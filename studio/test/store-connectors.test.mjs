@@ -23,7 +23,7 @@ const P8 = ec.privateKey.export({ type: 'pkcs8', format: 'pem' })
 const APPLE = { issuerId: '57246542-96fe-1a63-e053-0824d011072a', keyId: '2X9R4HXF34', privateKey: P8 }
 
 const rsa = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })
-const ACCOUNT = { type: 'service_account', client_email: 'publisher@yard-test.iam.gserviceaccount.com', private_key: rsa.privateKey.export({ type: 'pkcs8', format: 'pem' }), token_uri: 'https://oauth2.googleapis.com/token' }
+const ACCOUNT = { type: 'service_account', client_email: 'publisher@yard-test.iam.gserviceaccount.com', private_key: rsa.privateKey.export({ type: 'pkcs8', format: 'pem' }), token_uri: 'https://oauth2.googleapis.com/token' } // a made-up service account. release-check: allow
 
 /** App Store Connect, as far as these tools ask it: checks the token on every call. */
 function appleStore() {
