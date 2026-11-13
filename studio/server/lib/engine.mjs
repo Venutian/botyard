@@ -357,14 +357,19 @@ const mineOf = (comment) => comment.authorType === 'user' && !scriptOf(comment.b
 const textOf = (comment) => withRefs((comment.body || '').replace(SCRIPT_MARK, ''))
 
 /** A question a bot is waiting on, in the two forms the app can answer. Other kinds stay in the engine. */
-function questionView(interaction) {
+/** A question with nothing to pick from: the owner answers it in their own words. */
+const OWN_WORDS = Object.freeze({ id: 'answer', prompt: '', multiple: false, required: true, options: [] })
+
+export function questionView(interaction) {
   const { id, kind, title, payload } = interaction
   if (kind === 'ask_user_questions') {
+    const asked = payload?.questions || []
     return {
       id,
       kind: 'choice',
       title: title || payload?.title || 'A bot has a question',
-      items: (payload?.questions || []).map((q) => ({
+      // A bot can ask without giving any choice; the card must still have somewhere to answer.
+      items: !asked.length ? [{ ...OWN_WORDS }] : asked.map((q) => ({
         id: q.id,
         prompt: q.prompt,
         multiple: q.selectionMode === 'multi',
