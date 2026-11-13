@@ -91,9 +91,11 @@ function engine({ calls = [], attentionDelay = 0, chatDelay = 0, summaryDelay = 
     if (path === `/approvals/${APPROVAL}/approve`) return json({})
     if (path === '/companies/co/chats') return json([{ id: 'chat', conversationAgentId: BOT, lastActivityAt: '2026-11-02T10:00:00Z' }])
     if (path === `/agents/${BOT}`) return json(agents[2])
-    if (path === `/companies/co/chats/${BOT}`) return json({ id: 'chat', conversationState: 'active' })
+    if (path === `/companies/co/chats/${BOT}`) return json({ id: 'chat', conversationState: state.chatState || 'active' })
+    if (path === '/issues/chat/live-runs') return json(state.chatRuns || [])
     if (path.startsWith('/issues/chat/comments?limit=')) {
       return json([
+        ...(state.scriptNote ? [{ id: 'm5', authorType: 'user', body: 'The crew check found 1 thing to fix.\n\n<!-- myshop-script: Crew check -->' }] : []),
         { id: 'm3', authorType: 'system', body: 'Run retried' },
         { id: 'm2', authorType: 'agent', authorAgentId: BOT, body: 'On it' },
         { id: 'm1', authorType: 'user', body: 'Review this' },
@@ -503,6 +505,24 @@ test('a conversation reads oldest first and says when the bot is working', async
     assert.equal(body.working, true)
     assert.deepEqual(body.messages.map((m) => [m.from, m.mine]), [['You', true], ['Critic', false], ['Botyard', false]])
   })
+})
+
+test('a bot is working while a run of its is going on the chat, whatever the conversation state says', async () => {
+  for (const [runs, working] of [[[{ agentId: BOT, status: 'running' }], true], [[{ agentId: BOT, status: 'queued' }], true], [[{ agentId: 'someone-else', status: 'running' }], false], [[], false]]) {
+    await withDoor(async (ask) => {
+      assert.equal((await ask(`/v1/chats/${BOT}`)).body.working, working, JSON.stringify(runs))
+    }, { state: { chatState: 'waiting', chatRuns: runs } })
+  }
+})
+
+test('a script\'s message is a note under the script\'s name, without its signature, whatever prefix it signs with', async () => {
+  await withDoor(async (ask) => {
+    const { body } = await ask(`/v1/chats/${BOT}`)
+    const note = body.messages.find((m) => m.id === 'm5')
+    assert.deepEqual([note.from, note.mine, note.note, note.text], ['Crew check', false, true, 'The crew check found 1 thing to fix.'])
+    assert.equal(body.messages.find((m) => m.id === 'm3').note, true)
+    assert.equal(body.messages.find((m) => m.id === 'm2').note, false)
+  }, { state: { scriptNote: true } })
 })
 
 test('a chat message opens the chat and carries the phone\'s request id', async () => {
@@ -924,4 +944,29 @@ test('the phone gets the same bot portraits the map shows: which bots have one, 
     assert.equal((await ask('/v1/faces/..%2Fdevices.json')).status, 404, 'only a name from the folder is read, never a path')
     assert.equal((await ask('/v1/faces', { token: '' })).status, 401)
   }, { faces: { 'lead.png': png, 'scout.webp': png, 'notes.txt': 'x' } })
+})
+
+test('a paired phone reaches an own page\'s list and its own calls, never its files', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'door-own-'))
+  const dir = path.join(home, 'pages', 'notes')
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify({ title: 'Notes', script: 'page.js', server: 'server.mjs' }))
+  fs.writeFileSync(path.join(dir, 'page.js'), 'export const mount = () => {}')
+  fs.writeFileSync(path.join(dir, 'server.mjs'), "export default ({ method, path, query, body }) => ({ body: { method, path, to: query.to || '', got: body } })")
+  const saved = process.env.BOTYARD_HOME
+  process.env.BOTYARD_HOME = home
+  try {
+    await withDoor(async (ask) => {
+      const list = await ask('/v1/own')
+      assert.deepEqual(list.body.pages.map((p) => p.name), ['notes'])
+      assert.deepEqual((await ask('/v1/own/notes/api/hello?to=me')).body, { method: 'GET', path: '/hello', to: 'me', got: {} })
+      assert.deepEqual((await ask('/v1/own/notes/api/save', { method: 'POST', body: { a: 1 } })).body.got, { a: 1 })
+      assert.equal((await ask('/v1/own/notes/files/page.js')).status, 404)
+      assert.equal((await ask('/v1/own/Bad/api/x')).status, 404)
+    })
+  } finally {
+    if (saved === undefined) delete process.env.BOTYARD_HOME
+    else process.env.BOTYARD_HOME = saved
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })

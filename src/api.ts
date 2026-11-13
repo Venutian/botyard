@@ -143,7 +143,8 @@ export type LastMessage = { text: string; mine: boolean; at: string };
 export type ChatBot = Bot & { lastActiveAt: string | null; lastMessage: LastMessage | null };
 /** Who signs a line the service itself puts in a conversation: the app's name, or the older one. */
 export const SYSTEM = ['Botyard', 'Studio'];
-export type ChatMessage = { id: string; from: string; mine: boolean; text: string; at: string };
+/** `note`: Botyard's or one of the crew's scripts' words, shown as a note, not as the bot speaking. */
+export type ChatMessage = { id: string; from: string; mine: boolean; note?: boolean; text: string; at: string };
 /** A card a bot put in a conversation. One still `pending` carries its `question` when the app can answer it; a `connect` card is finished on the Connectors page. */
 export type ChatCard = { service?: string; id: string; at: string; state: 'pending' | 'done' | 'cancelled'; kind: 'choice' | 'confirm' | 'connect' | 'other'; title: string; detail?: string; question?: Question; path?: string };
 export type ChatThread = { bot: Looked & { id: string; name: string; title: string }; chatId?: string; working: boolean; messages: ChatMessage[]; cards?: ChatCard[] };

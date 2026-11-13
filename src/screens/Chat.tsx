@@ -22,7 +22,7 @@ const HEADER = 112;
 const NEAR_BOTTOM = 120;
 type Item = ChatMessage | ChatCard;
 const isCard = (item?: Item): item is ChatCard => Boolean(item && 'state' in item);
-const side = (m?: Item) => (m ? (isCard(m) ? 'card' : SYSTEM.includes(m.from) ? 'note' : m.mine ? 'mine' : 'bot') : null);
+const side = (m?: Item) => (m ? (isCard(m) ? 'card' : m.note || SYSTEM.includes(m.from) ? 'note' : m.mine ? 'mine' : 'bot') : null);
 
 /** A card a bot put in the conversation, where it was asked: answered here when the app can, otherwise it says where. */
 function CardRow({ card, busy, onAnswer, onConnect }: { card: ChatCard; busy: boolean; onAnswer: (verb: 'respond' | 'accept' | 'reject', answers?: Answer[]) => void; onConnect: (connected: boolean | 'open') => void }) {
@@ -120,7 +120,7 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
   const lastMessage = thread?.messages[thread.messages.length - 1];
   const speakReplies = Boolean(p.bots[botId]?.speak);
   useEffect(() => {
-    if (!lastMessage || lastMessage.mine || SYSTEM.includes(lastMessage.from) || spoken.current === lastMessage.id) return;
+    if (!lastMessage || lastMessage.mine || lastMessage.note || SYSTEM.includes(lastMessage.from) || spoken.current === lastMessage.id) return;
     const first = spoken.current === null;
     spoken.current = lastMessage.id;
     if (!first && speakReplies) speak(lastMessage.text);

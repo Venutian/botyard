@@ -38,6 +38,7 @@ import {
 import { PREVIEW_PORT, listPreviews, previewRoot, startPreviews } from './lib/previews.mjs'
 import { artifactList, documentRevisions, jobList, jobPage, projectPage, restoreDocument, routinePage, saveGoal, setRoutineSchedule } from './lib/work.mjs'
 import { liveSessions as readLiveSessions } from './lib/sessions.mjs'
+import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 
 const MIN_TOKEN = 32
 const MAX_BODY = 16 * 1024
@@ -590,6 +591,17 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
         return send(res, 200, await settleConnectCard(connectCard[1], { connected: body.connected === true, service: body.service }, options))
       }
       if (pathname === '/v1/company' && req.method === 'GET') return send(res, 200, phoneCompany(await companySettings(options)))
+      // A page of the owner's own (lib/own-pages.mjs): the list, and the page's own calls to its server file.
+      // A phone has no use for a page's scripts and styles, so its files are not passed on.
+      const own = /^\/v1\/own(\/([a-z0-9][a-z0-9-]{0,31})\/api(\/.*)?)?$/.exec(pathname)
+      if (own && (get || post)) {
+        const inner = new URL(`${OWN_PATH}${own[1] || ''}${req.url.slice(req.url.indexOf('?') >= 0 ? req.url.indexOf('?') : req.url.length)}`, 'http://localhost')
+        const runHelper = async (name) => {
+          const { timetableAct } = await import('./lib/timetable.mjs')
+          return timetableAct({ action: 'run', name: String(name) })[0] === 200
+        }
+        return await ownPagesRequest(req, res, inner, { demo: process.env.BOTYARD_DEMO === '1', runHelper })
+      }
       if (chat && req.method === 'GET') return send(res, 200, await chatThread(chat[1], options))
       if (chatMessage && req.method === 'POST') {
         const body = await readBody(req)

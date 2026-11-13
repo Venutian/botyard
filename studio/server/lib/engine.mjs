@@ -334,7 +334,8 @@ export async function crewRecords(options) {
 export const jobComments = (jobId, count, options) => orElse(call(`/issues/${jobId}/comments?limit=${count}`, options), [])
 
 /** The crew's scripts post with the owner's board identity and sign with this, so they are not shown as the owner. */
-const SCRIPT_MARK = /\n*<!-- botyard-script: ([^>]+?) -->\s*$/
+// A studio's own scripts may sign with their own prefix (`<!-- myshop-script: Night check -->`): the same rule.
+const SCRIPT_MARK = /\n*<!-- [\w-]*script: ([^>]+?) -->\s*$/
 // Messages the scripts posted before they signed them, known by their fixed wording.
 const OLD_SCRIPT = [
   [/^The crew check found \d+ thing/, 'Crew check'],
@@ -352,6 +353,8 @@ function authorOf(comment, names) {
   return comment.authorAgentId ? names.get(comment.authorAgentId) || 'A bot' : 'You'
 }
 
+/** A note from Botyard or one of the crew's scripts: shown as a note, not as the bot's words or the owner's. */
+const noteOf = (comment) => comment.authorType === 'system' || Boolean(comment.authorType === 'user' && scriptOf(comment.body))
 /** Whether the owner wrote it, and its words without a script's signature. */
 const mineOf = (comment) => comment.authorType === 'user' && !scriptOf(comment.body)
 const textOf = (comment) => withRefs((comment.body || '').replace(SCRIPT_MARK, ''))
@@ -515,13 +518,14 @@ export async function chatThread(botId, options) {
   ])
   const bot = { id: agent.id, name: agent.name, title: agent.title || '' }
   if (!chat) return { bot, working: false, messages: [], cards: [] }
-  const [comments, interactions] = await Promise.all([
+  const [comments, interactions, live] = await Promise.all([
     call(`/issues/${chat.id}/comments?limit=${SHOWN_MESSAGES}`, options),
     orElse(call(`/issues/${chat.id}/interactions`, options), []),
+    orElse(call(`/issues/${chat.id}/live-runs`, options), []),
   ])
   const names = new Map([[agent.id, agent.name]])
   const messages = comments
-    .map((c) => ({ id: c.id, from: authorOf(c, names), mine: mineOf(c), text: textOf(c), at: c.createdAt }))
+    .map((c) => ({ id: c.id, from: authorOf(c, names), mine: mineOf(c), note: noteOf(c), text: textOf(c), at: c.createdAt }))
     .reverse()
   // Settled cards only as far back as the messages go; one still waiting always shows.
   const since = messages.length ? Date.parse(messages[0].at) : 0
@@ -529,7 +533,9 @@ export async function chatThread(botId, options) {
     bot,
     /** The conversation's own id: a card is answered against it. */
     chatId: chat.id,
-    working: chat.conversationState === 'active',
+    // Working while a run of the bot is going on this chat: the engine's own conversation state stays
+    // "open" or "waiting" through a run, so the phone never showed the bot typing.
+    working: chat.conversationState === 'active' || live.some((run) => run.agentId === agent.id && ['queued', 'running'].includes(run.status)),
     messages,
     cards: interactions
       .filter((i) => i.status === 'pending' || Date.parse(i.createdAt) >= since)

@@ -87,6 +87,16 @@ function BubbleView({ message, first, last, bot, fresh, named }: Props) {
   if (SYSTEM.includes(message.from)) {
     return <View style={styles.system}><Txt size={12} color={t.ink3} style={styles.systemText}>{message.text}</Txt></View>;
   }
+  // One of the crew's scripts speaking to the bot (a crew check, the review guard): a note in the
+  // middle, under the script's name, so it is neither read as the bot's words nor as the owner's.
+  if (message.note) {
+    return (
+      <View style={[styles.scriptNote, { borderColor: t.line }]}>
+        <Txt size={11} weight={700} color={t.ink3}>{`${message.from}${message.at ? `  ${clock(message.at)}` : ''}`}</Txt>
+        <Markdown text={message.text} ink={t.ink2} size={13} />
+      </View>
+    );
+  }
 
   const space = SPACING[p.spacing];
   const size = Math.round(16 * p.textScale);
@@ -173,6 +183,7 @@ const styles = StyleSheet.create({
   timeMine: { marginRight: 4, textAlign: 'right' },
   timeBot: { marginLeft: AVATAR + 10 },
   system: { alignItems: 'center', marginVertical: 8, paddingHorizontal: 24 },
+  scriptNote: { borderRadius: 12, borderStyle: 'dashed', borderWidth: 1, gap: 4, marginHorizontal: 18, marginVertical: 8, paddingHorizontal: 12, paddingVertical: 9 },
   systemText: { textAlign: 'center' },
   typing: { marginTop: 12 },
   typingBubble: { alignItems: 'center', borderRadius: 18, flexDirection: 'row', gap: 5, height: 36, paddingHorizontal: 14 },
