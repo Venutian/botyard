@@ -71,7 +71,7 @@ s.put('runs', { id: '11111111-1111-4111-8111-111111111111', companyId: C, agentI
 const pass = { authorization: `Bearer ${issueToken(s, '11111111-1111-4111-8111-111111111111', made.id)}` }
 await call('GET', '/agents/me', null, pass)
 await G(`/issues/${j.id}/interactions`)
-const q = await call('POST', `/issues/${j.id}/interactions`, { kind: 'ask_user_questions', title: 'q', payload: { questions: [] } }, pass)
+const q = await call('POST', `/issues/${j.id}/interactions`, { kind: 'ask_user_questions', title: 'q', payload: { questions: [{ id: 'a', prompt: 'Which?', options: [{ id: 'b', label: 'This one' }] }] } }, pass)
 await P(`/issues/${j.id}/interactions/${q.id}/respond`, { answers: [{ questionId: 'a', optionIds: ['b'] }] })
 const c1 = await call('POST', `/issues/${j.id}/interactions`, { kind: 'request_confirmation', title: 'c' }, pass); await P(`/issues/${j.id}/interactions/${c1.id}/accept`)
 const c2 = await call('POST', `/issues/${j.id}/interactions`, { kind: 'request_confirmation', title: 'c' }, pass); await P(`/issues/${j.id}/interactions/${c2.id}/reject`, { reason: 'no' })

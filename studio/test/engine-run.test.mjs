@@ -189,7 +189,7 @@ test('a card is asked by a bot and answered by the owner, which wakes the bot; a
   const s = studio()
   const job = createJob(s.store, COMPANY, { title: 'Pick a map size', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
   s.store.db.exec("UPDATE wakes SET status = 'completed'")
-  const card = createCard(s.store, job.id, { kind: 'ask_user_questions', title: 'Which size ships?', payload: { questions: [] } }, { now: NOW, actor: { agent: 'bot-builder', run: 'r1' } })
+  const card = createCard(s.store, job.id, { kind: 'ask_user_questions', title: 'Which size ships?', payload: { questions: [{ id: 'size', prompt: 'Which size ships?', options: [{ id: 's', label: 'Small' }, { id: 'l', label: 'Large' }] }] } }, { now: NOW, actor: { agent: 'bot-builder', run: 'r1' } })
   assert.throws(() => settleCard(s.store, job.id, card.id, 'respond', { answers: [{ questionId: 'q', optionIds: ['a'] }] }, { actor: { agent: 'bot-builder' } }), /Only the owner/)
   const answered = settleCard(s.store, job.id, card.id, 'respond', { answers: [{ questionId: 'q', optionIds: ['a'] }] }, { now: NOW + 1000, actor: { user: 'local-board' } })
   assert.equal(answered.status, 'answered')

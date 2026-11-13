@@ -66,16 +66,17 @@ The owner answers from "Needs you" in Botyard, which only shows cards. One card 
 option you recommend first, each option saying what it costs.
 
 ```sh
-curl -sf -X POST "$api/api/issues/$job/interactions" -H "Authorization: Bearer $key" \
-  -H 'Content-Type: application/json' -d '{
-  "kind": "ask_user_questions", "title": "Short title of the decision",
-  "idempotencyKey": "question:'"$job"':what-it-is-about:v1",
-  "resolverPolicy": "human_only", "continuationPolicy": "wake_assignee",
-  "payload": {"version": 1, "questionSet": {"schema": "botyard.question_set.v1", "questions": [{
-    "id": "choice", "prompt": "The question, in one or two plain sentences.", "answerMode": "single_select", "required": true,
-    "options": [{"id": "a", "label": "Do this (recommended)", "description": "What it costs."},
-                {"id": "b", "label": "Do that", "description": "What it costs."}]}]}}}'
+bash scripts/ask-owner.sh --title "Short title of the decision" \
+  --question "The question, in one or two plain sentences." \
+  --option "Do this (recommended)|What it costs." --option "Do that|What it costs." \
+  --key what-it-is-about
 ```
+
+It refuses to send a card with no question or fewer than two options: something with no choices is a
+comment on your job, not a card. `--multi` lets the owner pick more than one. If you send the card
+yourself, the shape is `{"kind": "ask_user_questions", "title": "...", "payload": {"questions": [{"id":
+"choice", "prompt": "...", "selectionMode": "single", "options": [{"id": "a", "label": "...",
+"description": "..."}]}]}}`; Botyard answers 400, saying what to send, when there is nothing to answer.
 
 Then set your job to `in_review` and end your run: you are woken with the answer. Withdraw a card that
 went stale (`POST $api/api/issues/$job/interactions/<card id>/withdraw`), and do not repeat an open

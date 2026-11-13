@@ -17,6 +17,42 @@ export class Refused extends Error {
 const STATUSES = new Set(['backlog', 'todo', 'in_progress', 'in_review', 'blocked', 'done', 'cancelled'])
 const PRIORITIES = new Set(['critical', 'high', 'medium', 'low'])
 const CARD_KINDS = new Set(['ask_user_questions', 'request_confirmation'])
+const MOST_QUESTIONS = 10
+const MOST_OPTIONS = 12
+const SAY_QUESTIONS = 'A question card needs its questions, each with a prompt and at least one option to choose: '
+  + '{"payload": {"questions": [{"id": "choice", "prompt": "Which way?", "selectionMode": "single", "options": [{"id": "a", "label": "This way (recommended)", "description": "What it costs."}, {"id": "b", "label": "That way"}]}]}}. '
+  + 'To ask something with no choices, write it as a comment on the job instead.'
+
+/**
+ * A question card's questions in the one shape the owner's pages and the answers read: `payload.questions`,
+ * each `{ id, prompt, selectionMode: 'single' | 'multi', required, options: [{ id, label, description }] }`.
+ * It reads the shapes bots have sent too: the questions under `payload.questionSet`, and `answerMode`
+ * ('single_select', 'multi_select') for `selectionMode`. Null when there is no question that can be answered.
+ */
+export function questionsOf(payload) {
+  const given = Array.isArray(payload?.questions) ? payload.questions : Array.isArray(payload?.questionSet?.questions) ? payload.questionSet.questions : []
+  const out = []
+  for (const [n, q] of given.slice(0, MOST_QUESTIONS).entries()) {
+    if (!q || typeof q !== 'object') return null
+    const prompt = text(q.prompt ?? q.question ?? q.text, 2000).trim()
+    const options = (Array.isArray(q.options) ? q.options : []).slice(0, MOST_OPTIONS).map((o, i) => (typeof o === 'string' ? { label: o } : o || {}))
+      .map((o, i) => ({ ...o, id: text(String(o.id ?? ''), 80).trim() || `option-${i + 1}`, label: text(o.label ?? o.title ?? '', 300).trim(), description: text(o.description ?? o.hint ?? '', 1000).trim() || null }))
+      .filter((o) => o.label || o.freeText)
+    if (!prompt || !options.some((o) => !o.freeText)) return null
+    const mode = String(q.selectionMode ?? q.answerMode ?? '').toLowerCase()
+    out.push({ ...q, id: text(String(q.id ?? ''), 80).trim() || `question-${n + 1}`, prompt, selectionMode: mode.startsWith('multi') ? 'multi' : 'single', required: q.required !== false, options })
+  }
+  return out.length ? out : null
+}
+
+/** A stored question card as the pages read it: an older shape is given in the one shape, nothing is rewritten. */
+export function cardAsRead(card) {
+  if (card?.kind !== 'ask_user_questions' || Array.isArray(card.payload?.questions)) return card
+  const questions = questionsOf(card.payload)
+  if (!questions) return card
+  const { questionSet, ...rest } = card.payload
+  return { ...card, payload: { ...rest, questions } }
+}
 const MAX_TEXT = 200_000
 const iso = (now) => new Date(now).toISOString()
 const text = (value, max = MAX_TEXT) => (typeof value === 'string' ? value.slice(0, max) : '')
@@ -192,6 +228,15 @@ export function addComment(store, jobId, body = {}, { now = Date.now(), actor, q
 export function createCard(store, jobId, body = {}, { now = Date.now(), actor } = {}) {
   const job = jobOr404(store, jobId)
   if (!CARD_KINDS.has(body.kind)) throw new Refused(400, 'A card is ask_user_questions or request_confirmation')
+  const sent = body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? body.payload : {}
+  let payload = sent
+  if (body.kind === 'ask_user_questions') {
+    // The owner answers what is on the card: a card with nothing to choose from is refused before it reaches them.
+    const questions = questionsOf(sent)
+    if (!questions) throw new Refused(400, SAY_QUESTIONS)
+    const { questionSet, ...rest } = sent
+    payload = { version: 1, ...rest, questions }
+  }
   if (body.idempotencyKey) {
     const before = store.objects('SELECT raw FROM cards WHERE job_id = ?', job.id).find((c) => c.idempotencyKey === body.idempotencyKey)
     if (before) return before
@@ -202,7 +247,7 @@ export function createCard(store, jobId, body = {}, { now = Date.now(), actor } 
     continuationPolicy: body.continuationPolicy || 'wake_assignee', requestedResolverPolicy: body.resolverPolicy || 'human_only', resolverPolicy: body.resolverPolicy || 'human_only',
     idempotencyKey: body.idempotencyKey || null, title: text(body.title, 500) || null, summary: text(body.summary, 4000) || null,
     createdByAgentId: actor?.agent || null, createdByUserId: actor?.agent ? null : actor?.user || 'local-board', sourceRunId: actor?.run || null,
-    addresseeUserId: 'local-board', payload: body.payload && typeof body.payload === 'object' ? body.payload : {}, result: null,
+    addresseeUserId: 'local-board', payload, result: null,
     resolvedByUserId: null, resolvedByAgentId: null, resolvedAt: null, createdAt: iso(now), updatedAt: iso(now),
   }
   store.put('cards', card, { position })

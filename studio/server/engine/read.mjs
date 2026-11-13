@@ -8,6 +8,7 @@
  * bot in a list, a chat, a run in the run list), the shorter shape is made from the kept one.
  */
 import { unpack } from './store.mjs'
+import { cardAsRead } from './write.mjs'
 
 export class Refused extends Error {
   constructor(status, message) {
@@ -368,7 +369,7 @@ export function comments(store, ref, query = {}) {
   return limit ? all.slice(0, limit) : all
 }
 
-export const cards = (store, ref) => store.objects('SELECT raw FROM cards WHERE job_id = ? ORDER BY position', jobOr404(store, ref).id)
+export const cards = (store, ref) => store.objects('SELECT raw FROM cards WHERE job_id = ? ORDER BY position', jobOr404(store, ref).id).map(cardAsRead)
 
 // Documents an engine writes for itself. They are read by name and searched, but not listed unless asked for.
 const SYSTEM_DOCUMENTS = new Set(['continuation-summary', 'pipeline-case-body'])
