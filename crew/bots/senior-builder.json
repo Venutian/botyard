@@ -1,0 +1,32 @@
+{
+  "name": "Senior Builder",
+  "role": "builder",
+  "tier": "strong",
+  "title": "Builds what needs judgment",
+  "does": "Builds the hard things: design, architecture, a fault nobody understands yet, and whatever a free build could not finish. Off until Claude is signed in.",
+  "reportsTo": "lead",
+  "ai": "claude",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "minutes": 180,
+  "turns": 300,
+  "mayNot": [
+    "push"
+  ],
+  "atOnce": 2,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": false,
+  "needs": "claude",
+  "look": {
+    "colour": "#6457e8",
+    "hat": "cog",
+    "build": "heavy",
+    "gear": [
+      "toolbelt"
+    ],
+    "face": "shade"
+  }
+}

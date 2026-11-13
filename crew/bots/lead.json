@@ -1,0 +1,35 @@
+{
+  "name": "Lead",
+  "role": "lead",
+  "tier": "strong",
+  "title": "Plans the work and hands it out",
+  "does": "Talks with you, finds the facts, writes each job as a brief, gives it to the right bot, follows every build through its check, and says plainly what is done. Never builds.",
+  "reportsTo": null,
+  "ai": "free",
+  "model": "auto",
+  "effort": "high",
+  "minutes": 45,
+  "turns": null,
+  "mayNot": [
+    "push",
+    "commit"
+  ],
+  "atOnce": 1,
+  "freshChat": {
+    "runs": 20,
+    "hours": 12
+  },
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": true,
+  "look": {
+    "colour": "#1d1e22",
+    "hat": "crown",
+    "build": null,
+    "gear": [
+      "sash"
+    ],
+    "face": "light"
+  }
+}

@@ -1,0 +1,512 @@
+#!/usr/bin/env python3
+"""The free builder's OpenCode: when his free model runs out mid-job, he carries on in the same session
+on the next free model, inside the same run. No AI of its own.
+
+Free models run out often and without an error: over its limit OpenCode just goes quiet. Before this,
+fallback.py stopped the run and the engine started a new one, which began with no memory of the job and
+spent 10 to 15 minutes reading it all again. Here, a run quiet
+for QUIET seconds asks its model for one word. A model that answers is busy (a long build or test), so
+the run goes on. One that does not is set aside for an hour, and OpenCode is started again with
+--session on the best free model that answers, told to continue where it stopped. When a model of
+another family does not answer either, the connection is down, and the run waits instead.
+
+Free limits are counted per model, so the free builder's runs at once each take a different model, of another family
+where one answers: two jobs on one model ran DeepSeek out in half an hour on 10 November. Each run
+claims its model in free-busy.json, which every other run reads before it picks.
+
+A model can also go round in circles: the same command with the same arguments, again and again, with
+nothing changed in the worktree between. That is never a new question, only a run that burns its free
+limit. Loops counts each tool call against the files as they stood (OpenCode's snapshot at each step):
+the fifth identical call with nothing changed stops the run, which goes on once, in the same session, on
+a model of another family told what it was repeating. A second loop ends the run. Re-running a test after
+an edit is a new snapshot, so it never counts.
+
+A model can also wait inside its run: a poll for a done file with a sleep in it. A wait is measured by
+what the command says (waits.py), so one whose number changes each time is counted too. A wait with no
+end, one long wait, or more waiting than a run's budget stops the run the same way, and it goes on once
+told how to wait without spending a run (start the job detached, botyard-wait, end the run).
+
+A checker runs here too. She does not judge a build on the model family that made it: every pick takes
+another family first, a lighter model of another family before a strong one of the same. When no other
+family answers at all, the check still runs, and says so on its own job (SAME-FAMILY CHECK), so the
+pipeline tells the lead it was not an independent check.
+
+The engine runs it as the free builder's command with OpenCode's own arguments and the prompt on stdin.
+"""
+import atexit
+import collections
+import fcntl
+import importlib.util
+import json
+import os
+import queue
+import signal
+import subprocess
+import sys
+import threading
+import time
+import re
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import botyard_home  # noqa: E402
+import waits  # noqa: E402
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+QUIET = 240
+MOST_SWITCHES = 8
+BUSY = botyard_home.state('free-busy.json')
+# The same call with nothing changed: this many is a loop.
+REPEATS = 5
+# How old the kept listing of the tool's models may be before a run asks the tool again.
+LIST_AGAIN = 6 * 3600
+WAITED = ('You were waiting inside your run ({call}): {why}')
+SAME_FAMILY = 'SAME-FAMILY CHECK:'
+LOOPED = ('You were going round in circles: you ran {call} {times} times with nothing in the worktree changing '
+          'between. Stop repeating it. Read what it returned, decide what that means, and take a different next '
+          'step; if you are blocked, say what blocks you and end the task with OUTCOME: NOT MET and why.')
+CONTINUE = ('The free model you were running on ran out partway through this task, so you are now on another '
+            'model in the same session. Carry on from exactly where you stopped: check what is already done in '
+            'the worktree (git status, the last files you changed) instead of starting over.')
+
+
+class Loops:
+    """Counts identical tool calls against the worktree as it stood. feed() takes OpenCode's JSON events
+    one at a time and returns a short description of the call once it has repeated too often."""
+
+    def __init__(self):
+        self.snapshot = ''
+        self.seen = collections.Counter()
+        self.waited = 0
+
+    def feed(self, event):
+        part = event.get('part') or {}
+        if event.get('type') == 'step_start':
+            self.snapshot = part.get('snapshot') or self.snapshot
+            return None
+        if event.get('type') != 'tool_use':
+            return None
+        state = part.get('state') or {}
+        if state.get('status') not in (None, 'completed', 'error'):
+            return None
+        tool, given = part.get('tool') or '?', state.get('input') or {}
+        key = (tool, json.dumps(given, sort_keys=True), self.snapshot)
+        self.seen[key] += 1
+        command = str(given.get('command') or '')
+        shown = command or json.dumps(given)[:120]
+        # A wait is judged by what it says, so a poll with a new number each time is seen too. It has
+        # already run by now: what it waited is counted, and the one past the rule stops the run.
+        why, added = waits.judge(command, self.waited)
+        if why:
+            return f'{tool} `{shown[:160]}`', why
+        self.waited += added
+        if self.seen[key] < REPEATS:
+            return None
+        return f'{tool} `{shown[:160]}`', self.seen[key]
+
+
+def load(name, file):
+    spec = importlib.util.spec_from_file_location(name, f'{HERE}/{file}')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# What a provider says when a model will never serve this PC: blocked in the owner's region, or gone from
+# the offer. On 11 and 12 November runs kept switching to inkling-2-small (403, not in this region) and
+# flint-v1.0 (no longer offered) because a model that failed was only set aside for an hour; each switch
+# sent the whole session, 300,000 tokens and more, to a model that could only refuse it.
+GONE = ('not available in your region', 'model is unavailable', 'model not found', 'unknown model',
+        'no endpoints found', 'not a valid model', 'model does not exist')
+GONE_FOR = 30 * 86400
+# A provider's own daily cap on free use: every model of that provider is out until its day resets.
+PER_DAY = ('free-models-per-day', 'per day', 'daily limit')
+BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
+
+
+def probe(opencode, model):
+    """One word from the model, never from a cache: 'ok' when it answers, 'gone' when the provider says it
+    can never serve us, else 'out' (its limit, or busy)."""
+    try:
+        out = subprocess.run([opencode, 'run', '-m', model, 'Reply with exactly: pong'], capture_output=True, text=True,
+                             timeout=30, stdin=subprocess.DEVNULL, cwd='/tmp', env={**os.environ, 'PWD': '/tmp'})
+    except (OSError, subprocess.TimeoutExpired):
+        return 'out'
+    if 'pong' in out.stdout.lower():
+        return 'ok'
+    return 'gone' if any(w in (out.stdout + out.stderr).lower() for w in GONE) else 'out'
+
+
+def answers(opencode, model):
+    return probe(opencode, model) == 'ok'
+
+
+def next_utc_day(now=None):
+    now = time.time() if now is None else now
+    return int(now // 86400 + 1) * 86400 + 300
+
+
+def set_aside(fallback, bots, model, why):
+    """Sets a model aside for as long as the reason lasts: a month when it can never serve us, the rest of
+    the provider's day for its daily cap (every model of that provider), else what its history says."""
+    text = (why or '').lower()
+    if any(w in text for w in GONE):
+        fallback.set_free_aside(bots, model, f'never serves this PC: {why}'[:200], until=int(time.time() + GONE_FOR))
+    elif any(w in text for w in PER_DAY):
+        provider = model.split('/')[0] + '/'
+        for m, _, _ in bots.free_list():
+            if m.startswith(provider):
+                fallback.set_free_aside(bots, m, f'its provider\'s daily free cap: {why}'[:200], until=next_utc_day())
+    else:
+        fallback.set_free_aside(bots, model, (why or 'did not answer: its free limit, or the offer ended')[:200])
+    return fallback.setup()
+
+
+def next_working(fallback, bots, avoid_family=None, tries=4):
+    """The next free model that answers now, asked before it is handed the session: a model that cannot
+    answer one word would only take the whole session's tokens and fail. None when none answers."""
+    for _ in range(tries):
+        nxt = pick(bots, avoid_family=avoid_family)
+        if not nxt:
+            return None, bots
+        claim(nxt)
+        got = probe(bots.OPENCODE, nxt)
+        if got == 'ok':
+            fallback.limits().answered(nxt)
+            return nxt, bots
+        bots = set_aside(fallback, bots, nxt, 'model is unavailable (asked before the switch)' if got == 'gone' else None)
+    return None, bots
+
+
+def error_of(event):
+    """The provider's message in one of OpenCode's error events, or None."""
+    if not isinstance(event, dict) or event.get('type') != 'error':
+        return None
+    err = event.get('error') or {}
+    data = err.get('data') if isinstance(err, dict) else None
+    return str((data or {}).get('message') or (err.get('name') if isinstance(err, dict) else err) or 'error')[:300]
+
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def claim(model):
+    """Records this run's model, or none, and returns the models the free builder's other live runs are on."""
+    with open(BUSY, 'a+') as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            busy = json.loads(f.read() or '{}')
+        except ValueError:
+            busy = {}
+        busy = {pid: m for pid, m in busy.items() if pid != str(os.getpid()) and alive(pid)}
+        others = set(busy.values())
+        if model:
+            busy[str(os.getpid())] = model
+        f.seek(0)
+        f.truncate()
+        json.dump(busy, f)
+    return others
+
+
+# A checker runs here too, with BOTYARD_CHECKER set: she must not judge a build on the family that made
+# it, so that family is avoided at every pick, the way fallback.py chose for her before (11 November).
+NEVER = set()
+
+
+def build_family(bots):
+    """The family of the model that made the build this check is for, from its job: None when unknown."""
+    base, task = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
+    if not (base and task):
+        return None
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{task}",
+                                     headers={'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
+        with urllib.request.urlopen(req, timeout=20) as res:
+            text = json.load(res).get('description') or ''
+    except (OSError, ValueError):
+        return None
+    built = (re.findall(r'built-on: (\S+) -->', text) or [None])[0]
+    return bots.free_family(built) if built and built != 'None' else None
+
+
+def same_family(bots, model):
+    """True when this run is a check and the model is of the family that made the build."""
+    return bool(NEVER) and bool(model) and bots.free_family(model) in NEVER
+
+
+def say_same_family(bots, model, post=None):
+    """Says on the check's own job that it could not be run on another family than the build's. Once a
+    run. The pipeline reads the line and tells the lead the check was not independent."""
+    if getattr(say_same_family, 'said', False):
+        return False
+    say_same_family.said = True
+    base, job = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
+    text = (f"{SAME_FAMILY} no free model of another family than the build's ({', '.join(sorted(NEVER))}) answers now, so "
+            f"this check runs on {model}, the family that made the build. It is a second look by the same kind of "
+            "model, not an independent check.\n\n<!-- botyard-script: free-runner -->")
+    note(f'The checker had only the build\'s own family left: {model}')
+    sys.stderr.write(text.split('\n')[0] + '\n')
+    if post:
+        return post(text)
+    if not (base and job):
+        return False
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST', data=json.dumps({'body': text}).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
+        urllib.request.urlopen(req, timeout=20).close()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def list_again(bots, run=subprocess.run, now=None):
+    """Asks the tool which models it has when the kept listing is older than LIST_AGAIN, so a name that
+    left the offer is not handed a run. A tool that does not answer changes nothing."""
+    now = time.time() if now is None else now
+    kept = bots.read_json(bots.FREE_LISTED, {})
+    if isinstance(kept, dict) and now - kept.get('at', 0) < LIST_AGAIN:
+        return False
+    try:
+        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return bots.keep_tool_models([line.strip() for line in out.stdout.splitlines() if '/' in line and ' ' not in line.strip()], now=now)
+
+
+def pick(bots, avoid_family=None):
+    """The best strong free model no other builder run is on, of a family none of them uses where one is
+    left; then any strong one; then any that is not set aside. A check takes a model of another family
+    than the build's before any of these, a light one if no strong one is left."""
+    used = claim(None)
+    families = {bots.free_family(m) for m in used} | {avoid_family} | NEVER
+    aside = bots.free_aside()
+    rows = [(m, f, t) for m, f, t in bots.free_list() if m not in aside]
+    if NEVER:
+        other = [(m, f, t) for m, f, t in rows if f not in NEVER]
+        for choice in ([m for m, f, t in other if t == 'strong' and m not in used and f not in families],
+                       [m for m, f, t in other if t == 'strong' and m not in used], [m for m, f, t in other if t == 'strong'],
+                       [m for m, f, t in other if m not in used], [m for m, _, _ in other]):
+            if choice:
+                return choice[0]
+    strong = [(m, f) for m, f, t in rows if t == 'strong']
+    # NVIDIA's requests a minute are shared by every model on the key, so a second run there takes from
+    # the first: on 11 November the free builder and the checker on two NVIDIA models got "Too Many Requests" all night.
+    pools = {m.split('/')[0] for m in used if m.startswith('nvidia/')}
+    for choice in ([m for m, f in strong if m not in used and f not in families and m.split('/')[0] not in pools],
+                   [m for m, f in strong if m not in used and f not in families], [m for m, f in strong if m not in used],
+                   [m for m, _ in strong], [m for m, _, _ in rows]):
+        if choice:
+            return choice[0]
+    return None
+
+
+def with_model(args, model, session):
+    args = list(args)
+    at = args.index('--model') if '--model' in args else args.index('-m') if '-m' in args else -1
+    if at >= 0:
+        args[at + 1] = model
+    else:
+        args += ['--model', model]
+    if session and '--session' not in args:
+        args += ['--session', session]
+    return args
+
+
+def note(line):
+    try:
+        with open(botyard_home.state('fallback.log'), 'a') as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M')} {line}\n")
+    except OSError:
+        pass
+
+
+def with_connectors(env, folder=None):
+    """The bot's OpenCode settings with the connectors the owner gave it in Botyard added.
+
+    Botyard writes each bot's list next to the skills file's name (`<bot>.opencode.json`, under `mcp`); the bot
+    reaches a service through Botyard's gateway and never holds a key. Returns the settings file to run with:
+    the bot's own when it was given nothing, when BOTYARD_CONNECTORS is off, or when anything cannot be read.
+    """
+    own = env.get('OPENCODE_CONFIG') or ''
+    if not own or env.get('BOTYARD_CONNECTORS') == 'off':
+        return own
+    folder = folder or env.get('BOTYARD_BOT_CONNECTORS') or botyard_home.state('connectors')
+    given = os.path.join(folder, os.path.basename(own))
+    try:
+        with open(given) as f:
+            mcp = json.load(f).get('mcp') or {}
+        if not mcp:
+            return own
+        with open(own) as f:
+            config = json.load(f)
+        merged = os.path.join(folder, os.path.basename(own).replace('.opencode.json', '.with-connectors.opencode.json'))
+        text = json.dumps({**config, 'mcp': {**(config.get('mcp') or {}), **mcp}}, indent=1)
+        try:
+            with open(merged) as f:
+                same = f.read() == text
+        except OSError:
+            same = False
+        if not same:
+            fd = os.open(merged, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write(text)
+        return merged
+    except (OSError, ValueError):
+        return own
+
+
+def main():
+    settings = with_connectors(os.environ)
+    if settings:
+        os.environ['OPENCODE_CONFIG'] = settings
+    # Keys pasted in Botyard reach OpenCode as the variables it reads; with none, its own free models still work.
+    os.environ.update(botyard_home.key_env())
+    fallback = load('fallback', 'fallback.py')
+    bots = fallback.setup()
+    if not bots.OPENCODE:
+        sys.exit(botyard_home.INSTALL['opencode'])
+    args = sys.argv[1:]
+    if args[:1] != ['run']:
+        # The engine also lists models and checks the version through this command: those go straight through.
+        os.execv(bots.OPENCODE, [bots.OPENCODE, *args])
+    list_again(bots)
+    prompt = sys.stdin.read() if not sys.stdin.isatty() else ''
+    model = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ('--model', '-m')), None)
+    session = None
+    child = None
+    atexit.register(lambda: claim(None))
+    if os.environ.get('BOTYARD_CHECKER'):
+        NEVER.discard(None)
+        NEVER.add(build_family(bots))
+        NEVER.discard(None)
+    for _ in range(MOST_SWITCHES):
+        chosen = pick(bots) or model
+        claim(chosen)  # before asking it, so a run starting at the same moment picks another
+        if not chosen:
+            break
+        got = probe(bots.OPENCODE, chosen)
+        if got == 'ok':
+            fallback.limits().answered(chosen)
+            break
+        if got == 'out' and fallback.outage(bots, chosen):
+            break
+        bots = set_aside(fallback, bots, chosen, 'model is unavailable' if got == 'gone' else None)
+    if chosen and chosen != model:
+        args, model = with_model(args, chosen, None), chosen
+    claim(model)
+    if same_family(bots, model):
+        say_same_family(bots, model)
+
+    def stop(signum, _frame):
+        if child and child.poll() is None:
+            os.killpg(child.pid, signal.SIGTERM)
+        claim(None)
+        os._exit(128 + signum)
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    loops = Loops()
+    looped = 0
+    for switch in range(MOST_SWITCHES + 1):
+        child = subprocess.Popen([bots.OPENCODE, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                 start_new_session=True)
+        child.stdin.write(prompt)
+        child.stdin.close()
+        lines = queue.Queue()
+        threading.Thread(target=lambda: [lines.put(line) for line in child.stdout] + [lines.put(None)], daemon=True).start()
+        heard, ended, ran_out, circling, failed = time.time(), False, False, None, None
+        while not ended:
+            try:
+                line = lines.get(timeout=10)
+            except queue.Empty:
+                line = ''
+            if line is None:
+                ended = True
+                break
+            if line:
+                heard = time.time()
+                sys.stdout.write(line)
+                sys.stdout.flush()
+                try:
+                    event = json.loads(line)
+                    session = event.get('sessionID') or session
+                    circling = loops.feed(event)
+                    failed = error_of(event) or failed
+                except ValueError:
+                    pass
+                if circling:
+                    os.killpg(child.pid, signal.SIGTERM)
+                    child.wait(timeout=30)
+                    break
+                continue
+            if time.time() - heard < QUIET:
+                continue
+            if answers(bots.OPENCODE, model):
+                heard = time.time()
+                continue
+            if fallback.outage(bots, model):
+                heard = time.time()
+                continue
+            ran_out = True
+            os.killpg(child.pid, signal.SIGTERM)
+            child.wait(timeout=30)
+            break
+        code = child.wait()
+        if circling:
+            looped += 1
+            what, times = circling
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            if isinstance(times, str):
+                # A wait, not a circle: the same model goes on, told how to wait without spending a run.
+                if looped > 1 or not session:
+                    note(f'The free builder stopped waiting inside its run on {task}: {what}')
+                    sys.stderr.write(f'Stopped: the model kept waiting inside its run ({what}).\n')
+                    return 1
+                note(f'The free builder was waiting inside its run on {task} ({what}); told how to wait, same session')
+                args = with_model(args, model, session)
+                prompt = WAITED.format(call=what, why=times)
+                loops = Loops()
+                continue
+            if looped > 1 or not session:
+                note(f'The free builder stopped looping on {task}: {model} ran {what} {times} times with nothing changed')
+                sys.stderr.write(f'Stopped: the model ran {what} {times} times with nothing changed between, twice over.\n')
+                return 1
+            nxt = next_working(fallback, bots, avoid_family=bots.free_family(model))[0] or model
+            note(f'The free builder looped on {task} ({what} {times} times on {model}); going on with {nxt}, same session')
+            sys.stderr.write(f'{model} was repeating itself; continuing the same session on {nxt}.\n')
+            args, model = with_model(args, nxt, session), nxt
+            claim(model)
+            prompt = LOOPED.format(call=what, times=times)
+            loops = Loops()
+            continue
+        # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
+        # the work: it goes on in the same session on a model that answers, instead of failing the run.
+        if code and failed and any(w in failed.lower() for w in GONE + PER_DAY + BUSY_WORDS):
+            ran_out = True
+        if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
+            return code
+        bots = set_aside(fallback, bots, model, failed)
+        nxt, bots = next_working(fallback, bots, avoid_family=bots.free_family(model))
+        if not nxt:
+            note(f'The free builder ran out of free models mid-run on {botyard_home.run_var('JOB_ID', "?")[:8]}')
+            sys.stderr.write('Every free model is out now; this run stops and is woken again when one answers.\n')
+            return 1
+        note(f'The free builder switched mid-run from {model} to {nxt}, same session')
+        sys.stderr.write(f'{model} ran out; continuing the same session on {nxt}.\n')
+        args, model = with_model(args, nxt, session), nxt
+        claim(model)
+        if same_family(bots, model):
+            say_same_family(bots, model)
+        if session:
+            prompt = CONTINUE
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

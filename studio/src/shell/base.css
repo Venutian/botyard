@@ -1,0 +1,97 @@
+/*
+ * The page's base: what every panel stands on before plates.css paints it. A full-window yard,
+ * the layer the panels sit in (it lets clicks through to the yard except where a panel is), the
+ * button and row every panel uses, and the frame's own parts: the map's two buttons, the map
+ * settings, the help sheet, passing notes, the hint and the opening plate.
+ */
+
+:root {
+  --sign: 'Big Shoulders Display', 'Barlow Semi Condensed', ui-sans-serif, system-ui, sans-serif;
+  --body: 'IBM Plex Sans', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: #15181d;
+  color: #15181d;
+  font: 400 14px/1.45 var(--body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The yard is handled by hand: nothing on it is selected by a drag. What is read in a panel is. */
+#app { position: relative; user-select: none; }
+#app :is(.studio-deck, .studio-chat, .help .sheet, .toast) { user-select: text; }
+#app :is(input, textarea, [contenteditable]) { user-select: text; }
+
+.yard-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; outline: none; touch-action: none; cursor: grab; }
+.yard-canvas:active { cursor: grabbing; }
+.yard-canvas.over-bot { cursor: pointer; }
+
+/* The layer the panels sit in: the window's size, open to the yard below except where a panel is. */
+.hud { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.hud :is(.panel, .btn, .toggle, select, input, textarea, a, .help.open, .toast) { pointer-events: auto; }
+.hud.hidden > :not(.boot):not(.toasts) { visibility: hidden; }
+
+:focus-visible { outline: 3px solid #ffc61a; outline-offset: 2px; }
+
+/* ── what every panel uses ───────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 13px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 600 14px/1.1 var(--body);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:disabled { cursor: default; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn.icon { width: 38px; height: 38px; min-height: 0; padding: 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px; padding: 8px 0; }
+.row .label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row .hint { font-size: 12.5px; line-height: 1.4; }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; font: 600 12px/1.4 var(--body); text-align: center; }
+
+/* ── the map's two buttons ───────────────────────────────────────────────────── */
+.rail { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+
+/* ── map settings ────────────────────────────────────────────────────────────── */
+.settings.panel { position: absolute; right: 14px; top: 78px; width: min(360px, calc(100% - 28px)); max-height: calc(100% - 100px); }
+.hud .settings.panel:not(.open) { display: none !important; }
+.settings.panel > header { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 10px 16px; }
+.settings.panel .body { padding: 4px 16px 16px; overflow-y: auto; }
+.settings.panel .planets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+.settings.panel .planet { display: flex; align-items: center; gap: 9px; padding: 8px 10px; font: 600 14px var(--body); cursor: pointer; pointer-events: auto; }
+.settings.panel .orb { width: 22px; height: 22px; border-radius: 4px; border: 2px solid #15181d; }
+.settings.panel .select { min-height: 34px; padding: 4px 8px; font: 500 14px var(--body); border-radius: 6px; border: 2px solid currentColor; background: transparent; color: inherit; }
+
+/* ── the help sheet's frame ──────────────────────────────────────────────────── */
+.help { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px; background: rgb(10 12 16 / 0.45); }
+.help.open { display: flex; }
+.help .sheet { max-height: calc(100% - 40px); overflow-y: auto; border-radius: 10px; background: var(--panel-solid, #eef0f2); border: 2px solid var(--edge, #15181d); box-shadow: var(--thick, none), var(--lift, none); }
+.help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+.help .k { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; }
+@media (max-width: 640px) { .help .cols { grid-template-columns: 1fr; } }
+
+/* ── passing notes and the hint ──────────────────────────────────────────────── */
+.toasts { position: absolute; left: 50%; top: 86px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 30; }
+.toast { padding: 9px 15px; font: 500 14px/1.35 var(--body); max-width: min(520px, 90vw); }
+.hint-pill { position: absolute; left: 50%; transform: translateX(-50%); padding: 6px 13px; font: 500 13px var(--body); opacity: 0; transition: opacity 0.2s; }
+.hint-pill.on { opacity: 1; }
+
+/* ── the opening plate ───────────────────────────────────────────────────────── */
+.boot { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 40; pointer-events: auto; }
+.boot .bar { display: flex; gap: 3px; margin-top: 18px; padding: 3px; width: 240px; }
+.boot .bar > i { flex: 1; height: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

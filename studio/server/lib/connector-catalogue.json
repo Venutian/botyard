@@ -1,0 +1,650 @@
+[
+ {
+  "id": "airtable",
+  "name": "Airtable",
+  "about": "Use Airtable from a bot: look things up and, where you allow it, change them.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.airtable.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.airtable.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Airtable personal access token",
+    "keysPage": "https://airtable.com/create/tokens"
+   }
+  ]
+ },
+ {
+  "id": "bitly",
+  "name": "Bitly",
+  "about": "Use Bitly from a bot: look things up and, where you allow it, change them.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api-ssl.bitly.com/v4/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://api-ssl.bitly.com/v4/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Bitly API key",
+    "keysPage": "https://bitly.com/settings/api"
+   }
+  ]
+ },
+ {
+  "id": "calendly",
+  "name": "Calendly",
+  "about": "Review Calendly event types and availability, and use supported scheduling actions.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.calendly.com"
+   }
+  ]
+ },
+ {
+  "id": "clickhouse",
+  "name": "ClickHouse",
+  "about": "Use ClickHouse from a bot: look things up and, where you allow it, change them.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.clickhouse.cloud/clickstack"
+   }
+  ]
+ },
+ {
+  "id": "cloudflare",
+  "name": "Cloudflare",
+  "about": "Use Cloudflare from a bot: look things up and, where you allow it, change them.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.cloudflare.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.cloudflare.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Cloudflare API key",
+    "keysPage": "https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/"
+   }
+  ]
+ },
+ {
+  "id": "cloudinary",
+  "name": "Cloudinary",
+  "about": "Use Cloudinary from a bot: look things up and, where you allow it, change them.",
+  "kind": "content",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://asset-management.mcp.cloudinary.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "composio",
+  "name": "Composio",
+  "about": "Discover and use connected apps through Composio Connect.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://connect.composio.dev/mcp"
+   }
+  ]
+ },
+ {
+  "id": "context7",
+  "name": "Context7",
+  "about": "Search public library documentation and retrieve current code examples.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.context7.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "enterpret",
+  "name": "Enterpret",
+  "about": "Ask questions about your customer feedback and pull verbatim quotes with citations.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://wisdom-api.enterpret.com/server/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Enterpret auth token",
+    "keysPage": "https://enterpret.support.site/article/enterpret-mcp-server"
+   },
+   {
+    "kind": "signin",
+    "url": "https://wisdom-api.enterpret.com/server/mcp"
+   }
+  ]
+ },
+ {
+  "id": "exa",
+  "name": "Exa",
+  "about": "Search the public web and read source pages with Exa.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.exa.ai/mcp"
+   }
+  ]
+ },
+ {
+  "id": "firecrawl",
+  "name": "Firecrawl",
+  "about": "Search, scrape, and parse public web pages with Firecrawl.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.firecrawl.dev/v2/mcp-oauth"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.firecrawl.dev/v2/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Use a Firecrawl API key",
+    "keysPage": "https://docs.firecrawl.dev/mcp-server"
+   },
+   {
+    "kind": "open",
+    "url": "https://mcp.firecrawl.dev/v2/mcp"
+   }
+  ]
+ },
+ {
+  "id": "fireflies",
+  "name": "Fireflies",
+  "about": "Search meeting transcripts, read summaries and action items, and connect meeting-ready routines.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.fireflies.ai/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://api.fireflies.ai/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Fireflies API key",
+    "keysPage": "https://app.fireflies.ai/settings"
+   }
+  ]
+ },
+ {
+  "id": "gauge",
+  "name": "Gauge",
+  "about": "Track how AI answers mention your brand, research keywords and traffic, and run content workflows.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://app.withgauge.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://app.withgauge.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Gauge API key",
+    "keysPage": "https://docs.withgauge.com/help/mcp"
+   }
+  ]
+ },
+ {
+  "id": "github",
+  "name": "GitHub",
+  "about": "Give agents access to GitHub repositories, issues, and pull requests.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "GitHub token",
+    "keysPage": ""
+   }
+  ]
+ },
+ {
+  "id": "gsc-wizard",
+  "name": "GSC Wizard",
+  "about": "Read Google Search Console, Bing Webmaster, and analytics data for connected properties.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.gscwizard.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.gscwizard.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Use a GSC Wizard MCP key",
+    "keysPage": "https://www.gscwizard.com/claude-search-console-mcp.html"
+   }
+  ]
+ },
+ {
+  "id": "hugging-face",
+  "name": "Hugging Face",
+  "about": "Use Hugging Face from a bot: look things up and, where you allow it, change them.",
+  "kind": "ai",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://huggingface.co/mcp?login&gradio=none"
+   },
+   {
+    "kind": "open",
+    "url": "https://huggingface.co/mcp"
+   }
+  ]
+ },
+ {
+  "id": "jira",
+  "name": "Jira",
+  "about": "Use Jira from a bot: look things up and, where you allow it, change them.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.atlassian.com/v1/mcp/authv2"
+   }
+  ]
+ },
+ {
+  "id": "linear",
+  "name": "Linear",
+  "about": "Create, update, and read Linear issues.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.linear.app/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.linear.app/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Linear API key",
+    "keysPage": "https://linear.app/docs/api-and-webhooks"
+   }
+  ]
+ },
+ {
+  "id": "make",
+  "name": "Make",
+  "about": "Use Make from a bot: look things up and, where you allow it, change them.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.make.com"
+   }
+  ]
+ },
+ {
+  "id": "miro",
+  "name": "Miro",
+  "about": "Use Miro from a bot: look things up and, where you allow it, change them.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.miro.com/"
+   }
+  ]
+ },
+ {
+  "id": "mixpanel",
+  "name": "Mixpanel",
+  "about": "Use Mixpanel from a bot: look things up and, where you allow it, change them.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.mixpanel.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "neon",
+  "name": "Neon",
+  "about": "Manage Postgres projects and branches, run SQL, and inspect schemas in Neon.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.neon.tech/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.neon.tech/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Neon API key",
+    "keysPage": "https://console.neon.tech/app/settings/api-keys"
+   }
+  ]
+ },
+ {
+  "id": "netlify",
+  "name": "Netlify",
+  "about": "Use Netlify from a bot: look things up and, where you allow it, change them.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://netlify-mcp.netlify.app/mcp"
+   }
+  ]
+ },
+ {
+  "id": "notion",
+  "name": "Notion",
+  "about": "Read and update pages in your Notion workspace.",
+  "kind": "content",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.notion.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "pagerduty",
+  "name": "PagerDuty",
+  "about": "Use PagerDuty from a bot: look things up and, where you allow it, change them.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://mcp.pagerduty.com/mcp",
+    "header": "Authorization",
+    "prefix": "Token token=",
+    "keyLabel": "PagerDuty API key",
+    "keysPage": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server"
+   }
+  ]
+ },
+ {
+  "id": "parallel-search",
+  "name": "Parallel Search",
+  "about": "Search the public web and extract source pages with Parallel.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://search.parallel.ai/mcp"
+   }
+  ]
+ },
+ {
+  "id": "posthog",
+  "name": "PostHog",
+  "about": "Analyze product usage, errors, feature flags, and experiments with PostHog's hosted MCP server.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.posthog.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.posthog.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "PostHog personal API key",
+    "keysPage": "https://posthog.com/docs/model-context-protocol/faq"
+   }
+  ]
+ },
+ {
+  "id": "postman",
+  "name": "Postman",
+  "about": "Use Postman from a bot: look things up and, where you allow it, change them.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.postman.com/minimal"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.eu.postman.com/minimal",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Postman API key",
+    "keysPage": "https://learning.postman.com/latest-v-12/docs/reference/postman-api/postman-mcp-server/postman-mcp-remote-server"
+   }
+  ]
+ },
+ {
+  "id": "railway",
+  "name": "Railway",
+  "about": "Inspect services and logs, deploy applications, and run commands in your Railway containers.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.railway.com"
+   }
+  ]
+ },
+ {
+  "id": "resend",
+  "name": "Resend",
+  "about": "Use Resend from a bot: look things up and, where you allow it, change them.",
+  "kind": "communication",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.resend.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "sentry",
+  "name": "Sentry",
+  "about": "Investigate errors, releases, and production issues.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.sentry.dev/mcp"
+   }
+  ]
+ },
+ {
+  "id": "stripe",
+  "name": "Stripe",
+  "about": "Use Stripe from a bot: look things up and, where you allow it, change them.",
+  "kind": "commerce",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.stripe.com"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.stripe.com",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Stripe API key",
+    "keysPage": "https://docs.stripe.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "supabase",
+  "name": "Supabase",
+  "about": "Use Supabase from a bot: look things up and, where you allow it, change them.",
+  "kind": "data",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.supabase.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.supabase.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Supabase API key",
+    "keysPage": "https://supabase.com/docs/guides/ai-tools/mcp"
+   }
+  ]
+ },
+ {
+  "id": "superagent",
+  "name": "Superagent",
+  "about": "Review security findings, start red-team reports, and score content and packages before agents trust them.",
+  "kind": "developer",
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://www.superagent.sh/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Superagent API key",
+    "keysPage": "https://www.superagent.sh/app/settings#api-keys"
+   }
+  ]
+ },
+ {
+  "id": "tavily",
+  "name": "Tavily",
+  "about": "Search the public web and extract page content with Tavily\u2019s hosted MCP server.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.tavily.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "telem",
+  "name": "Telem.AI",
+  "about": "Search the web and read pages across many search providers with one API key.",
+  "kind": "ai",
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://mcp.telem.ai/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Telem.AI API key",
+    "keysPage": "https://app.telem.ai"
+   }
+  ]
+ },
+ {
+  "id": "todoist",
+  "name": "Todoist",
+  "about": "Use Todoist from a bot: look things up and, where you allow it, change them.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://ai.todoist.net/mcp"
+   }
+  ]
+ },
+ {
+  "id": "webflow",
+  "name": "Webflow",
+  "about": "Use Webflow from a bot: look things up and, where you allow it, change them.",
+  "kind": "content",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.webflow.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "windsor-ai",
+  "name": "Windsor.ai",
+  "about": "Query connected marketing, analytics, CRM, and warehouse data through Windsor.ai.",
+  "kind": "analytics",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.windsor.ai/"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.windsor.ai/",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Use a Windsor.ai API key",
+    "keysPage": "https://mcp.windsor.ai/"
+   }
+  ]
+ },
+ {
+  "id": "wix",
+  "name": "Wix",
+  "about": "Use Wix from a bot: look things up and, where you allow it, change them.",
+  "kind": "content",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.wix.com/mcp"
+   }
+  ]
+ },
+ {
+  "id": "youcom",
+  "name": "You.com",
+  "about": "Use You.com from a bot: look things up and, where you allow it, change them.",
+  "kind": "ai",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.you.com/mcp"
+   },
+   {
+    "kind": "key",
+    "url": "https://api.you.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "You.com API key",
+    "keysPage": "https://you.com/docs/build-with-agents/mcp-server"
+   },
+   {
+    "kind": "open",
+    "url": "https://api.you.com/mcp?profile=free"
+   }
+  ]
+ }
+]

@@ -1,0 +1,16 @@
+{
+	"name": "botyard-edge",
+	"main": "./src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [
+		{ "pattern": "studio.example.org", "custom_domain": true },
+		{ "pattern": "play.example.org", "custom_domain": true }
+	],
+	"vpc_services": [
+		{ "binding": "DOOR", "service_id": "PUT-THE-DOOR-SERVICE-ID-HERE" },
+		{ "binding": "PLAY", "service_id": "PUT-THE-PLAY-SERVICE-ID-HERE" }
+	],
+	"observability": { "enabled": true }
+}

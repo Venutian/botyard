@@ -1,0 +1,32 @@
+{
+  "name": "Claude Builder",
+  "role": "builder",
+  "tier": "light",
+  "title": "Builds the everyday work on Claude",
+  "does": "Builds everyday work that is clear from its brief: small features, fixes, tests, renames, docs. Takes over a free build that failed its check. Off until Claude is signed in.",
+  "reportsTo": "lead",
+  "ai": "claude",
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "minutes": 90,
+  "turns": 150,
+  "mayNot": [
+    "push"
+  ],
+  "atOnce": 2,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": false,
+  "needs": "claude",
+  "look": {
+    "colour": "#2f7cf6",
+    "hat": "hardhat",
+    "build": "barrel",
+    "gear": [
+      "wrench"
+    ],
+    "face": "shade"
+  }
+}

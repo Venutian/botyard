@@ -1,0 +1,105 @@
+{
+  "about": "The crew's helper scripts and when Botyard runs them. Read by studio/server/lib/timetable.mjs. A timer has `every` (30s, 5m, 1h) counted from the last `start` or `finish`, with `first` as the wait after the service starts; or `at` (`Mon 08:00`, `04:30`, `*:05,35`), with `catchUp` to run a time that passed while the service was off. A keeper is kept running. `limit` is how long one run may take.",
+  "jobs": [
+    {
+      "name": "review-guard",
+      "kind": "timer",
+      "what": "Sends each finished build to its check, acts on the verdict, and wakes jobs that are stuck. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/pipeline.py"
+      ],
+      "every": "1m",
+      "after": "finish",
+      "first": "1m",
+      "limit": "5m",
+      "on": true
+    },
+    {
+      "name": "wait",
+      "kind": "timer",
+      "what": "Wakes build sessions whose heavy job has finished. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/botyard-wait.py",
+        "--wake"
+      ],
+      "every": "1m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "5m",
+      "on": true
+    },
+    {
+      "name": "fallback",
+      "kind": "timer",
+      "what": "Moves bots to another AI while theirs is out of its limit, and back again.",
+      "command": [
+        "{python}",
+        "{scripts}/fallback.py"
+      ],
+      "every": "2m",
+      "after": "finish",
+      "first": "3m",
+      "limit": "5m",
+      "on": true
+    },
+    {
+      "name": "token-guard",
+      "kind": "timer",
+      "what": "Pauses Claude bots at your token limit, so the week's allowance lasts.",
+      "command": [
+        "{python}",
+        "{scripts}/token-guard.py"
+      ],
+      "every": "5m",
+      "after": "finish",
+      "first": "3m",
+      "limit": "5m",
+      "on": true
+    },
+    {
+      "name": "away",
+      "kind": "timer",
+      "what": "Keeps the router's port open so the phone app reaches Botyard away from home.",
+      "command": [
+        "{node}",
+        "{repo}/tools/away.mjs",
+        "keep"
+      ],
+      "cwd": "{repo}",
+      "every": "15m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "5m",
+      "on": true
+    },
+    {
+      "name": "free-scout",
+      "kind": "timer",
+      "what": "Looks for new free models every morning, tests them and adds the ones that work.",
+      "command": [
+        "{python}",
+        "{scripts}/free-scout.py"
+      ],
+      "at": "04:30",
+      "catchUp": true,
+      "limit": "60m",
+      "on": true
+    },
+    {
+      "name": "edge",
+      "kind": "keeper",
+      "what": "Botyard's private link to Cloudflare, for the phone app away from home.",
+      "command": [
+        "cloudflared",
+        "tunnel",
+        "--no-autoupdate",
+        "run"
+      ],
+      "envFile": "{config}/edge-tunnel.env",
+      "restart": "10s",
+      "on": true
+    }
+  ]
+}

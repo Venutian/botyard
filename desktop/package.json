@@ -1,0 +1,29 @@
+{
+  "name": "botyard-desktop",
+  "productName": "Botyard",
+  "version": "2.5.0",
+  "description": "Botyard's map, your whole yard in one window",
+  "author": "Botyard contributors",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "44.9.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "org.botyard.desktop",
+    "productName": "Botyard",
+    "artifactName": "Botyard-${version}.${ext}",
+    "directories": { "output": "dist" },
+    "files": ["main.cjs", "preload.cjs", "bar.html"],
+    "linux": {
+      "target": "AppImage",
+      "category": "Development",
+      "icon": "../assets/icon.png"
+    }
+  }
+}

@@ -1,0 +1,765 @@
+/*
+ * Plates: Botyard's look.
+ *
+ * The studio is a workshop staffed by robots, and its controls are the workshop's own signs: flat
+ * powder-coated plates with a dark edge and a visible thickness, standing in front of the floor
+ * instead of glass floating over it. Three things carry it:
+ *
+ *  1. The crew's colours. Each bot wears one colour on the floor; the same colour is its plate in
+ *     the roster, the edge of every job it is on, and the head of its conversation. Who is on
+ *     what is read by colour before a word is.
+ *  2. Workshop colours for state, used as paint and not as glow: green is running, yellow needs
+ *     the owner (the one place hazard stripes appear), red has stopped.
+ *  3. A tall sign face (Big Shoulders Display) for names, codes and titles, and a plain machine
+ *     face (IBM Plex Sans) for everything that is read.
+ *
+ * Day plates are light; night plates are the same signs after dark. This file comes after
+ * studio.css and money.css and only says what the look changes; layout stays where it was.
+ */
+
+/* The type comes from npm (@fontsource), so no font file is kept in this tree. Latin only. */
+@import '@fontsource/big-shoulders-display/latin-600';
+@import '@fontsource/big-shoulders-display/latin-800';
+@import '@fontsource/ibm-plex-sans/latin-400';
+@import '@fontsource/ibm-plex-sans/latin-500';
+@import '@fontsource/ibm-plex-sans/latin-600';
+
+/* ── paint ─────────────────────────────────────────────────────────────────────── */
+
+.hud.studio {
+  --sign: 'Big Shoulders Display', 'Barlow Semi Condensed', ui-sans-serif, system-ui, sans-serif;
+  --body: 'IBM Plex Sans', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  /* Day plates: signal white, graphite ink. */
+  --panel: #eef0f2;
+  --panel-solid: #eef0f2;
+  --raise: #ffffff;
+  --sunk: #dfe3e8;
+  --line: #cdd3da;
+  --line-strong: #99a2ad;
+  --edge: #15181d;
+  --text: #15181d;
+  --muted: #454d58;
+  --dim: #66707c;
+  --accent: #1746c9;
+  --accent-ink: #ffffff;
+  --go: #ffc61a;
+  --go-ink: #15181d;
+  --green: #0f7a43;
+  --amber: #8f5600;
+  --red: #c0271b;
+  --blue: #1746c9;
+  --green-paint: #35d07f;
+  --yellow-paint: #ffc61a;
+  --red-paint: #ff5b4d;
+  --thick: 0 4px 0 var(--edge);
+  --lift: 0 18px 30px -14px rgb(10 12 16 / 0.55);
+  --bot: #7d8590;
+  --bot-ink: #ffffff;
+  color-scheme: light;
+}
+.hud.studio[data-plates='night'] {
+  --panel: #1c2026;
+  --panel-solid: #1c2026;
+  --raise: #272c35;
+  --sunk: #14171c;
+  --line: #333a45;
+  --line-strong: #5b6573;
+  --edge: #05070a;
+  --text: #f2f4f6;
+  --muted: #b1b9c4;
+  --dim: #8c96a3;
+  --accent: #8fb3ff;
+  --accent-ink: #0b1220;
+  --green: #55dc92;
+  --amber: #ffc61a;
+  --red: #ff7a6e;
+  --blue: #8fb3ff;
+  --lift: 0 18px 30px -14px rgb(0 0 0 / 0.8);
+  color-scheme: dark;
+}
+
+/* ── the plate ─────────────────────────────────────────────────────────────────── */
+
+.hud.studio .panel,
+.hud.studio .studio-sheet.deck-col {
+  background: var(--panel-solid);
+  border: 2px solid var(--edge);
+  border-radius: 10px;
+  box-shadow: var(--thick), var(--lift);
+}
+.hud.studio { font-family: var(--body); }
+.hud.studio ::selection { background: var(--go); color: var(--go-ink); }
+
+/* Buttons are keys: an edge, a thickness, and they go down when pressed. */
+.hud.studio .btn {
+  border: 2px solid var(--edge);
+  border-radius: 7px;
+  background: var(--raise);
+  color: var(--text);
+  font: 600 13px/1 var(--body);
+  box-shadow: 0 2px 0 var(--edge);
+  transition: transform 0.06s, box-shadow 0.06s, background-color 0.12s;
+}
+.hud.studio .btn:hover { background: var(--sunk); border-color: var(--edge); }
+.hud.studio .btn:active { transform: translateY(2px); box-shadow: 0 0 0 var(--edge); }
+.hud.studio .btn.primary { background: var(--go); color: var(--go-ink); border-color: var(--edge); }
+.hud.studio .btn.primary:hover { background: color-mix(in srgb, var(--go) 86%, #fff); }
+.hud.studio .btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.hud.studio .btn.ghost:hover { background: var(--sunk); border-color: transparent; }
+.hud.studio .btn.ghost:active { transform: none; background: var(--line); }
+.hud.studio .btn[aria-pressed='true'] { background: var(--edge); color: var(--panel-solid); border-color: var(--edge); }
+.hud.studio .btn:disabled { opacity: 0.4; box-shadow: none; cursor: default; }
+.hud.studio .btn.danger { color: var(--red); border-color: var(--red) !important; box-shadow: 0 2px 0 var(--red); }
+.hud.studio :is(button, a, input, textarea, select, summary, [tabindex]):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .hud.studio .btn { transition: none; }
+  .hud.studio .btn:active { transform: none; }
+}
+
+/* ── the sign along the top ────────────────────────────────────────────────────── */
+
+.hud.studio .studio-top { height: 52px; padding: 0 8px 0 0; gap: 8px; overflow: hidden; }
+.hud.studio .studio-top .mark {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 18px 0 16px;
+  background: var(--edge);
+  color: #f2f4f6;
+  font: 800 25px/1 var(--sign);
+  letter-spacing: 0.02em;
+}
+.hud.studio .studio-top .mark::before { width: 12px; height: 12px; margin-right: 10px; border-radius: 0; background: var(--go); transform: none; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.hud.studio .studio-state { margin: 0 6px 0 8px; padding-left: 0; border-left: 0; font: 500 14px/1.3 var(--body); color: var(--text); }
+.hud.studio .studio-top .btn { height: 36px; }
+.hud.studio .studio-top .btn.icon { width: 36px; }
+.hud.studio .studio-top .meters { gap: 18px; margin: 0 10px 0 6px; }
+.hud.studio .studio-top .meter { gap: 8px; font-size: 13px; }
+.hud.studio .studio-top .meter b { font: 800 17px/1 var(--sign); letter-spacing: 0.03em; color: var(--text); }
+.hud.studio .studio-top .meter .cells { width: auto; height: 16px; display: flex; gap: 2px; padding: 2px; border: 2px solid var(--edge); border-radius: 4px; background: var(--raise); overflow: visible; }
+.hud.studio .studio-top .meter .cells u { display: block; width: 5px; height: 100%; background: var(--line); }
+.hud.studio .studio-top .meter .cells u.on { background: var(--green-paint); }
+.hud.studio .studio-top .meter.warn .cells u.on { background: var(--yellow-paint); }
+.hud.studio .studio-top .meter.bad .cells u.on { background: var(--red-paint); }
+.hud.studio .studio-top .meter em { min-width: 58px; font-weight: 500; color: var(--muted); }
+.hud.studio .studio-top .meter.bad em { color: var(--red); font-weight: 600; }
+
+/* ── the rail ──────────────────────────────────────────────────────────────────── */
+
+.hud.studio .studio-dock { top: 78px; width: 76px; padding: 6px; gap: 3px; max-height: calc(100% - 196px); }
+.hud.studio .studio-dock button { padding: 9px 0 7px; border: 2px solid transparent; border-radius: 7px; color: var(--muted); font: 600 12px/1 var(--body); transition: none; }
+.hud.studio .studio-dock button svg { width: 22px; height: 22px; stroke-width: 1.9; }
+.hud.studio .studio-dock button:hover { background: var(--sunk); color: var(--text); }
+.hud.studio .studio-dock button.on { background: var(--edge); color: #f2f4f6; border-color: var(--edge); }
+.hud.studio .studio-dock button.on::before { display: none; }
+.hud.studio .studio-dock .dock-gap { height: 2px; margin: 4px 6px; background: var(--line); }
+.hud.studio .studio-dock kbd { position: absolute; top: 3px; left: 5px; font: 600 10px/1 var(--body); color: var(--dim); }
+.hud.studio .studio-dock button.on kbd { color: #9aa3ae; }
+.hud.studio .studio-dock button b { top: 2px; right: 3px; min-width: 19px; padding: 2px 4px; border: 2px solid var(--edge); border-radius: 5px; background: var(--raise); color: var(--text); font: 600 11px/1.1 var(--body); }
+.hud.studio .studio-dock button b.bad { background: var(--yellow-paint); color: #15181d; }
+
+/* ── the roster along the bottom ───────────────────────────────────────────────── */
+
+.hud.studio .studio-crew { gap: 6px; padding: 8px; align-items: flex-end; }
+.hud.studio .studio-crew .tier-gap { align-self: stretch; width: 2px; margin: 4px 2px; background: var(--line); flex: none; }
+.hud.studio .studio-crew .mate {
+  position: relative;
+  width: 146px;
+  gap: 8px;
+  padding: 5px 8px 5px 5px;
+  border: 2px solid var(--edge);
+  border-radius: 8px;
+  background: var(--raise);
+  box-shadow: 0 2px 0 var(--edge);
+  overflow: hidden;
+}
+/* The bot's own colour is the left of its plate, behind its face. */
+.hud.studio .studio-crew .mate::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 34px; background: var(--bot); border-right: 2px solid var(--edge); }
+.hud.studio .studio-crew .mate:hover { background: var(--sunk); }
+.hud.studio .studio-crew .mate:active { transform: translateY(2px); box-shadow: none; }
+.hud.studio .studio-crew .mate.on { background: var(--bot); color: var(--bot-ink); }
+.hud.studio .studio-crew .mate.on .text small { color: inherit; opacity: 0.85; }
+.hud.studio .studio-crew .face { position: relative; width: 44px; height: 44px; border: 2px solid var(--edge); box-shadow: none; background: var(--bot); }
+.hud.studio .studio-crew .light { right: -3px; bottom: -3px; width: 10px; height: 10px; border: 2px solid var(--edge); background: var(--line-strong); }
+.hud.studio .studio-crew .running .face,
+.hud.studio .studio-crew .error .face { box-shadow: none; }
+.hud.studio .studio-crew .running .light { background: var(--green-paint); }
+.hud.studio .studio-crew .paused .light { background: var(--yellow-paint); }
+.hud.studio .studio-crew .error .light { background: var(--red-paint); }
+.hud.studio .studio-crew .text b { font: 800 20px/1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .studio-crew .text small { font-size: 12px; color: var(--dim); }
+.hud.studio .studio-crew .running .text small { color: var(--green); font-weight: 600; }
+.hud.studio .studio-crew .error .text small { color: var(--red); font-weight: 600; }
+/* Who is working stands a little taller; nobody moves sideways. */
+.hud.studio .studio-crew .mate.running { padding-top: 9px; padding-bottom: 9px; }
+.hud.studio .studio-crew .mate:not(.running):not(.on) .face { filter: saturate(0.75); }
+.hud.studio .studio-crew .paused .face { filter: grayscale(0.8); opacity: 0.75; }
+@media (prefers-reduced-motion: reduce) { .hud.studio .studio-crew .mate:active { transform: none; } }
+
+/* ── names on the floor ────────────────────────────────────────────────────────── */
+
+.hud.studio .studio-tags .tag {
+  padding: 2px 9px 3px 4px;
+  border: 2px solid var(--edge);
+  border-radius: 6px;
+  background: var(--panel-solid);
+  color: var(--text);
+  font: 800 15px/1.1 var(--sign);
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 0 var(--edge);
+}
+.hud.studio .studio-tags .tag:has(.face) { border-radius: 6px; }
+.hud.studio .studio-tags .tag .face { width: 24px; height: 24px; margin: 0 2px 0 0; border-radius: 4px; border: 2px solid var(--edge); background: var(--bot); }
+.hud.studio .studio-tags .tag small { font: 500 11px/1.2 var(--body); color: var(--muted); }
+.hud.studio .studio-tags .tag.running { border-color: var(--edge); box-shadow: 0 2px 0 var(--edge), inset 0 -3px 0 var(--green-paint); }
+.hud.studio .studio-tags .tag.running small { color: var(--green); font-weight: 600; }
+.hud.studio .studio-tags .tag.screen { background: var(--edge); border-color: var(--edge); color: #f2f4f6; padding-left: 9px; }
+
+/* ── columns and pages ─────────────────────────────────────────────────────────── */
+
+.hud.studio .studio-deck { top: 78px; left: 104px; bottom: 104px; gap: 12px; }
+.hud.studio .studio-chat { top: 78px; }
+.hud.studio .settings { top: 78px; }
+.hud.studio .studio-sheet .col-head { padding: 12px 8px 10px 16px; border-bottom: 2px solid var(--edge); background: var(--raise); border-radius: 8px 8px 0 0; }
+.hud.studio .studio-sheet header strong,
+.hud.studio .studio-sheet .col-head strong { font: 800 27px/1.05 var(--sign); letter-spacing: 0.015em; }
+.hud.studio .studio-sheet .col-head p { margin-top: 3px; font-size: 13px; color: var(--muted); }
+.hud.studio .studio-body .panel-head { background: var(--raise); border-bottom: 2px solid var(--edge); }
+.hud.studio .studio-body .panel-head strong { font: 800 24px/1.05 var(--sign); letter-spacing: 0.015em; }
+.hud.studio .studio-sheet h3,
+.hud.studio .studio-body h3 { margin: 20px 8px 7px; padding-bottom: 5px; border-bottom: 2px solid var(--line); font: 600 14px/1.2 var(--body); letter-spacing: 0; color: var(--text); }
+.hud.studio .studio-sheet summary { font: 600 13px/1.6 var(--body); color: var(--text); }
+.hud.studio .studio-body .none,
+.hud.studio .studio-sheet .none { margin: 8px 8px; padding: 12px 14px; border: 2px dashed var(--line-strong); border-radius: 8px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.hud.studio .studio-body .hint,
+.hud.studio .studio-sheet .hint { color: var(--muted); }
+.hud.studio .deck-col .sheet-body { scrollbar-color: var(--line-strong) transparent; }
+
+/* A row is picked: it is inked in, the way a tab is lifted off the board. */
+.hud.studio .studio-body button:hover { background: var(--raise); }
+.hud.studio .deck-col .picked,
+.hud.studio .deck-col tr.picked > td { background: var(--raise); }
+.hud.studio .deck-col :is(button, div).picked { box-shadow: inset 0 0 0 2px var(--edge); }
+.hud.studio .deck-col tr.picked > td:first-child { box-shadow: inset 4px 0 0 var(--edge); }
+
+/* Job lines: the code in the sign face, the bot's colour down the edge. */
+.hud.studio .studio-body .line { position: relative; padding: 8px 8px 8px 16px; border-radius: 7px; column-gap: 9px; }
+.hud.studio .studio-body .line::before { content: ''; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 5px; border-radius: 2px; background: var(--bot, var(--line-strong)); }
+.hud.studio .studio-body .line.done::before { background: var(--line); }
+.hud.studio .studio-body .line .ref { font: 800 17px/1.05 var(--sign); letter-spacing: 0.03em; color: var(--text); }
+.hud.studio .studio-body .line .title { font-size: 14px; line-height: 1.4; }
+.hud.studio .studio-body .line .note { font-size: 12px; color: var(--muted); }
+.hud.studio .studio-body .line.late .note { color: var(--amber); font-weight: 600; }
+.hud.studio .studio-body .line.done .ref,
+.hud.studio .studio-body .line.done .title { color: var(--muted); }
+
+/* Stage and state words are painted tags: one colour per meaning, the word always there. */
+.hud.studio .state,
+.hud.studio .stage {
+  display: inline-block;
+  padding: 2px 7px 3px;
+  border: 2px solid var(--edge);
+  border-radius: 5px;
+  background: var(--raise);
+  color: #15181d;
+  font: 600 12px/1.15 var(--body);
+  white-space: nowrap;
+}
+.hud.studio[data-plates='night'] :is(.state, .stage) { background: #c8ced6; }
+.hud.studio :is(.state, .stage).go { background: var(--green-paint); }
+.hud.studio :is(.state, .stage).warn { background: var(--yellow-paint); }
+.hud.studio :is(.state, .stage).bad { background: var(--red-paint); }
+.hud.studio :is(.state, .stage).done { background: #bfe9d2; }
+.hud.studio :is(.state, .stage).dim { background: var(--sunk); color: var(--muted); border-color: var(--line-strong); }
+.hud.studio[data-plates='night'] :is(.state, .stage).dim { background: var(--raise); color: var(--muted); }
+
+/* Needs you: the one place with hazard stripes. */
+.hud.studio .studio-body .ask { position: relative; margin: 6px 2px 10px; padding: 16px 12px 12px; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); box-shadow: 0 3px 0 var(--edge); overflow: hidden; }
+.hud.studio .studio-body .ask::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 7px; border-bottom: 2px solid var(--edge); background: repeating-linear-gradient(-45deg, var(--yellow-paint) 0 9px, #15181d 9px 18px); }
+.hud.studio .studio-body .ask p { font-size: 13px; color: var(--muted); }
+.hud.studio .studio-body .ask .btn.primary { background: var(--go); color: var(--go-ink); }
+.hud.studio .studio-body .ask .btn.ghost { border: 2px solid var(--line-strong); }
+.hud.studio .col-a.called { animation: none; }
+
+/* The project's goal is the sign over its door. */
+.hud.studio .studio-sheet .goal-card { margin: 8px 6px 20px; padding: 14px 16px 14px; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); box-shadow: 0 3px 0 var(--edge); }
+.hud.studio .studio-sheet .goal-card .kicker { font: 600 13px/1 var(--body); letter-spacing: 0; color: var(--muted); }
+.hud.studio .studio-sheet .goal-card .goal-line { margin: 10px 0 12px; font: 800 26px/1.14 var(--sign); letter-spacing: 0.01em; }
+.hud.studio .studio-sheet .goal-card.empty { border-style: dashed; box-shadow: none; background: transparent; }
+.hud.studio .studio-sheet .goal-card.empty .goal-line { font: 600 16px/1.4 var(--body); }
+.hud.studio .studio-sheet .goal-card header .btn { border: 2px solid var(--edge); }
+.hud.studio .studio-sheet .goal-edit,
+.hud.studio .studio-sheet .plan-card { border: 2px solid var(--line-strong); border-radius: 8px; }
+.hud.studio .studio-sheet .plan-steps summary { color: var(--accent); }
+
+/* Tables. */
+.hud.studio .studio-sheet table.grid th { font: 600 12px/1.2 var(--body); color: var(--muted); border-bottom: 2px solid var(--edge); }
+.hud.studio .studio-sheet table.grid td { border-bottom: 1px solid var(--line); }
+.hud.studio .studio-sheet table.grid tr.go-row:hover > td { background: var(--raise); }
+.hud.studio .studio-sheet table.grid td b { font-weight: 600; }
+
+/* Fields. */
+.hud.studio :is(.studio-sheet, .studio-chat) :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+  border: 2px solid var(--edge);
+  border-radius: 7px;
+  background: var(--raise);
+  color: var(--text);
+  font-family: var(--body);
+}
+.hud.studio :is(.studio-sheet, .studio-chat) :is(input, textarea)::placeholder { color: var(--dim); }
+.hud.studio .studio-sheet .seg { border: 2px solid var(--edge); border-radius: 7px; background: var(--sunk); }
+.hud.studio .studio-sheet .seg button.on,
+.hud.studio .studio-sheet .seg label input:checked + span { background: var(--edge); color: var(--panel-solid); }
+.hud.studio .studio-sheet .seg label input[value='write']:checked + span { background: var(--yellow-paint); color: #15181d; }
+.hud.studio .studio-sheet section.way { border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); }
+.hud.studio .studio-sheet .pick-row:hover,
+.hud.studio .studio-sheet .pick-row:focus-visible { background: var(--raise); }
+.hud.studio .studio-sheet .pick-row b { font: 800 18px/1.1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .studio-sheet code { font: 13px/1.4 ui-monospace, 'JetBrains Mono', Menlo, monospace; }
+
+/* The yes-or-no bar a risky press raises. */
+.hud.studio .sheet-confirm { border-top: 2px solid var(--edge); background: var(--yellow-paint); color: #15181d; }
+.hud.studio .sheet-confirm p { color: #15181d; }
+
+/* What a page shows while it is read: blank tickets, standing still. */
+.hud.studio .skeleton i,
+.hud.studio .skeleton b { background: var(--sunk); animation: none; border-radius: 4px; }
+
+/* ── a conversation ────────────────────────────────────────────────────────────── */
+
+.hud.studio .studio-chat header { padding: 10px 10px 10px 12px; background: var(--bot); color: var(--bot-ink); border-bottom: 2px solid var(--edge); }
+.hud.studio .studio-chat header .face { width: 46px; height: 46px; border: 2px solid var(--edge); border-radius: 8px; background: var(--bot); }
+.hud.studio .studio-chat header .light { border: 2px solid var(--edge); width: 10px; height: 10px; background: #c8ced6; box-shadow: none !important; }
+.hud.studio .studio-chat header.running .light { background: var(--green-paint); }
+.hud.studio .studio-chat header.paused .light { background: var(--yellow-paint); }
+.hud.studio .studio-chat header.error .light { background: var(--red-paint); }
+.hud.studio .studio-chat .who strong { font: 800 24px/1 var(--sign); letter-spacing: 0.015em; }
+.hud.studio .studio-chat .who span { color: inherit; opacity: 0.85; }
+.hud.studio .studio-chat header .btn { color: var(--bot-ink); border-color: transparent; box-shadow: none; background: transparent; height: 30px; padding: 0 9px; }
+.hud.studio .studio-chat header .btn:hover { background: color-mix(in srgb, var(--bot-ink) 18%, transparent); }
+.hud.studio .studio-chat .doing { padding: 9px 14px; border-bottom: 2px solid var(--line); background: var(--raise); color: var(--text); font-size: 13px; }
+.hud.studio .studio-chat .msg .said { border: 2px solid var(--line); border-radius: 8px 8px 8px 2px; background: var(--raise); font-size: 14px; line-height: 1.5; }
+.hud.studio .studio-chat .msg.mine .said { border-color: var(--edge); border-radius: 8px 8px 2px 8px; background: var(--edge); color: #f2f4f6; }
+.hud.studio[data-plates='night'] .studio-chat .msg.mine .said { background: #f2f4f6; color: #15181d; border-color: #f2f4f6; }
+.hud.studio .studio-chat .msg .said h4 { font: 600 14px/1.3 var(--body); }
+.hud.studio .studio-chat .card { border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); box-shadow: 0 3px 0 var(--edge); }
+.hud.studio .studio-chat .card.settled { border-color: var(--line-strong); box-shadow: none; background: transparent; }
+.hud.studio .studio-chat form { border-top: 2px solid var(--edge); background: var(--raise); }
+
+/* ── the office's own leftovers, brought into line ─────────────────────────────── */
+
+.hud.studio .rail { border: 2px solid var(--edge); border-radius: 10px; background: var(--panel-solid); box-shadow: var(--thick), var(--lift); }
+.hud.studio .hint-pill { bottom: 100px; border: 2px solid var(--edge); border-radius: 6px; background: var(--panel-solid); color: var(--text); box-shadow: 0 2px 0 var(--edge); font-family: var(--body); }
+.hud.studio .toast { border: 2px solid var(--edge); border-radius: 7px; background: var(--edge); color: #f2f4f6; box-shadow: var(--lift); font: 600 14px/1.35 var(--body); }
+.hud.studio .toast.err { background: var(--red-paint); color: #15181d; }
+
+/* ── narrow windows ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .hud.studio .studio-top .meter em { display: none; }
+  .hud.studio .studio-crew .mate { width: 128px; }
+}
+@media (max-width: 900px) {
+  .hud.studio .studio-top .mark { font-size: 21px; padding: 0 12px; }
+  .hud.studio .studio-top .meters { display: none; }
+  .hud.studio .studio-dock { width: 64px; }
+  .hud.studio .studio-deck { left: 90px; }
+  .hud.studio .studio-crew .mate { width: auto; padding-right: 5px; }
+  .hud.studio .studio-crew .mate::before { width: 100%; border-right: 0; }
+}
+
+/* With a conversation open the roster folds to faces, so nobody is cut off by it. */
+.hud.studio.studio-chatting .studio-crew { left: 14px; transform: none; max-width: calc(100% - 402px); }
+@media (max-width: 1500px) {
+  .hud.studio.studio-chatting .studio-crew .mate { width: auto; padding-right: 5px; }
+  .hud.studio.studio-chatting .studio-crew .mate .text { display: none; }
+  .hud.studio.studio-chatting .studio-crew .mate::before { width: 100%; border-right: 0; }
+}
+.hud.studio .studio-dock button { padding-top: 12px; }
+.hud.studio .studio-dock button { padding: 9px 0 6px; gap: 3px; }
+.hud.studio .studio-dock button svg { width: 20px; height: 20px; }
+.hud.studio .studio-dock { scrollbar-width: none; }
+@media (max-height: 880px) {
+  .hud.studio .studio-dock button { padding: 6px 0 5px; }
+  .hud.studio .studio-dock kbd { display: none; }
+  .hud.studio .studio-dock .dock-gap { margin: 2px 6px; }
+}
+.hud.studio .studio-sheet .none + .acts { margin: 0 8px; }
+.hud.studio .studio-sheet .none + .acts .btn { flex: none; }
+.hud.studio :is(.state, .stage):is(.go, .warn, .bad, .done) { color: #15181d !important; }
+.hud.studio[data-plates='night'] .studio-body .line::before { box-shadow: 0 0 0 1px var(--line-strong); }
+.hud.studio .studio-chat .card .row { flex-wrap: wrap; gap: 6px; }
+.hud.studio .studio-chat .card .row .btn { white-space: nowrap; flex: 0 1 auto; }
+@media (max-height: 960px) {
+  .hud.studio .studio-dock button { padding: 6px 0 5px; }
+  .hud.studio .studio-dock kbd { display: none; }
+  .hud.studio .studio-dock .dock-gap { margin: 2px 6px; }
+}
+.hud.studio .studio-tags .tag.screen small { color: #b9c0c9; }
+@media (max-width: 900px) { .hud.studio .studio-dock { width: 76px; } .hud.studio .studio-deck { left: 104px; } }
+@media (max-width: 1320px) { .hud.studio .studio-crew .mate { width: 124px; } }
+@media (max-width: 1140px) {
+  .hud.studio .studio-crew .mate { width: auto; padding-right: 5px; }
+  .hud.studio .studio-crew .mate .text { display: none; }
+  .hud.studio .studio-crew .mate::before { width: 100%; border-right: 0; }
+}
+
+/* ── opening ───────────────────────────────────────────────────────────────────── */
+/* The first thing seen: the sign, and ten cells that fill once. */
+.boot { background: #15181d; }
+.boot .inner { text-align: left; }
+.boot h1 { margin: 0 0 4px; font: 800 64px/0.95 'Big Shoulders Display', 'Barlow Semi Condensed', sans-serif; letter-spacing: 0.01em; color: #f2f4f6; }
+.boot h1::before { content: ''; display: inline-block; width: 30px; height: 30px; margin-right: 16px; background: #ffc61a; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.boot p { font: 500 15px/1.4 'IBM Plex Sans', 'Barlow', sans-serif; color: #9aa3ae; }
+.boot .bar { width: 236px; height: 18px; margin: 18px 0 0; padding: 2px; border: 2px solid #f2f4f6; border-radius: 4px; background: repeating-linear-gradient(90deg, #2a2f38 0 21px, transparent 21px 23px); overflow: hidden; }
+.boot .bar > i { width: 100%; height: 100%; border-radius: 0; background: repeating-linear-gradient(90deg, #ffc61a 0 21px, transparent 21px 23px); animation: cells 1.6s steps(10, jump-none) both; }
+@keyframes cells { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@media (prefers-reduced-motion: reduce) { .boot .bar > i { animation: none; } .boot { transition: none; } }
+
+/* ══ after the first review ═══════════════════════════════════════════════════════ */
+
+/* A selected thing is inked in: the page's own ink behind, the plate's colour for the words. Both
+ * themes get their contrast from the same pair. */
+.hud.studio { --dim: #5a6470; }
+.hud.studio[data-plates='night'] { --dim: #98a2af; }
+.hud.studio .studio-dock button.on,
+.hud.studio .btn[aria-pressed='true'],
+.hud.studio .studio-sheet .seg button.on,
+.hud.studio .studio-sheet .seg label input:checked + span { background: var(--text); color: var(--panel-solid); border-color: var(--text); }
+.hud.studio .studio-dock button.on kbd { color: var(--panel-solid); opacity: 0.6; }
+.hud.studio .studio-sheet .seg label input[value='write']:checked + span { background: var(--yellow-paint); color: #15181d; }
+
+/* Every state word is a painted tag with dark ink on it, by day and by night: the paint says which. */
+.hud.studio :is(.state, .stage),
+.hud.studio .studio-body .line .stage,
+.hud.studio .product .state {
+  padding: 2px 7px 3px;
+  border: 2px solid var(--edge);
+  border-radius: 5px;
+  background: #ffffff;
+  color: #15181d !important;
+  font: 600 12px/1.15 var(--body);
+}
+.hud.studio[data-plates='night'] :is(.state, .stage) { background: #dfe3e8; }
+.hud.studio :is(.state, .stage).go,
+.hud.studio .product .state.live { background: var(--green-paint) !important; }
+.hud.studio :is(.state, .stage):is(.warn, .look),
+.hud.studio .product .state.submitted { background: var(--yellow-paint) !important; }
+.hud.studio :is(.state, .stage).bad,
+.hud.studio .studio-sheet tr.failed .state { background: var(--red-paint) !important; }
+.hud.studio :is(.state, .stage):is(.done, .ok) { background: #bfe9d2 !important; }
+.hud.studio :is(.state, .stage):is(.dim, .wait) { background: #dfe3e8 !important; border-color: var(--line-strong); }
+
+/* Needs you: stripes only on what waits for the owner's own answer. */
+.hud.studio .studio-body .ask { padding-top: 12px; }
+.hud.studio .studio-body .ask::before { display: none; }
+.hud.studio .studio-body .ask.wants { padding-top: 19px; }
+.hud.studio .studio-body .ask.wants::before { display: block; }
+.hud.studio .studio-body .ask.read { box-shadow: none; background: transparent; border-color: var(--line-strong); }
+.hud.studio .studio-body .ask .kind { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; font-size: 12px; color: var(--muted); }
+.hud.studio .studio-body .ask .kind .new { width: 8px; height: 8px; border-radius: 2px; background: var(--edge); }
+
+/* One kind of quiet button inside a page: framed, flat. And one kind of tab. */
+.hud.studio .studio-sheet .sheet-body .btn.ghost,
+.hud.studio .studio-body .btn.ghost { border-color: var(--line-strong); background: transparent; box-shadow: none; }
+.hud.studio .studio-sheet .sheet-body .btn.ghost:hover,
+.hud.studio .studio-body .btn.ghost:hover { background: var(--raise); border-color: var(--edge); }
+.hud.studio .studio-sheet .sheet-body .btn.ghost.danger { border-color: var(--red) !important; }
+.hud.studio .money-lists { display: inline-flex; gap: 0; padding: 2px; border: 2px solid var(--edge); border-radius: 7px; background: var(--sunk); }
+.hud.studio .money-lists button { padding: 5px 12px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: 600 13px/1.2 var(--body); }
+.hud.studio .money-lists button.on { background: var(--text); color: var(--panel-solid); }
+.hud.studio .money-lists button.on span { color: inherit; opacity: 0.7; }
+
+/* A form's last button lines up with its fields. */
+.hud.studio .studio-sheet form > button.btn.primary[type='submit'] { margin: 4px 8px 0; width: calc(100% - 16px); align-self: auto; box-shadow: 0 2px 0 var(--edge); }
+.hud.studio .studio-sheet section.way .acts,
+.hud.studio .studio-sheet section.way form.fields { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+.hud.studio .studio-sheet section.way .hint { margin-left: 0; margin-right: 0; }
+
+/* A bot's face is its plate wherever it is shown: square, edged, on its own colour. */
+.hud.studio .face { border-radius: 8px; border: 2px solid var(--edge); background: var(--bot, var(--sunk)); }
+.hud.studio .studio-body .bot.paused .face,
+.hud.studio .studio-sheet .face { filter: none; opacity: 1; }
+.hud.studio .studio-chat .who span { opacity: 1; }
+
+/* Share bars are plates too, not rounded threads. */
+.hud.studio .studio-sheet :is(.bar, .share, .meter-bar) { border-radius: 0; }
+
+/* Small text has a floor. */
+.hud.studio .studio-body .line .note,
+.hud.studio .studio-crew .text small,
+.hud.studio .studio-sheet table.grid small,
+.hud.studio .studio-body .event,
+.hud.studio .studio-body .counts { font-size: 13px; }
+.hud.studio .studio-sheet .sheet-body { max-width: none; }
+.hud.studio .studio-sheet :is(p.hint, .said, dd, .goal-more) { max-width: 78ch; }
+
+/* ── the office's own help and picture panel, on plates ── */
+.hud.studio .help .sheet { max-width: 640px; padding: 22px 24px 20px; color: var(--text); font-family: var(--body); }
+.hud.studio .help h2 { margin: 0 0 8px; font: 800 30px/1.05 var(--sign); letter-spacing: 0.015em; color: var(--text); }
+.hud.studio .help .sub { margin: 0 0 14px; max-width: 66ch; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.hud.studio .help .k { color: var(--text); font-size: 14px; }
+.hud.studio :is(.help, .settings) kbd { padding: 2px 7px; border: 2px solid var(--edge); border-bottom-width: 3px; border-radius: 5px; background: var(--raise); color: var(--text); font: 600 12px/1.3 var(--body); }
+.hud.studio .help .acts { display: flex; justify-content: flex-end; margin-top: 14px; }
+.hud.studio .settings.panel { color: var(--text); font-family: var(--body); }
+.hud.studio .settings.panel > header { font: 800 24px/1.1 var(--sign); letter-spacing: 0.015em; color: var(--text); border-bottom: 2px solid var(--edge); }
+.hud.studio .settings.panel :is(label, .row, .name, h3, h4, span, p, small, b, strong) { color: var(--text); }
+.hud.studio .settings.panel :is(.sub, .hint, small) { color: var(--muted); }
+.hud.studio .settings.panel .planet { border: 2px solid var(--line-strong); border-radius: 7px; background: var(--raise); color: var(--text); }
+.hud.studio .settings.panel .planet.on,
+.hud.studio .settings.panel .planet[aria-pressed='true'] { border-color: var(--edge); box-shadow: 0 2px 0 var(--edge); }
+
+/* The opening plate when the server has not answered. */
+.boot.waiting .bar > i { animation: none; clip-path: inset(0 70% 0 0); }
+
+/* ── narrow and short windows ── */
+.hud.studio .deck-col { container-type: inline-size; }
+@container (max-width: 760px) {
+  .studio-sheet .opt { display: none; }
+  .studio-sheet table.grid :is(th, td) { white-space: normal !important; padding-left: 6px; padding-right: 6px; overflow-wrap: anywhere; }
+  .studio-sheet table.grid td.n { white-space: normal !important; }
+  .studio-sheet table.grid td.n .btn { margin: 2px 0 2px 4px; }
+  .studio-sheet table.grid { min-width: 0 !important; width: 100%; }
+  .studio-sheet .grid-wrap { overflow-x: visible; }
+}
+@media (max-height: 900px) {
+  .hud.studio .studio-dock { top: 74px; width: 56px; padding: 4px; gap: 2px; max-height: calc(100% - 74px - 96px); }
+  .hud.studio .studio-dock button { padding: 7px 0; }
+  .hud.studio .studio-dock button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .hud.studio .studio-dock kbd { display: none; }
+  .hud.studio .studio-dock .dock-gap { margin: 2px 6px; }
+  .hud.studio .studio-dock button b { top: -2px; right: -2px; }
+  .hud.studio .studio-deck { left: 84px; }
+}
+@media (max-width: 900px) {
+  /* A conversation takes the page's place beside the rail, and leaves the roster in reach. */
+  .hud.studio .studio-chat { left: 104px; right: 14px; width: auto; bottom: 104px; }
+  .hud.studio.studio-chatting .studio-deck { visibility: hidden; }
+  .hud.studio.studio-chatting .studio-crew { max-width: calc(100% - 28px); }
+  .hud.studio .studio-top .meters { display: flex; gap: 10px; margin: 0 4px; }
+  .hud.studio .studio-top .meter b { font-size: 14px; }
+  .hud.studio .studio-top .meter .cells u { width: 3px; }
+  .hud.studio .studio-top .money-btn span,
+  .hud.studio .studio-top .new-job span { display: none; }
+  .hud.studio .studio-state { display: none; }
+}
+@media (max-width: 900px) and (max-height: 900px) { .hud.studio .studio-chat { left: 84px; } }
+.hud.studio .rail .btn { background: var(--raise); color: var(--text); }
+.hud.studio .rail .btn:hover { background: var(--sunk); }
+@media (max-height: 900px) {
+  .hud.studio .studio-dock button b { top: 1px; right: 1px; min-width: 16px; padding: 1px 3px; font-size: 9.5px; border-width: 1.5px; }
+  .hud.studio .studio-dock button:has(b) svg { transform: translateX(-8px); }
+}
+
+/* ══ after the second review ══════════════════════════════════════════════════════ */
+
+/* The rail keeps its words on any ordinary window; only a very short one gets icons alone. */
+@media (max-height: 900px) {
+  .hud.studio .studio-dock { width: 68px; max-height: calc(100% - 74px - 96px); }
+  .hud.studio .studio-dock button { padding: 5px 0 4px; gap: 2px; }
+  .hud.studio .studio-dock button span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: 11px; }
+  .hud.studio .studio-dock button b { top: 1px; right: 2px; min-width: 17px; padding: 1px 3px; font-size: 11px; border-width: 2px; }
+  .hud.studio .studio-dock button:has(b) svg { transform: translateX(-9px); }
+  .hud.studio .studio-deck { left: 96px; }
+}
+@media (max-height: 740px) {
+  .hud.studio .studio-dock { width: 56px; }
+  .hud.studio .studio-dock button { padding: 7px 0; }
+  .hud.studio .studio-dock button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .hud.studio .studio-deck { left: 84px; }
+}
+.hud.studio .studio-dock button b { font-size: 11px; }
+@media (max-width: 900px) and (max-height: 900px) { .hud.studio .studio-chat { left: 96px; } }
+@media (max-width: 900px) and (max-height: 740px) { .hud.studio .studio-chat { left: 84px; } }
+
+/* Money and Routines fit their column: names wrap, buttons keep their own width. */
+.hud.studio .product .name { min-width: 0; }
+.hud.studio .product .name small { white-space: normal; overflow: visible; text-overflow: clip; }
+.hud.studio table.money { width: 100%; table-layout: auto; }
+.hud.studio table.money td.idea { min-width: 0; }
+.hud.studio table.money :is(td, th) { overflow-wrap: anywhere; }
+.hud.studio .studio-sheet .sheet-body { overflow-x: hidden; }
+.hud.studio .studio-sheet table.grid td .btn { width: auto; flex: none; display: inline-flex; margin: 1px 0 1px 4px; }
+.hud.studio .studio-sheet table.grid td.n { white-space: nowrap; text-align: right; }
+@container (max-width: 760px) {
+  .studio-sheet table.grid td.n { white-space: normal !important; }
+  .studio-sheet table.grid td.n .btn { display: flex; margin: 3px 0 3px auto; }
+}
+
+/* Picture and sound: its own plate, over a conversation, ending above the roster. */
+.hud.studio .settings.panel { top: 78px; bottom: 104px; max-height: none; height: auto; z-index: 6; display: flex; flex-direction: column; overflow: hidden; }
+.hud.studio .settings.panel .body { flex: 1; min-height: 0; overflow-y: auto; }
+.hud.studio .settings.panel .toggle { position: relative; width: 44px; height: 24px; border: 2px solid var(--edge); border-radius: 5px; background: var(--sunk); }
+.hud.studio .settings.panel .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 3px; background: var(--line-strong); transform: none; transition: left 0.1s; box-shadow: none; }
+.hud.studio .settings.panel .toggle[aria-checked='true'] { background: var(--green-paint); }
+.hud.studio .settings.panel .toggle[aria-checked='true']::after { left: 22px; background: #15181d; }
+.hud.studio .settings.panel input[type='range'] { accent-color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .hud.studio .settings.panel .toggle::after { transition: none; } }
+
+/* Shares and steps are cells and plates, like the meter in the top bar. */
+.hud.studio .studio-sheet td.bar { min-width: 90px; }
+.hud.studio .studio-sheet td.bar i { display: block; height: 12px; min-width: 3px; border: 2px solid var(--edge); border-radius: 3px; background: var(--text); }
+.hud.studio .studio-sheet .usage-line :is(i, .track),
+.hud.studio .studio-sheet .limit i { border-radius: 3px; }
+.hud.studio .studio-body .line .steps { gap: 2px; }
+.hud.studio .studio-body .line .steps i { width: 12px; height: 8px; border: 2px solid var(--edge); border-radius: 2px; background: var(--raise); }
+.hud.studio .studio-body .line .steps .done { background: var(--green-paint); }
+.hud.studio .studio-body .line .steps .now { background: var(--text); }
+.hud.studio .studio-body .line .steps .queued { background: var(--yellow-paint); }
+.hud.studio .studio-body .line .steps .failed { background: var(--red-paint); }
+.hud.studio .studio-body .line .steps .skipped { background: transparent; border-style: dashed; box-shadow: none; }
+.hud.studio .studio-sheet .steps.big { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.hud.studio .studio-sheet .steps.big span { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1.2 var(--body); color: var(--muted); }
+.hud.studio .studio-sheet .steps.big span i { width: 14px; height: 10px; border: 2px solid var(--edge); border-radius: 2px; background: var(--raise); }
+.hud.studio .studio-sheet .steps.big .done i { background: var(--green-paint); }
+.hud.studio .studio-sheet .steps.big .now { color: var(--text); }
+.hud.studio .studio-sheet .steps.big .now i { background: var(--text); }
+.hud.studio .studio-sheet .steps.big .queued i { background: var(--yellow-paint); }
+.hud.studio .studio-sheet .steps.big .failed i { background: var(--red-paint); }
+.hud.studio .studio-sheet .steps.big .skipped i { border-style: dashed; }
+
+/* The map's camera keys step aside when two columns are open, and never sit under a page. */
+.hud.studio:has(.studio-deck.two) .rail { display: none; }
+
+/* At a narrow width the top bar keeps New job as a word; Money is on the rail. */
+@media (max-width: 900px) {
+  .hud.studio .studio-top .new-job span { display: inline; }
+  .hud.studio .studio-top .money-btn { display: none; }
+}
+@media (max-height: 900px) and (min-height: 741px) {
+  .hud.studio .studio-dock { width: 74px; }
+  .hud.studio .studio-dock button span { white-space: nowrap; }
+  .hud.studio .studio-deck { left: 102px; }
+}
+
+/* ══ after the third review ═══════════════════════════════════════════════════════ */
+
+/* The ten-cell meter wherever a share of a whole is shown: the top bar, the week's limits, each share. */
+.hud.studio .cells { width: auto; height: 16px; display: inline-flex; gap: 2px; padding: 2px; border: 2px solid var(--edge); border-radius: 4px; background: var(--raise); overflow: visible; vertical-align: middle; flex: none; }
+.hud.studio .cells u { display: block; width: 6px; height: 100%; background: var(--line); }
+.hud.studio .cells u.on { background: var(--text); }
+.hud.studio .limit .cells u.on { background: var(--green-paint); }
+.hud.studio .limit.warn .cells u.on { background: var(--yellow-paint); }
+.hud.studio .limit.bad .cells u.on { background: var(--red-paint); }
+.hud.studio .studio-sheet td.bar { min-width: 0; width: 1%; white-space: nowrap; }
+.hud.studio .studio-sheet .limit b { font: 800 18px/1 var(--sign); letter-spacing: 0.03em; }
+
+/* Inside the pages too: a bot's colour down the edge of its row, and numbers in the sign face. */
+.hud.studio .studio-sheet tr.bot-row > td:first-child { box-shadow: inset 5px 0 0 var(--bot); padding-left: 14px; }
+.hud.studio .studio-sheet tr.bot-row.picked > td:first-child { box-shadow: inset 5px 0 0 var(--bot); }
+.hud.studio .studio-sheet table.grid td.n { font: 800 17px/1.1 var(--sign); letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
+.hud.studio .studio-sheet table.grid td.n .btn { font: 600 13px/1 var(--body); letter-spacing: 0; }
+.hud.studio .studio-sheet table.grid th.n { text-align: right; }
+
+/* Money: the tag and the score keep their place on every row. */
+.hud.studio .product .state { min-width: 78px; text-align: center; }
+.hud.studio .product .score { min-width: 64px; text-align: right; font: 800 20px/1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .product .score small { font: 500 11px/1 var(--body); color: var(--dim); }
+
+/* A page runs to just above the roster, and Picture and sound covers a conversation whole. */
+.hud.studio .studio-deck { bottom: 92px; }
+.hud.studio .settings.panel { width: 360px; right: 14px; }
+.hud.studio .rail { z-index: 1; }
+
+/* At a narrow width the top bar still says how many are working. */
+@media (max-width: 900px) {
+  .hud.studio .studio-state { display: block; flex: 0 1 auto; max-width: 9ch; margin: 0 2px 0 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+}
+.hud.studio .studio-state .short { display: none; }
+@media (max-width: 900px) {
+  .hud.studio .studio-state { max-width: none; }
+  .hud.studio .studio-state .long { display: none; }
+  .hud.studio .studio-state .short { display: inline; font-weight: 600; }
+}
+.hud.studio .studio-sheet.deck-col { max-height: 100%; }
+.hud.studio .studio-sheet td.bar i.cells { display: inline-flex; height: 14px; min-width: 0; border: 2px solid var(--edge); border-radius: 4px; background: var(--raise); }
+.hud.studio .studio-sheet td.bar i.cells u { width: 5px; }
+
+/* ── the bays' boards ──────────────────────────────────────────────────────────── */
+/* Over each bay: a dark sign plate with the project's name, and its work as painted tags. */
+.hud.studio .studio-tags .bay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  will-change: transform;
+}
+.hud.studio .studio-tags .bay .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 11px 5px 5px;
+  border: 2px solid #05070a;
+  border-radius: 5px;
+  background: #15181d;
+  color: #f2f4f6;
+  font: 800 19px/1 var(--sign);
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 #05070a;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.hud.studio .studio-tags .bay .name i { width: 15px; height: 19px; border-radius: 2px; background: var(--bay, #7d8590); }
+.hud.studio .studio-tags .bay .name:hover { background: #272c35; }
+.hud.studio .studio-tags .bay .name:focus-visible,
+.hud.studio .studio-tags .bay .t.you:focus-visible { outline: 3px solid var(--go); outline-offset: 2px; }
+.hud.studio .studio-tags .bay .name.gate { padding: 5px 12px 6px; background: var(--go); color: var(--go-ink); cursor: default; pointer-events: none; }
+.hud.studio .studio-tags .bay .tags { display: flex; gap: 4px; }
+.hud.studio .studio-tags .bay .t {
+  padding: 2px 7px 3px;
+  border: 2px solid var(--edge);
+  border-radius: 4px;
+  font: 600 12px/1.15 var(--body);
+  white-space: nowrap;
+  color: #15181d;
+  background: #eef0f2;
+}
+.hud.studio .studio-tags .bay .t.build { background: var(--green-paint); }
+.hud.studio .studio-tags .bay .t.check { background: #9ec1ff; }
+.hud.studio .studio-tags .bay .t.wait { background: #dfe3e8; }
+.hud.studio .studio-tags .bay .t.none { background: #dfe3e8; color: #454d58; font-weight: 500; }
+/* The one place hazard stripes appear on the map: this bay waits for the owner. */
+.hud.studio .studio-tags .bay .t.you {
+  border-width: 2px 12px;
+  border-image: repeating-linear-gradient(-45deg, #15181d 0 5px, var(--yellow-paint) 5px 10px) 2 12;
+  background: var(--yellow-paint);
+  font-weight: 700;
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* A bay too small on the page to carry words keeps its sign and only what waits for the owner. */
+.hud.studio .studio-tags .bay.far .t:not(.you) { display: none; }
+.hud.studio .studio-tags .bay.far .name { font-size: 15px; padding: 3px 8px 4px 4px; }
+.hud.studio .studio-tags .bay.far .name i { width: 11px; height: 14px; }
+
+/* The step that is left of the first run, kept in the top bar until the yard has had its first job. */
+.hud.studio .studio-state .next-step {
+  padding: 5px 12px 6px;
+  border: 2px solid var(--edge);
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--text);
+  font: 600 14px/1.2 var(--body);
+  box-shadow: 0 2px 0 var(--edge);
+  cursor: pointer;
+}
+.hud.studio .studio-state .next-step::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 9px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: rotate(45deg) translateY(-1px); }
+.hud.studio .studio-state .next-step:hover { background: var(--go); color: var(--go-ink); }
+.hud.studio .studio-tags .bay .t.add { background: var(--go); font-weight: 700; pointer-events: auto; cursor: pointer; }
+.hud.studio .studio-tags .bay .t.add:focus-visible { outline: 3px solid #15181d; outline-offset: 2px; }
+.hud.studio .studio-tags .bay .t.stop { background: var(--red-paint); }
+.hud.studio .studio-crew:empty { display: none; }
+.hud.studio .studio-tags .bay .tags { flex-wrap: wrap; justify-content: center; }
+/* Checking is the crew's own step, so it is blue as on the bays; yellow is kept for the owner. */
+.hud.studio .stage.look { background: #9ec1ff !important; color: #15181d; }
+/* The top bar says the short thing before the long one is cut. */
+@media (max-width: 1240px) {
+  .hud.studio .studio-state .long { display: none; }
+  .hud.studio .studio-state .short { display: inline; font-weight: 600; }
+}
+/* At a narrow width the two map buttons sit under the top bar, off the bays. */
+@media (max-width: 900px) { .hud.studio .rail { top: 86px; right: 14px; transform: none; } }

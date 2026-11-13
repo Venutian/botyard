@@ -1,0 +1,34 @@
+{
+  "name": "Checker",
+  "role": "checker",
+  "tier": "strong",
+  "title": "Checks every build",
+  "does": "Checks a finished build on a free model of another family than the one that built it. Runs the proof itself and never changes the work.",
+  "reportsTo": "lead",
+  "ai": "free",
+  "model": "auto",
+  "effort": "high",
+  "minutes": 60,
+  "turns": null,
+  "mayNot": [
+    "push",
+    "commit"
+  ],
+  "atOnce": 2,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": true,
+  "checker": true,
+  "look": {
+    "colour": "#f06fae",
+    "hat": "feelers",
+    "build": "lady",
+    "gear": [
+      "magnifier",
+      "ponytail"
+    ],
+    "face": "shade"
+  }
+}

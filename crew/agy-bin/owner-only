@@ -1,0 +1,27 @@
+#!/usr/bin/python3 -I
+"""The send-and-publish commands, for the bots that run outside Claude Code (OpenCode, Gemini): each name
+in agy-bin that links here refuses what owner-guard.py refuses for the Claude bots, and passes the rest
+to the real command. The rule: no mail and no publishing without their card;
+pushing to GitHub and updating the website are fine.
+"""
+import os
+import shutil
+import sys
+
+name = os.path.basename(sys.argv[0])
+args = sys.argv[1:]
+# Each command, and the subcommands of it that only the owner may approve (empty: all of it).
+OWNER_ONLY = {'sendmail': set(), 'mail': set(), 'mailx': set(), 'msmtp': set(), 'mutt': set(), 'swaks': set(),
+              'eas': {'submit', 'update'}, 'npm': {'publish'}, 'pnpm': {'publish'}, 'twine': {'upload'},
+              'cargo': {'publish'}, 'butler': {'push'}, 'fastlane': {'deliver', 'supply', 'pilot'}}
+words = [a for a in args if not a.startswith('-')]
+banned = OWNER_ONLY.get(name)
+if banned is not None and (not banned or banned & set(words[:2])):
+    sys.exit(f"{name} {' '.join(words[:2])}: refused. Sending mail or messages and publishing online need the "
+             "owner's approval: put it to the owner on a choice card saying what would go out and where.")
+here = os.path.dirname(os.path.realpath(__file__))
+path = os.pathsep.join(p for p in os.environ.get('PATH', '').split(os.pathsep) if os.path.realpath(p) != here)
+real = shutil.which(name, path=path)
+if not real:
+    sys.exit(f'{name}: not installed')
+os.execv(real, [real] + args)

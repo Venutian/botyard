@@ -1,0 +1,25 @@
+#!/usr/bin/python3 -I
+"""git for the bots that run outside Claude Code (Gemini, OpenCode): refuses what the owner does by hand, wherever git's options sit.
+
+agy's deny rules only match a command's first words, so `git -C dir commit` slips past them. This is
+first on those bots' PATH and passes everything else to the real git.
+"""
+import os
+import sys
+
+GIT = '/usr/bin/git'
+NEVER = {'push', 'merge', 'rebase', 'commit', 'clean'}
+# The free builder commits to its own branch, so its PATH lets commit through.
+NEVER -= set(os.environ.get('BOTYARD_GIT_ALLOW', '').split(','))
+# git's own options that take the next word as their value.
+TAKES_VALUE = {'-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env', '--super-prefix'}
+
+args = sys.argv[1:]
+i = 0
+while i < len(args) and args[i].startswith('-'):
+    i += 2 if args[i] in TAKES_VALUE else 1
+command, rest = (args[i], args[i + 1:]) if i < len(args) else ('', [])
+if (command in NEVER or (command == 'reset' and '--hard' in rest)
+        or (command == 'worktree' and rest[:1] == ['remove'])):
+    sys.exit(f'git {command}: refused. It needs the owner\'s approval, so leave it to a Claude Code session or the owner.')
+os.execv(GIT, [GIT] + args)

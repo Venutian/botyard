@@ -1,0 +1,1337 @@
+/*
+ * The office as a studio. The map is the page; everything else is a thin dark deck around it: a bar
+ * along the top that says how things stand, a dock on the left that opens one panel at a time, and
+ * the crew along the bottom as faces you click to talk to. The deck is its own night palette, so
+ * the warm map reads as the lit room and the controls as the glass you look through.
+ */
+
+.hud.studio {
+  --panel: #10141a;
+  --panel-solid: #10141a;
+  --raise: #1a2029;
+  --line: #222a35;
+  --line-strong: #364252;
+  --text: #eef1f5;
+  --muted: #a3aebb;
+  --dim: #8794a3;
+  --accent: #ffb454;
+  --accent-ink: #1d1304;
+  --green: #5bd693;
+  --amber: #f3b94c;
+  --red: #ff6f61;
+  --blue: #74b8ff;
+  color-scheme: dark;
+}
+
+/* The old office chrome steps out: its lists live in the deck now. */
+.hud.studio .side,
+.hud.studio .frontdesk { display: none !important; }
+.hud.studio .btn { color: var(--text); }
+.hud.studio .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.hud.studio .btn.ghost:hover,
+.hud.studio .btn:not(.primary):hover { background: var(--raise); }
+.hud.studio .panel { border-color: var(--line); box-shadow: 0 10px 30px rgb(0 0 0 / 0.35); }
+
+/* ── top bar ─────────────────────────────────────────────────────────────────────── */
+
+.studio-top {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  right: 14px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 16px;
+  font-family: var(--body);
+  color: var(--text);
+  z-index: 2;
+}
+.studio-top .mark { font: 600 17px/1 var(--sign); letter-spacing: 0.03em; white-space: nowrap; }
+.studio-top .mark::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: rotate(45deg) translateY(-1px);
+}
+.studio-state {
+  flex: 1;
+  min-width: 0;
+  margin: 0 10px 0 14px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-strong);
+  font-size: 14px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-top .meters { display: flex; gap: 16px; margin-right: 8px; }
+.studio-top .meter { display: flex; align-items: center; gap: 7px; font-size: 13px; white-space: nowrap; }
+.studio-top .meter b { font-weight: 600; color: var(--muted); }
+.studio-top .meter i { width: 64px; height: 6px; border-radius: 3px; background: var(--line-strong); overflow: hidden; }
+.studio-top .meter u { display: block; height: 100%; background: var(--green); }
+.studio-top .meter em { min-width: 32px; font-style: normal; font-variant-numeric: tabular-nums; }
+.studio-top .meter.warn u { background: var(--amber); }
+.studio-top .meter.bad u { background: var(--red); }
+.studio-top .meter.bad em { color: var(--red); }
+.studio-top .btn svg { width: 19px; height: 19px; }
+
+/* ── dock ────────────────────────────────────────────────────────────────────────── */
+
+.studio-dock {
+  position: absolute;
+  top: 70px;
+  left: 14px;
+  width: 64px;
+  max-height: calc(100% - 180px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  font-family: var(--body);
+  z-index: 2;
+}
+.studio-dock button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 0 7px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 11px/1 var(--body);
+  cursor: pointer;
+}
+.studio-dock button svg { width: 21px; height: 21px; }
+.studio-dock button:hover { background: var(--raise); color: var(--text); }
+.studio-dock button.on { background: var(--raise); color: var(--accent); }
+.studio-dock button.on::before { content: ''; position: absolute; left: -6px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.studio-dock button { transition: background-color 0.15s, color 0.15s; }
+.studio-dock .dock-gap { display: block; height: 1px; margin: 5px 9px; background: var(--line-strong); }
+.studio-dock button:focus-visible,
+.studio-crew button:focus-visible,
+.studio-top button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.studio-dock button b {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  min-width: 17px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  background: var(--line-strong);
+  color: var(--text);
+  font: 600 11px/1.2 var(--body);
+  text-align: center;
+}
+.studio-dock button b.bad { background: var(--red); color: #1d0705; }
+
+/* ── the two columns the dock opens ────────────────────────────────────────────────
+ * A is the list the dock opened, or a screen. B is the page of what was picked in A, beside it, so another
+ * row is one click away. They slide in once; after that a page changes with a short fade. When there is
+ * no room for both, B covers A and its Back returns to the list. */
+
+.studio-deck {
+  position: absolute;
+  top: 70px;
+  left: 90px;
+  right: 14px;
+  bottom: 96px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 3;
+  transition: right 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hud.studio-chatting .studio-deck { right: 388px; }
+.studio-sheet.deck-col {
+  position: relative;
+  inset: auto;
+  transform: none;
+  width: auto;
+  max-height: none;
+  pointer-events: auto;
+  min-width: 0;
+  border-radius: 14px;
+  box-shadow: 0 22px 44px -20px rgb(0 0 0 / 0.75), 0 2px 6px rgb(0 0 0 / 0.35);
+  z-index: auto;
+}
+.deck-col.col-a { flex: 0 0 360px; transition: flex-basis 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.deck-col.col-a.page { flex: 0 1 1040px; }
+.deck-col.col-a.page:not(.wide) { flex-basis: 620px; }
+.studio-deck.two .deck-col.col-a.page { flex: 0 0 460px; }
+.deck-col.col-b { flex: 0 1 700px; }
+.deck-col.col-b.wide { flex-basis: 940px; }
+.studio-deck.two .deck-col.col-b { border-color: var(--line-strong); }
+.studio-deck.stacked .deck-col.col-a { display: none; }
+.studio-deck.stacked .deck-col.col-b { flex: 1 1 auto; }
+/* A narrow screen in A keeps its first columns; the rest are on the page beside it. */
+.studio-deck.two .col-a .opt { display: none; }
+
+/* Columns slide without fading: a page that paints while hidden must never be left see-through. */
+@keyframes deck-in { from { transform: translateX(-18px); } to { transform: none; } }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.deck-col.entering { animation: deck-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.deck-col .sheet-body.swap { animation: page-in 0.18s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .deck-col.entering, .deck-col .sheet-body.swap { animation: none; }
+  .studio-deck, .deck-col.col-a { transition: none; }
+}
+
+.studio-sheet .col-head { align-items: flex-start; gap: 6px; padding: 12px 8px 11px 16px; }
+.studio-sheet .col-head .back { margin: -2px 0 0 -8px; }
+.studio-sheet .col-head .btn { width: 32px; height: 32px; flex: none; }
+.studio-sheet .col-head svg { width: 18px; height: 18px; }
+.studio-sheet .col-head strong { display: block; overflow-wrap: anywhere; }
+.studio-sheet .col-head p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.studio-sheet .col-head p .go { color: var(--green); }
+.studio-sheet .col-head p .bad { color: var(--red); }
+.studio-sheet .col-head p .dot-sep { display: none; }
+.deck-col .sheet-body { flex: 1; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* The row whose page is open beside the list. */
+.deck-col .picked,
+.deck-col tr.picked > td { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.deck-col :is(button, div).picked { box-shadow: inset 3px 0 0 var(--accent); }
+.deck-col tr.picked > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* ── a project's goal and the lead's plan ─────────────────────────────────────────────── */
+
+.studio-sheet .goal-card {
+  margin: 6px 6px 18px;
+  padding: 14px 16px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--raise));
+}
+.studio-sheet .goal-card header { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; }
+.studio-sheet .goal-card header > * { flex: none; }
+.studio-sheet .goal-card .goal-more { margin: -4px 0 12px; font-size: 14px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
+.studio-sheet .goal-card .kicker { font: 600 14px/1 var(--sign); letter-spacing: 0.02em; color: var(--accent); }
+.studio-sheet .goal-card header small { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studio-sheet .goal-card header .btn { width: auto; margin: 0 0 0 auto; padding: 5px 14px; font-size: 13px; border: 1px solid var(--line-strong); }
+.studio-sheet .goal-card .goal-line { margin: 9px 0 12px; font: 600 18px/1.38 var(--sign); color: var(--text); text-wrap: pretty; }
+.studio-sheet .goal-card.empty .goal-line { margin-bottom: 6px; color: var(--muted); }
+.studio-sheet .goal-card .goal-instead { margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.studio-sheet .goal-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 7px 16px; margin: 0; font-size: 13px; line-height: 1.5; }
+.studio-sheet .goal-card dt { color: var(--dim); }
+.studio-sheet .goal-card dd { margin: 0; color: var(--text); }
+.studio-sheet .goal-edit { margin: 4px 6px 18px; padding: 10px 6px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 12px; }
+.studio-sheet .plan-card { margin: 0 6px 12px; padding: 2px 2px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.studio-sheet .plan-goal { margin: 4px 10px 6px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.studio-sheet .plan-goal b { color: var(--text); font-weight: 600; }
+.studio-sheet .plan-steps summary { margin: 2px 10px; font-size: 13px; color: var(--accent); cursor: pointer; }
+.studio-sheet .plan-steps .said { margin: 6px 10px 0; font-size: 13px; white-space: normal; }
+
+.studio-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.studio-body .panel-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 -10px 8px;
+  padding: 9px 8px 8px 16px;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--line);
+  z-index: 1;
+}
+.studio-body .panel-head strong { flex: 1; font: 600 16px/1.2 var(--sign); letter-spacing: 0.02em; }
+.studio-body .panel-head .btn { width: 30px; height: 30px; }
+.studio-body .panel-head .btn:first-child { margin-left: -8px; }
+.studio-body .panel-head svg { width: 17px; height: 17px; }
+
+.studio-body h3 {
+  margin: 16px 6px 6px;
+  font: 600 13px/1 var(--sign);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.studio-body .none {
+  margin: 4px 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.studio-body .proj {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  padding: 9px 8px;
+}
+.studio-body .proj b { font-size: 14px; font-weight: 600; }
+.studio-body .proj em { font-style: normal; font-size: 12px; color: var(--amber); }
+.studio-body .proj.shelved b { color: var(--muted); }
+/* The ranked list: the number, the project, and the two moves. */
+.studio-body > .hint { margin: 2px 8px 8px; font-size: 12px; line-height: 1.45; color: var(--dim); }
+.studio-body .proj-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 2px; }
+.studio-body .proj-row .rank { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; text-align: center; color: var(--muted); }
+.studio-body .proj-row:not(.shelved) .rank { color: var(--ink, inherit); }
+.studio-body .rank-moves { display: flex; flex-direction: column; gap: 0; }
+.studio-body .rank-moves .btn { width: 28px; height: 22px; font-size: 10px; line-height: 1; padding: 0; }
+.studio-body .rank-moves .btn:disabled, .studio-body .rank-acts .btn:disabled { opacity: 0.3; cursor: default; }
+.studio-body .rank-acts { align-items: center; }
+.studio-body .rank-of { flex: 1; font-size: 13px; color: var(--muted); }
+.studio-body .counts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.studio-body .counts.big { margin: 2px 6px 10px; font-size: 13px; }
+.studio-body .counts .go { color: var(--green); }
+.studio-body .counts .bad { color: var(--red); }
+.studio-body .acts { display: flex; gap: 6px; margin: 0 6px 10px; }
+.studio-body .acts .btn { width: auto; flex: 1; padding: 7px 10px; border: 1px solid var(--line-strong); font-size: 13px; text-align: center; }
+.studio-body .acts .btn.primary { border-color: transparent; }
+
+/* ── the crew along the bottom ───────────────────────────────────────────────────── */
+
+.studio-crew {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 28px);
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-family: var(--body);
+  z-index: 2;
+}
+.studio-crew .mate {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.studio-crew .mate:hover,
+.studio-crew .mate.on { background: var(--raise); }
+.studio-crew .who { position: relative; display: flex; }
+.studio-crew .face { width: 44px; height: 44px; font-size: 18px; box-shadow: 0 0 0 2px var(--line-strong); }
+.studio-crew .light {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--panel-solid);
+  border-radius: 50%;
+  background: var(--dim);
+}
+.studio-crew .running .face { box-shadow: 0 0 0 2px var(--green); }
+.studio-crew .running .light { background: var(--green); }
+.studio-crew .paused .light { background: var(--amber); }
+.studio-crew .error .face { box-shadow: 0 0 0 2px var(--red); }
+.studio-crew .error .light { background: var(--red); }
+.studio-crew .paused .face { filter: grayscale(0.75); opacity: 0.7; }
+/* Whoever is working says what on; the rest are a face, named on hover and to a screen reader. */
+/* Every bot's slot is the same width whatever it is doing, so nobody moves when work starts or stops. */
+.studio-crew .mate { width: 138px; }
+.studio-crew .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; padding-right: 6px; }
+.studio-crew .text b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studio-crew .text small { font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-crew .running .text small { color: var(--green); }
+@media (max-width: 900px) { .studio-crew .mate { width: auto; } .studio-crew .text { display: none; } }
+.studio-crew .error .text small { color: var(--red); }
+
+/* The office's own pieces find new places around the deck. */
+.hud.studio .rail { left: auto; right: 14px; top: 50%; }
+.hud.studio.studio-chatting .rail { right: 388px; }
+.hud.studio .hint-pill { bottom: 92px; left: 50%; }
+.hud.studio .settings { top: 70px; }
+
+.studio-body .trouble {
+  position: relative;
+  margin: 0 6px 5px;
+  padding-left: 15px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.studio-body .trouble i {
+  position: absolute;
+  left: 0;
+  top: 0.42em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.studio-body .trouble.bad i { background: var(--red); }
+.studio-body .trouble.warn i { background: var(--amber); }
+.studio-body .trouble.info { color: var(--muted); }
+
+.studio-body button {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.studio-body button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.studio-body button:focus-visible,
+.studio-chat textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.studio-body .bot {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  column-gap: 9px;
+  align-items: baseline;
+  padding: 5px 6px;
+}
+
+/* A bot's portrait, wherever it is shown. Without one it is the bot's initial on its own colour. */
+.face {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line);
+}
+.face.plain {
+  display: grid;
+  place-items: center;
+  background: hsl(var(--hue) 45% 38%);
+  color: #fff;
+  font: 600 15px/1 var(--sign);
+  font-style: normal;
+}
+
+.studio-body .bot .who { position: relative; grid-row: 1 / 3; align-self: center; height: 34px; }
+.studio-body .bot .who .light {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  box-sizing: content-box;
+  border: 2px solid var(--panel-solid);
+}
+.studio-body .bot.paused .face { filter: grayscale(0.7); opacity: 0.75; }
+
+.studio-body .bot .light,
+.studio-chat header .light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  align-self: center;
+}
+.studio-body .bot.running .light,
+.studio-chat header.running .light { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent); }
+.studio-body .bot.paused .light,
+.studio-chat header.paused .light { background: var(--amber); }
+.studio-body .bot.error .light,
+.studio-chat header.error .light { background: var(--red); }
+
+.studio-body .bot .name { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.studio-body .bot .model {
+  max-width: 150px;
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-body .bot .doing {
+  grid-column: 2 / -1;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-body .bot .doing b { font-weight: 600; color: var(--green); }
+.studio-body .bot.paused .name { color: var(--muted); }
+
+.studio-body .line {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 7px;
+  align-items: baseline;
+  padding: 6px;
+}
+.studio-body .line .ref { font: 600 12px/1.3 var(--sign); color: var(--accent); }
+.studio-body .line .title {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.studio-body .line .steps { display: flex; gap: 3px; align-self: center; }
+.studio-body .line .steps i {
+  width: 9px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.studio-body .line .steps .done { background: var(--green); }
+.studio-body .line .steps .now { background: var(--blue); }
+.studio-body .line .steps .queued { background: var(--amber); }
+.studio-body .line .steps .failed { background: var(--red); }
+.studio-body .line .steps .skipped { background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.studio-body .line .note {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.studio-body .line.late .note { color: var(--amber); }
+
+/* A line and, beside it, the cross that calls the work off. */
+.studio-body .row { display: flex; align-items: flex-start; }
+.studio-body .row .line { flex: 1; min-width: 0; }
+.studio-body .row .clear {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin: 3px 0 0 2px;
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--dim);
+}
+.studio-body .row .clear svg { display: block; width: 100%; height: 100%; }
+.studio-body .row .clear:hover,
+.studio-body .row .clear:focus-visible { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+.studio-body .ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 3px 0;
+  padding: 9px 10px 10px;
+  border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line-strong));
+  border-radius: 10px;
+}
+.studio-body .ask p { flex-basis: 100%; margin: 0 0 3px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.studio-body .ask p b { color: var(--text); }
+.studio-body .ask .btn { width: auto; padding: 5px 12px; font-size: 13px; text-align: center; }
+.studio-body .ask .btn.primary { background: var(--red); color: #fff; }
+.studio-body .ask .btn.ghost { border: 1px solid var(--line-strong); }
+
+/* The manager's room on the map was clicked: the panel answers. */
+.col-a.called { animation: studio-called 900ms ease-out; }
+@keyframes studio-called {
+  from { box-shadow: 0 0 0 3px var(--accent); }
+  to { box-shadow: 0 0 0 3px transparent; }
+}
+
+.studio-body .event {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  margin: 0 6px 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.studio-body .event time { color: var(--dim); font-variant-numeric: tabular-nums; }
+.studio-body .event.blocking,
+.studio-body .event.stopped { color: color-mix(in srgb, var(--red) 70%, var(--text)); }
+.studio-body .event.merged,
+.studio-body .event.done { color: var(--text); }
+
+/* The HUD's own left-hand pieces step aside for the panel. */
+
+/*
+ * A studio is open all day: its panels are solid. Blurring a live 3D picture behind five panels
+ * is redone on every frame the map draws, and was the dearest thing on the page.
+ */
+.hud.studio .panel,
+.hud.studio [class] { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.hud.studio .panel { background: var(--panel-solid); }
+
+/* ── names over the crew ─────────────────────────────────────────────────────────── */
+
+.studio-tags {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.studio-tags .tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 8px 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-solid) 88%, transparent);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font: 600 13px/1.2 var(--sign);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  will-change: transform;
+}
+.studio-tags .tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.studio-tags .tag span { display: flex; flex-direction: column; }
+.studio-tags .tag b { font-weight: 600; }
+.studio-tags .tag small { font: 500 11px/1.2 var(--body); letter-spacing: 0; color: var(--muted); }
+.studio-tags .tag.running small { color: var(--green); }
+.studio-tags .tag .face { width: 26px; height: 26px; margin: -1px 0 -2px -6px; font-size: 12px; }
+.studio-tags .tag:has(.face) { border-radius: 15px; }
+.studio-tags .tag.running { border-color: var(--green); }
+.studio-tags .tag.paused { color: var(--muted); }
+.studio-tags .tag.paused .face { filter: grayscale(0.7); }
+/* The keeper of a room that opens a screen: a sign, not a name. */
+.studio-tags .tag.screen { border-color: var(--accent); color: var(--accent); }
+.hud.hidden .studio-tags { opacity: 1 !important; visibility: visible !important; }
+
+/* ── talking to a bot ────────────────────────────────────────────────────────────── */
+
+/* Over the sidebar, in its footprint: one conversation replaces the list it was picked from. */
+.studio-chat {
+  position: absolute;
+  top: 70px;
+  right: 14px;
+  bottom: 14px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel-solid);
+  backdrop-filter: none;
+  font-family: var(--body);
+  color: var(--text);
+  z-index: 3;
+}
+.studio-chat[hidden] { display: none; }
+.hud.studio-chatting .side { visibility: hidden; pointer-events: none; }
+
+.studio-chat header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 10px 10px 16px;
+}
+.studio-chat header .face { width: 40px; height: 40px; }
+.studio-chat header .portrait { display: flex; }
+.studio-chat header .light { margin-left: -16px; align-self: flex-end; box-sizing: content-box; border: 2px solid var(--panel-solid); z-index: 1; }
+.studio-chat .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.studio-chat .who strong { font: 600 17px/1.1 var(--sign); }
+.studio-chat .who span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.studio-chat .doing {
+  margin: 0;
+  padding: 0 16px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.studio-chat .talk {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+}
+.studio-chat .talk .none,
+.studio-chat .talk .typing { margin: 0; font-size: 13px; line-height: 1.45; color: var(--dim); }
+
+.studio-chat .msg { max-width: 92%; align-self: flex-start; }
+.studio-chat .msg.mine { align-self: flex-end; }
+.studio-chat .msg .from { display: block; margin: 0 4px 3px; font-size: 11px; color: var(--dim); }
+.studio-chat .msg.mine .from { text-align: right; }
+.studio-chat .msg .said {
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.studio-chat .msg .said > * { margin: 0 0 7px; }
+.studio-chat .msg .said > :last-child { margin-bottom: 0; }
+.studio-chat .msg .said h4 { font: 600 14px/1.3 var(--sign); }
+.studio-chat .msg .said h4.big { font-size: 15px; }
+.studio-chat .msg .said ul,
+.studio-chat .msg .said ol { padding-left: 19px; }
+.studio-chat .msg .said li { margin: 2px 0; }
+.studio-chat .msg .said code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font: 12px/1.4 ui-monospace, 'JetBrains Mono', Menlo, monospace;
+}
+.studio-chat .msg .said pre {
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  overflow-x: auto;
+}
+.studio-chat .msg .said pre code { padding: 0; background: none; white-space: pre; }
+.studio-chat .msg .said blockquote { padding-left: 9px; border-left: 2px solid var(--line-strong); color: var(--muted); }
+.studio-chat .msg .said a { color: var(--accent); }
+.studio-chat .msg .said hr { border: 0; border-top: 1px solid var(--line-strong); }
+.studio-chat .msg.mine .said { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* The rest of what a bot writes, in a chat bubble and on a job's page alike. */
+:is(.studio-chat .msg, .studio-sheet) .said ul ul,
+:is(.studio-chat .msg, .studio-sheet) .said ol ol,
+:is(.studio-chat .msg, .studio-sheet) .said ul ol,
+:is(.studio-chat .msg, .studio-sheet) .said ol ul { margin: 2px 0; }
+:is(.studio-chat .msg, .studio-sheet) .said li.task { list-style: none; margin-left: -17px; }
+:is(.studio-chat .msg, .studio-sheet) .said li.task input { margin: 0 5px 0 0; vertical-align: -2px; accent-color: var(--green); }
+:is(.studio-chat .msg, .studio-sheet) .said del { color: var(--dim); }
+:is(.studio-chat .msg, .studio-sheet) .said .table {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+:is(.studio-chat .msg, .studio-sheet) .said table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.4; }
+:is(.studio-chat .msg, .studio-sheet) .said th,
+:is(.studio-chat .msg, .studio-sheet) .said td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+  min-width: 5em;
+}
+:is(.studio-chat .msg, .studio-sheet) .said th { font-weight: 600; background: color-mix(in srgb, var(--text) 6%, transparent); }
+:is(.studio-chat .msg, .studio-sheet) .said tbody tr:last-child td { border-bottom: 0; }
+
+/* A card a bot put in the conversation: a question, a yes or no, a service to connect. */
+:is(.studio-chat, .studio-sheet) .card {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 2px 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+:is(.studio-chat, .studio-sheet) .card .from { font-size: 11px; font-weight: 600; color: var(--accent); }
+:is(.studio-chat, .studio-sheet) .card p { margin: 0; overflow-wrap: anywhere; }
+:is(.studio-chat, .studio-sheet) .card .hint { font-size: 12px; color: var(--muted); }
+:is(.studio-chat, .studio-sheet) .card fieldset { display: flex; flex-direction: column; gap: 5px; margin: 0; padding: 0; border: 0; min-width: 0; }
+:is(.studio-chat, .studio-sheet) .card legend { padding: 0 0 5px; color: var(--muted); }
+:is(.studio-chat, .studio-sheet) .card label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  cursor: pointer;
+}
+:is(.studio-chat, .studio-sheet) .card label:has(input:checked) { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+:is(.studio-chat, .studio-sheet) .card input { margin-top: 3px; accent-color: var(--accent); }
+:is(.studio-chat, .studio-sheet) .card label span { display: flex; flex-direction: column; }
+:is(.studio-chat, .studio-sheet) .card label small { font-size: 12px; color: var(--muted); }
+:is(.studio-chat, .studio-sheet) .card .row { display: flex; gap: 7px; }
+:is(.studio-chat, .studio-sheet) .card .btn { align-self: flex-start; }
+:is(.studio-chat, .studio-sheet) .card :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:is(.studio-chat, .studio-sheet) .card.settled { border-color: var(--line-strong); color: var(--muted); padding-bottom: 10px; }
+:is(.studio-chat, .studio-sheet) .card.settled .from { color: var(--dim); }
+:is(.studio-chat, .studio-sheet) .card.settled b { color: var(--text); font-weight: 600; }
+
+.studio-chat > form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+.studio-chat textarea {
+  flex: 1;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.4 var(--body);
+}
+.studio-chat.sending form { opacity: 0.6; pointer-events: none; }
+
+/* ── the screens that are rooms ──────────────────────────────────────────────────── */
+
+.studio-sheet {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel-solid);
+  backdrop-filter: none;
+  font-family: var(--body);
+  color: var(--text);
+  z-index: 4;
+}
+.studio-sheet[hidden] { display: none; }
+
+.studio-sheet header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 10px 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-sheet header div { flex: 1; min-width: 0; }
+.studio-sheet header strong { font: 600 19px/1.15 var(--sign); }
+.studio-sheet header p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.studio-sheet .sheet-body { overflow-y: auto; padding: 8px 10px 12px; }
+.studio-sheet .none { margin: 10px 8px; font-size: 13px; color: var(--muted); }
+.studio-sheet h3 { margin: 12px 8px 4px; font: 600 13px/1.2 var(--sign); letter-spacing: 0.03em; color: var(--muted); }
+.studio-sheet .hint { margin: 0 8px 8px; font-size: 13px; line-height: 1.45; color: var(--dim); }
+
+.studio-sheet .chat-row,
+.studio-sheet .crew-row {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  column-gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.studio-sheet .chat-row { cursor: pointer; }
+.studio-sheet .chat-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.studio-sheet .face { grid-row: 1 / 3; align-self: center; }
+.studio-sheet .name { font-size: 14px; font-weight: 600; }
+.studio-sheet time { font-size: 12px; color: var(--dim); }
+.studio-sheet .said {
+  grid-column: 2;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-sheet .chat-row .said { grid-column: 2 / -1; }
+.studio-sheet .crew-row .btn { grid-row: 1 / 3; grid-column: 3; align-self: center; padding: 5px 12px; font-size: 13px; border: 1px solid var(--line-strong); }
+.studio-sheet .crew-row:is(.project, .plain) { grid-template-columns: 1fr auto; }
+.studio-sheet .crew-row:is(.project, .plain) .said { grid-column: 1; }
+.studio-sheet .crew-row:is(.project, .plain) .btn { grid-column: 2; }
+.studio-sheet .crew-row.project.paused .name { color: var(--muted); }
+.studio-sheet .crew-row.paused .face { filter: grayscale(0.7); opacity: 0.75; }
+
+.studio-sheet form { display: flex; flex-direction: column; }
+.studio-sheet label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 8px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+.studio-sheet label.check { justify-content: flex-start; cursor: pointer; }
+.studio-sheet .num { color: var(--muted); font-size: 13px; }
+.studio-sheet input[type='number'] {
+  width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 600 14px/1.2 var(--body);
+  text-align: right;
+}
+.studio-sheet input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--accent); }
+.studio-sheet form .btn { align-self: flex-start; margin: 10px 8px 4px; }
+.studio-sheet button:focus-visible,
+.studio-sheet input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Talking to a bot takes the right edge: the crew slides over rather than under it. */
+.hud.studio-chatting .studio-crew { left: calc((100% - 374px) / 2); max-width: calc(100% - 402px); }
+
+@media (max-width: 820px) {
+  .studio-top .meters, .studio-state { display: none; }
+  .studio-top .mark { flex: 1; }
+  .studio-deck { left: 14px; top: 70px; bottom: 14px; z-index: 4; }
+  .deck-col.col-a, .deck-col.col-a.page { flex: 1 1 auto; }
+  .studio-chat { left: 14px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-head .btn svg { transition: none; }
+  .col-a.called { animation: none; }
+}
+
+
+/* ── the Manager's functions, on the map: a new job, a job's page, routines ──────── */
+
+.studio-top .new-job { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; margin-right: 10px; font: 600 13px/1 var(--body); white-space: nowrap; }
+.studio-top .new-job svg { width: 16px; height: 16px; }
+.studio-sheet .fields label.stack { flex-direction: column; align-items: stretch; gap: 5px; color: var(--muted); font-size: 13px; }
+.studio-sheet .fields input:not([type]),
+.studio-sheet .fields textarea,
+.studio-sheet .fields select {
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--text);
+  font: 14px/1.4 var(--body);
+}
+.studio-sheet .fields textarea { resize: vertical; min-height: 96px; }
+.studio-sheet .fields select { min-width: 190px; }
+.studio-sheet .fields :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.studio-sheet .steps.big { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 8px 10px; font-size: 13px; color: var(--dim); }
+.studio-sheet .steps.big span { display: flex; align-items: center; gap: 6px; }
+.studio-sheet .steps.big i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.studio-sheet .steps.big .done { color: var(--text); }
+.studio-sheet .steps.big .done i { background: var(--green); }
+.studio-sheet .steps.big .now { color: var(--blue); }
+.studio-sheet .steps.big .now i { background: var(--blue); }
+.studio-sheet .steps.big .queued i { background: var(--amber); }
+.studio-sheet .steps.big .failed { color: var(--red); }
+.studio-sheet .steps.big .failed i { background: var(--red); }
+.studio-sheet .acts { display: flex; gap: 6px; margin: 0 8px 6px; }
+.studio-sheet .acts .btn { padding: 7px 12px; border: 1px solid var(--line-strong); font-size: 13px; }
+.studio-sheet .note-row { margin: 0 8px 10px; }
+.studio-sheet .note-row .from { display: block; margin-bottom: 3px; font-size: 11px; color: var(--dim); }
+.studio-sheet .said { white-space: normal; font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.studio-sheet .note-row .said { padding: 8px 11px; border-radius: 10px; background: var(--raise); }
+.studio-sheet .said > * { margin: 0 0 7px; }
+.studio-sheet .said > :last-child { margin-bottom: 0; }
+.studio-sheet .said ul, .studio-sheet .said ol { padding-left: 19px; }
+.studio-sheet .said code { padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 9%, transparent); font: 12px/1.4 ui-monospace, Menlo, monospace; }
+.studio-sheet .said pre { padding: 8px 9px; border-radius: 8px; background: color-mix(in srgb, var(--text) 9%, transparent); overflow-x: auto; }
+.studio-sheet .said a { color: var(--accent); }
+.studio-sheet details { margin: 4px 8px 8px; }
+.studio-sheet summary { cursor: pointer; font: 600 13px/1.6 var(--sign); color: var(--muted); }
+.studio-sheet details .said { margin-top: 6px; }
+.studio-sheet .crew-row .pair { grid-row: 1 / 3; grid-column: 2; align-self: center; display: flex; gap: 6px; }
+.studio-sheet .crew-row .pair .btn { grid-row: auto; grid-column: auto; }
+
+.studio-body .line.done .ref { color: var(--green); }
+.studio-body .line.done .title { color: var(--muted); }
+
+/* What waits on the owner's word, at the top of Needs you. */
+.col-a .ask {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--raise);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+}
+.col-a .ask-open { display: grid; gap: 3px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.col-a button.ask-open { cursor: pointer; }
+.col-a .ask:has(button.ask-open:hover) { border-color: var(--accent); }
+.col-a .ask.read { background: transparent; }
+.col-a .ask.read b { font-weight: 500; color: var(--muted); }
+.col-a .ask .kind .new { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.col-a .ask .sort { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+.col-a .ask .sort .btn { padding: 2px 9px; font-size: 12px; border: 1px solid var(--line); }
+.col-a .all-read { display: block; margin: 0 0 8px auto; padding: 3px 10px; font-size: 12px; }
+.col-a .archived-cards { margin: 4px 0 10px; }
+.col-a .archived-cards summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.col-a .archived-cards .ask { opacity: 0.75; }
+.col-a .ask.approval { border-color: var(--accent); }
+.col-a .ask .kind { color: var(--accent); font-size: 11px; font-weight: 600; }
+.col-a .ask small { color: var(--muted); font-size: 12px; }
+.col-a .ask .pair { display: flex; gap: 6px; margin-top: 5px; }
+.studio-sheet form.comment { margin: 10px 0 4px; }
+.studio-sheet .acts a.btn { text-decoration: none; }
+.col-a .ask .go { color: var(--accent); }
+.studio-sheet .asked { display: flex; flex-direction: column; gap: 8px; margin: 0 8px 10px; }
+
+/* ── the crew in full: bots, runs, models ────────────────────────────────────────── */
+
+.studio-dock { max-height: calc(100% - 170px); overflow-y: auto; scrollbar-width: none; }
+.studio-sheet.wide { width: min(940px, calc(100% - 200px)); max-height: calc(100% - 96px); }
+.studio-sheet header .back { margin: -2px -4px 0 -10px; }
+.studio-sheet header .back svg { width: 18px; height: 18px; }
+.studio-sheet .sheet-body { flex: 1; min-height: 0; }
+
+/* A question before a change, at the foot of the sheet: the safe answer first. */
+.studio-sheet .sheet-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel-solid));
+}
+.studio-sheet .sheet-confirm[hidden] { display: none; }
+.studio-sheet .sheet-confirm p { flex: 1 1 320px; margin: 0; font-size: 13px; line-height: 1.45; }
+.studio-sheet .sheet-confirm .btn { padding: 7px 14px; font-size: 13px; }
+.studio-sheet .sheet-confirm .btn.ghost { border: 1px solid var(--line-strong); }
+
+/* Real tables: tabular numbers on the right, one line a row, the second line small and muted. */
+.studio-sheet .grid-wrap { overflow-x: auto; margin: 0 4px 6px; }
+.studio-sheet table.grid { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.35; }
+.studio-sheet table.grid th {
+  position: sticky;
+  top: -8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-solid);
+  color: var(--dim);
+  font: 600 12px/1.2 var(--body);
+  text-align: left;
+  white-space: nowrap;
+}
+.studio-sheet table.grid td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.studio-sheet table.grid tbody tr:last-child td { border-bottom: 0; }
+.studio-sheet table.grid .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.studio-sheet table.grid .t { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.studio-sheet table.grid small { display: block; margin-top: 2px; font-size: 12px; color: var(--dim); }
+.studio-sheet table.grid td.job { min-width: 180px; }
+.studio-sheet table.grid td.job b, .studio-sheet table.activity .link { font-variant-numeric: tabular-nums; }
+.studio-sheet table.grid tr.go-row { cursor: pointer; }
+.studio-sheet table.grid tr.go-row:hover td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.studio-sheet table.grid tr.go-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.studio-sheet table.grid .who { display: flex; align-items: center; gap: 9px; min-width: 170px; }
+.studio-sheet table.grid .who .face { width: 30px; height: 30px; flex: none; font-size: 13px; }
+.studio-sheet table.grid .who span { display: flex; flex-direction: column; }
+.studio-sheet table.grid.slim td { padding: 5px 8px; }
+.studio-sheet table.grid .btn { padding: 4px 10px; border: 1px solid var(--line-strong); font-size: 12px; white-space: nowrap; }
+.studio-sheet table.grid .btn + .btn { margin-left: 6px; }
+
+.studio-sheet .dim { color: var(--dim); }
+.studio-sheet .bad { color: var(--red); }
+.studio-sheet .warnish { color: var(--amber); }
+.studio-sheet .state { font-weight: 600; white-space: nowrap; }
+.studio-sheet .state.go { color: var(--green); }
+.studio-sheet .state.warn { color: var(--amber); }
+.studio-sheet .state.bad { color: var(--red); }
+.studio-sheet tr.failed .state { color: var(--red); }
+
+.studio-sheet button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.studio-sheet button.link:hover { text-decoration: underline; }
+.studio-sheet button.link b { color: inherit; }
+.studio-sheet code { padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 9%, transparent); font: 12px/1.4 ui-monospace, Menlo, monospace; }
+
+/* The one line that answers the screen's question. */
+.studio-sheet .flag { display: flex; gap: 10px; margin: 4px 8px 10px; font-size: 13px; line-height: 1.45; }
+.studio-sheet .flag i { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--green); }
+.studio-sheet .flag.bad i { background: var(--red); }
+.studio-sheet .flag.warn i { background: var(--amber); }
+.studio-sheet .flag.bad b { color: var(--red); }
+
+/* A bot's or a run's facts: a two-column list a glance reads down. */
+.studio-sheet dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 7px 18px; margin: 6px 8px 14px; font-size: 13px; line-height: 1.4; }
+.studio-sheet dl.facts dt { color: var(--dim); font-size: 12px; padding-top: 1px; }
+.studio-sheet dl.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.studio-sheet dl.facts small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.studio-sheet .acts { flex-wrap: wrap; }
+
+.studio-sheet .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 2px 8px 10px; }
+.studio-sheet .filters label { margin: 0; padding: 0; gap: 7px; font-size: 13px; color: var(--muted); }
+.studio-sheet .filters select { padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--raise); color: var(--text); font: 13px/1.3 var(--body); }
+.studio-sheet .seg { display: inline-flex; padding: 2px; border: 1px solid var(--line-strong); border-radius: 9px; }
+.studio-sheet .seg button { padding: 5px 12px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: 600 13px/1.2 var(--body); cursor: pointer; }
+.studio-sheet .seg button.on { background: var(--raise); color: var(--text); }
+.studio-sheet .pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px; font-size: 13px; color: var(--muted); }
+.studio-sheet .pager .btn { padding: 5px 12px; border: 1px solid var(--line-strong); font-size: 13px; }
+.studio-sheet .pager .btn:disabled { opacity: 0.35; cursor: default; }
+.studio-sheet table.activity td { padding: 6px 8px; }
+
+.studio-sheet ol.log { margin: 0 8px 10px; padding: 0; list-style: none; font-size: 13px; line-height: 1.45; }
+.studio-sheet ol.log li { display: grid; grid-template-columns: 14px 1fr; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.studio-sheet ol.log i { font-style: normal; color: var(--dim); text-align: center; }
+.studio-sheet ol.log .tool span { font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--muted); }
+.studio-sheet ol.log .note span { color: var(--dim); }
+.studio-sheet ol.log .error, .studio-sheet ol.log .error i { color: var(--red); }
+
+.studio-sheet .limits { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 6px 8px 10px; }
+.studio-sheet .limit { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.studio-sheet .limit i { width: 140px; height: 8px; border-radius: 4px; background: var(--line-strong); overflow: hidden; }
+.studio-sheet .limit u { display: block; height: 100%; background: var(--green); }
+.studio-sheet .limit.warn u { background: var(--amber); }
+.studio-sheet .limit.bad u { background: var(--red); }
+.studio-sheet .limit em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.studio-sheet .shares { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 14px; margin: 0 0 4px; }
+.studio-sheet .share table { margin: 0 4px; width: calc(100% - 8px); }
+.studio-sheet td.bar { width: 40%; vertical-align: middle; }
+.studio-sheet td.bar i { display: block; height: 7px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 70%, transparent); }
+
+.studio-sheet details.org ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.studio-sheet details.org > ul { padding-left: 4px; list-style: none; }
+.studio-sheet details.instructions .said.doc { max-height: 420px; overflow-y: auto; padding: 10px 12px; border-radius: 10px; background: var(--raise); }
+.studio-sheet .instr-edit textarea { min-height: 360px; font: 13px/1.5 ui-monospace, Menlo, monospace; }
+.studio-sheet .instr-edit { margin: 6px 0; }
+.studio-sheet .diff pre { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: var(--raise); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; max-height: 300px; overflow: auto; }
+.studio-sheet .diff del { background: color-mix(in srgb, var(--red) 25%, transparent); color: var(--text); }
+.studio-sheet .diff ins { background: color-mix(in srgb, var(--green) 25%, transparent); color: var(--text); text-decoration: none; }
+
+@media (max-width: 820px) {
+  .studio-sheet.wide { top: 0; left: 0; transform: none; width: 100%; max-height: none; height: 100%; border-radius: 0; }
+  .studio-sheet dl.facts { grid-template-columns: 1fr; gap: 1px; }
+  .studio-sheet dl.facts dd { margin-bottom: 8px; }
+}
+.studio-sheet header .back[hidden] { display: none; }
+.studio-sheet .flag.bad, .studio-sheet .flag.warn { color: var(--text); }
+.studio-sheet table.grid .nowrap { white-space: nowrap; }
+.studio-sheet td.bar { width: 28%; }
+@media (max-width: 600px) {
+  .studio-sheet table.bots small, .studio-sheet table.bots .wk { display: none; }
+  .studio-sheet table.bots .who { min-width: 0; }
+  .studio-sheet table.bots .face { display: none; }
+}
+
+/* ── jobs and projects in full, routines and timers, the library ─────────────────── */
+
+/* The Work panel's door to every job: it reads as a search field. */
+.studio-body button.find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 8px);
+  margin: 0 4px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--raise);
+  color: var(--dim);
+  font: 13px/1.2 var(--body);
+  text-align: left;
+  cursor: pointer;
+}
+.studio-body button.find:hover { color: var(--text); border-color: var(--muted); }
+.studio-body button.find svg { width: 15px; height: 15px; flex: none; }
+.studio-body .fact { margin: 3px 6px; font-size: 13px; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+.studio-body .fact code { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--text); }
+.studio-body .fact a, .studio-sheet a { color: var(--accent); }
+.studio-body .line .note { grid-column: 1 / -1; }
+
+.studio-sheet input.search {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--text);
+  font: 13px/1.3 var(--body);
+}
+.studio-sheet input.search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.studio-sheet form.filters { flex-direction: row; }
+.studio-sheet table.jobs td.job { min-width: 220px; }
+.studio-sheet .state.done { color: var(--muted); }
+.studio-sheet .state.dim { color: var(--dim); font-weight: 400; }
+.studio-sheet .add { color: var(--green); }
+.studio-sheet .del { color: var(--red); }
+.studio-sheet .acts label.inline { margin: 0; padding: 0; gap: 7px; font-size: 13px; color: var(--muted); }
+.studio-sheet .acts label.inline select { padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--raise); color: var(--text); font: 13px/1.3 var(--body); }
+.studio-sheet .job-edit, .studio-sheet .routine-add { margin: 0 0 10px; padding: 6px 0 2px; border: 1px solid var(--line); border-radius: 10px; }
+.studio-sheet .job-edit .acts .btn, .studio-sheet .routine-add .acts .btn { margin: 4px 0; }
+
+/* What a job made: pictures as pictures, the rest as a short list. */
+.studio-sheet .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 4px 8px 10px; }
+.studio-sheet .thumbs a { display: block; aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden; background: var(--raise); }
+.studio-sheet .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.studio-sheet ul.files { margin: 2px 8px 10px; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.studio-sheet details.doc-box { margin: 0 8px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.studio-sheet details.doc-box > summary { cursor: pointer; font-size: 13px; }
+.studio-sheet details.doc-box .said.doc { max-height: 480px; overflow-y: auto; margin-top: 6px; }
+.studio-sheet details > summary { cursor: pointer; }
+
+/* The branch's changes. */
+.studio-sheet ol.commits { margin: 0 8px 8px; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.studio-sheet details.patch { margin: 0 8px; border-bottom: 1px solid var(--line); }
+.studio-sheet details.patch summary { display: flex; gap: 8px; padding: 5px 0; font: 12px/1.4 ui-monospace, Menlo, monospace; }
+.studio-sheet details.patch .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-sheet details.patch pre { margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--raise); font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre; overflow: auto; max-height: 420px; }
+.studio-sheet details.patch pre .add { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--text); display: inline-block; min-width: 100%; }
+.studio-sheet details.patch pre .del { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--text); display: inline-block; min-width: 100%; }
+.studio-sheet details.patch pre .hunk { color: var(--blue); }
+
+/* The library: a small picture or a kind word, then the name and its job. */
+.studio-sheet table.made td.look { width: 64px; padding-right: 0; }
+.studio-sheet table.made img.thumb { width: 56px; height: 42px; object-fit: cover; border-radius: 6px; display: block; background: var(--raise); }
+.studio-sheet table.made .kind { display: inline-block; width: 56px; padding: 12px 0; border-radius: 6px; background: var(--raise); color: var(--dim); font-size: 11px; text-align: center; }
+.studio-sheet .said pre { padding: 8px 10px; border-radius: 8px; background: var(--raise); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-sheet tr.paused b { color: var(--muted); }
+.studio-sheet .money-page { padding-top: 2px; }
+
+@media (max-width: 700px) {
+  .studio-sheet .opt { display: none; }
+  .studio-sheet table.jobs td.job, .studio-sheet table.grid td.job { min-width: 0; }
+  .studio-sheet .filters .seg { flex: 1 1 100%; }
+  .studio-sheet .filters .seg button { flex: 1; }
+}
+.studio-sheet .sheet-body > table.grid, .studio-sheet details > table.grid { margin: 0 4px 8px; width: calc(100% - 8px); }
+.studio-sheet .sheet-body > .said.doc { margin: 0 8px 12px; }
+.studio-sheet form.comment textarea { min-height: 54px; }
+
+
+/* Questions still waiting: pinned at the top of the chat until answered, so later messages never bury them. */
+.studio-chat .talk .waiting-cards { position: sticky; top: 0; z-index: 2; margin: -2px -2px 10px; padding: 8px; flex: none; max-height: 65%; overflow-y: auto; overscroll-behavior: contain; background: var(--panel); border-bottom: 1px solid var(--line-strong); box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.5); }
+.studio-chat .talk .waiting-head { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--accent); }
+.studio-chat .talk .waiting-cards .card + .card { margin-top: 8px; }
+.studio-chat .talk .card.flash { animation: card-flash 1.6s ease-out 1; }
+@keyframes card-flash { 0%, 30% { outline: 2px solid var(--accent); outline-offset: 2px; } 100% { outline: 2px solid transparent; outline-offset: 2px; } }
+@media (prefers-reduced-motion: reduce) { .studio-chat .talk .card.flash { animation: none; outline: 2px solid var(--accent); } }
+.studio-chat .talk .asked-here { display: block; width: 100%; margin: 6px 0; padding: 6px 10px; text-align: left; font: inherit; font-size: 12px; color: var(--muted); background: transparent; border: 1px dashed var(--line-strong); border-radius: 8px; cursor: pointer; }
+.studio-chat .talk .asked-here:hover, .studio-chat .talk .asked-here:focus-visible { color: var(--text); border-color: var(--text); outline: none; }
+.card fieldset label.other { display: grid; gap: 4px; align-items: start; }
+.card fieldset label.other textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 2.6em; font: inherit; font-size: 13px; color: var(--text); background: var(--raise); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 8px; }
+.card fieldset label.other textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* The crew row in fixed places: a thin rule between tiers (lead, judges, builders, free crew, money). */
+.studio-crew .tier-gap { flex: 0 0 1px; align-self: stretch; margin: 6px 4px; background: var(--line-strong); }
+
+
+/* ── review of 12 November: readable, calm, and saying what it is doing ───────────── */
+
+/* The clear cross on a job shows on the row you point at, not on every row. */
+.studio-body .row .clear { opacity: 0; transition: opacity 0.12s; }
+.studio-body .row:hover .clear, .studio-body .row:focus-within .clear, .studio-body .row .clear:focus-visible { opacity: 1; }
+@media (hover: none) { .studio-body .row .clear { opacity: 1; } }
+
+/* Bigger targets for moving a project up and down. */
+.studio-body .rank-moves .btn { width: 30px; height: 25px; font-size: 11px; }
+
+/* A form's Save stays in reach at the foot of the column. */
+.studio-sheet form > button.btn.primary[type='submit'] { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 8px 18px -6px rgb(0 0 0 / 0.7); }
+
+/* The chat head's buttons that are not for this bot stay hidden. */
+.studio-chat [hidden] { display: none !important; }
+
+/* A page being read shows its shape, not an empty column. */
+.studio-sheet .skeleton { display: grid; gap: 9px; padding: 10px 8px; }
+.studio-sheet .skeleton i, .studio-sheet .skeleton b { display: block; height: 11px; border-radius: 6px; background: linear-gradient(90deg, var(--raise) 0%, var(--line-strong) 50%, var(--raise) 100%); background-size: 200% 100%; animation: skeleton 1.3s ease-in-out infinite; }
+.studio-sheet .skeleton b { height: 15px; width: 40%; margin-top: 10px; }
+.studio-sheet .skeleton i:nth-child(3n) { width: 72%; }
+.studio-sheet .skeleton i:nth-child(3n + 1) { width: 92%; }
+@keyframes skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .studio-sheet .skeleton :is(i, b) { animation: none; } }
+
+/* A long message folds after a screen's worth, with Show all of it. */
+.studio-sheet .said.clip { max-height: 15em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.studio-sheet .link.more { margin: 2px 0 6px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+
+/* Cancelling is set apart and red. */
+.studio-sheet .btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent) !important; }
+.studio-sheet .btn.danger:hover { background: color-mix(in srgb, var(--red) 14%, transparent); }
+
+/* More below: the foot of a long column fades, so the list reads as going on. */
+.deck-col::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 26px; border-radius: 0 0 13px 13px; background: linear-gradient(transparent, var(--panel-solid)); pointer-events: none; }
+.deck-col .sheet-body { padding-bottom: 26px; }
+.deck-col .sheet-confirm { position: relative; z-index: 2; }
+
+/* A money score reads as one out of a hundred. */
+.money-page .score small { margin-left: 1px; font-size: 11px; font-weight: 400; color: var(--dim); }
+.money-page .spark-none { display: inline-block; width: 64px; }
+
+/* Where a job stands, as a word with a colour. */
+.studio-body .line .stage { align-self: center; justify-self: end; padding: 2px 8px; border-radius: 10px; font: 600 12px/1.4 var(--body); white-space: nowrap; color: var(--muted); background: var(--raise); }
+.studio-body .line .stage.go { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+.studio-body .line .stage.look { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.studio-body .line .stage.bad { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+.studio-body .line .stage.ok { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.studio-body .line .stage.wait { color: var(--muted); }
+
+/* Needs you: each card says where it leads; its sorting buttons are readable. */
+.col-a .ask .go { display: block; margin-top: 3px; color: var(--accent); font-size: 12px; }
+.col-a .ask .sort .btn { min-height: 28px; padding: 3px 11px; font-size: 13px; }
+
+/* A job's last messages fold sooner. */
+.studio-sheet .said.clip { max-height: 9.5em; }
+
+/* Details most days do not need. */
+.studio-sheet .details-fold { margin: 12px 6px 4px; }
+.studio-sheet .details-fold > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+
+/* Money: the next step is the useful line, so it reads as text, not a footnote. */
+.money-page .product summary .name small { font-size: 13px; color: var(--text); opacity: 0.86; }
+
+/* A name that would sit on a more important one folds to its face; pointing at it shows it again. */
+.studio-tags .tag.tucked > span { display: none; }
+.studio-tags .tag.tucked { padding-right: 3px; opacity: 0.85; }
+.studio-tags .tag.tucked:hover > span { display: flex; }
+.studio-tags .tag.tucked:hover { opacity: 1; z-index: 2; }
+
+/* A goal's long text: three lines, and the rest on Show all of it. */
+.studio-sheet .goal-card .goal-more.clip { max-height: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; -webkit-mask-image: none; mask-image: none; margin-bottom: 2px; }
+.studio-sheet .goal-card .link.more { margin: 0 0 10px; }
+
+/* ── connectors ─────────────────────────────────────────────────────────────── */
+.studio-sheet .pick-list { display: grid; gap: 2px; margin: 8px 0 16px; }
+.studio-sheet .pick-row { display: grid; grid-template-columns: 1fr auto; gap: 1px 14px; align-items: baseline; padding: 9px 12px; border: 0; border-radius: 9px; background: none; color: var(--text); font: 13px/1.4 var(--body); text-align: left; cursor: pointer; }
+.studio-sheet .pick-row:hover, .studio-sheet .pick-row:focus-visible { background: var(--raise); }
+.studio-sheet .pick-row b { font-weight: 600; }
+.studio-sheet .pick-row span { color: var(--muted); min-width: 0; grid-column: 1; grid-row: 2; }
+.studio-sheet .pick-row i { font-style: normal; font-size: 12px; color: var(--dim); grid-column: 2; grid-row: 1; }
+.studio-sheet .pick-row.other { margin-top: 6px; border-top: 1px solid var(--line); border-radius: 0 0 9px 9px; padding-top: 12px; }
+.studio-sheet .seg label { display: inline-flex; cursor: pointer; }
+.studio-sheet .seg label input { position: absolute; opacity: 0; pointer-events: none; }
+.studio-sheet .seg label span { padding: 5px 12px; border-radius: 7px; color: var(--muted); font: 600 13px/1.2 var(--body); white-space: nowrap; }
+.studio-sheet .seg label input:checked + span { background: var(--raise); color: var(--text); }
+.studio-sheet .seg label input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.studio-sheet .seg label input[value="write"]:checked + span { background: color-mix(in srgb, var(--amber, #e0a03c) 26%, transparent); }
+.studio-sheet table.who td:last-child { text-align: right; }
+.studio-sheet ul.tools { list-style: none; margin: 6px 0 14px; padding: 0; display: grid; gap: 1px; }
+.studio-sheet ul.tools li, .studio-sheet ul.tools li label { display: grid; grid-template-columns: minmax(120px, 230px) 1fr; gap: 12px; align-items: baseline; padding: 6px 8px; font-size: 13px; line-height: 1.4; }
+.studio-sheet ul.tools.ticks li { padding: 0; }
+.studio-sheet ul.tools.ticks li label { grid-template-columns: auto minmax(120px, 210px) 1fr; cursor: pointer; border-radius: 8px; }
+.studio-sheet ul.tools.ticks li label:hover { background: var(--raise); }
+.studio-sheet ul.tools code { overflow-wrap: anywhere; }
+.studio-sheet ul.tools span { color: var(--muted); }
+.studio-sheet section.way { margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.studio-sheet section.way h3 { margin-top: 0; }
+.studio-sheet p.lead { margin: 4px 8px 16px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.studio-sheet h3 small { font-weight: 500; color: var(--dim); margin-left: 6px; }
+@media (max-width: 720px) {
+  .studio-sheet .pick-row { grid-template-columns: 1fr; gap: 2px; }
+  .studio-sheet .pick-row i { display: none; }
+  .studio-sheet ul.tools li, .studio-sheet ul.tools li label { grid-template-columns: 1fr; gap: 2px; }
+  .studio-sheet ul.tools.ticks li label { grid-template-columns: auto 1fr; }
+  .studio-sheet ul.tools.ticks li label span { grid-column: 2; }
+}

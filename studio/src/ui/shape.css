@@ -1,0 +1,214 @@
+/*
+ * The screens that shape a studio (the crew editor, a bot's instructions, Setup, the first run,
+ * a project's settings, when a routine runs), in the Plates look. Comes after plates.css and uses
+ * its paint; nothing here names a colour of its own but the hole punched in a step that is done.
+ *
+ * One thing carries these pages: the first run's steps are a workshop job card, the kind that
+ * travels with a piece of work and is punched at each station. Everything else is plain plates.
+ */
+
+/* What is hidden is hidden, whatever its row would otherwise be laid out as. */
+.hud.studio .studio-sheet :is(.fields, .plate-sec, .save-bar, .first-run) [hidden] { display: none !important; }
+
+/* ── a form cut into plates ──────────────────────────────────────────────────────── */
+
+.hud.studio .plate-sec { margin: 0 8px 12px; padding: 12px 12px 6px; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); }
+.hud.studio .plate-sec > h3 { margin: 0 0 10px; padding: 0; border: 0; font: 800 17px/1 var(--sign); letter-spacing: 0.03em; color: var(--text); }
+.hud.studio .plate-sec :is(.hint, .none, .acts, .grid-wrap, .seg, .flag) { margin-left: 0; margin-right: 0; }
+.hud.studio .plate-sec .fields, .hud.studio .plate-sec.fields { padding: 0; }
+.hud.studio .bot-edit > form.fields,
+.hud.studio .studio-sheet form.fields:has(> .plate-sec) { display: block; padding: 0; margin: 0; }
+.hud.studio .bot-edit .plate-sec:first-child,
+.hud.studio .bot-form > .plate-sec:first-child { border-top: 8px solid var(--bot, var(--edge)); }
+.hud.studio .plate-sec .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; margin-bottom: 10px; }
+.hud.studio .plate-sec label.stack { display: flex; margin-bottom: 10px; }
+.hud.studio .plate-sec .two label.stack { margin-bottom: 0; }
+.hud.studio .plate-sec :is(input:not([type='radio']):not([type='checkbox']), select, textarea) { width: 100%; min-width: 0; box-sizing: border-box; }
+.hud.studio .studio-sheet .fields :is(input[type='number'], input[type='time'], input[type='password'], input[type='url']) {
+  padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--raise); color: var(--text); font: 14px/1.4 var(--body);
+}
+.hud.studio .plate-sec .fields :is(input, select, textarea),
+.hud.studio .plate-sec.fields :is(input, select, textarea),
+.hud.studio form.fields .plate-sec :is(input:not([type='radio']):not([type='checkbox']), select, textarea),
+.hud.studio .plate-sec form.fields :is(input:not([type='radio']):not([type='checkbox']), select, textarea) { background: var(--panel-solid); border: 2px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; font: 14px/1.4 var(--body); color: var(--text); }
+.hud.studio form.fields .plate-sec :is(input, select, textarea):focus-visible { border-color: var(--edge); }
+.hud.studio .unit { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.hud.studio .unit input { width: 96px; flex: none; }
+
+/* Nothing in the editor is wider than its column, whatever a hidden control measures. */
+.hud.studio .bot-edit { overflow-x: clip; }
+
+/* Which AI runs it: four plates to choose from, each saying whether it can run a bot now. */
+.hud.studio .ai-plates { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.hud.studio .ai-plate { position: relative; display: block; cursor: pointer; }
+.hud.studio .ai-plate input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.hud.studio .ai-plate > span { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; height: 100%; box-sizing: border-box; padding: 10px 11px; border: 2px solid var(--line-strong); border-radius: 8px; background: var(--panel-solid); }
+.hud.studio .ai-plate b { font: 800 19px/1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .ai-plate small { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.hud.studio .ai-plate input:checked + span { border-color: var(--edge); box-shadow: 0 3px 0 var(--edge); background: var(--raise); }
+.hud.studio .ai-plate input:checked + span b::after { content: ' ✓'; }
+.hud.studio .ai-plate input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+.hud.studio .ai-plate:hover > span { border-color: var(--edge); }
+
+/* What it may not do: the first line is always on, and says so by being unchangeable. */
+.hud.studio .may-rows { display: grid; gap: 2px; margin-bottom: 8px; }
+.hud.studio .may-row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.hud.studio .may-row:hover { background: var(--sunk); }
+.hud.studio .may-row input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--edge); }
+.hud.studio .may-row b { display: block; font: 600 14px/1.3 var(--body); }
+.hud.studio .may-row small { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.hud.studio .may-row:has(input:disabled) { cursor: default; background: var(--sunk); }
+
+.hud.studio .skill-ticks { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow: auto; margin: 10px 0; padding: 8px; border: 2px solid var(--line-strong); border-radius: 8px; background: var(--panel-solid); }
+.hud.studio .skill-ticks label { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border: 1px solid var(--line-strong); border-radius: 5px; font-size: 13px; cursor: pointer; }
+.hud.studio .skill-ticks label:has(input:checked) { background: var(--edge); color: var(--panel-solid); border-color: var(--edge); }
+.hud.studio .skill-ticks input { width: 14px; height: 14px; margin: 0; accent-color: var(--go); }
+
+/* The bar that saves: it stays in sight while the form scrolls, and says when there is something to save. */
+.hud.studio .save-bar { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px; border-top: 2px solid var(--edge); background: var(--panel-solid); box-shadow: 0 28px 0 var(--panel-solid); }
+.hud.studio .save-bar .btn { width: auto; flex: none; padding: 9px 16px; }
+.hud.studio .save-bar .changed { order: 9; margin-left: auto; padding: 4px 8px; border: 2px solid var(--edge); border-radius: 5px; background: var(--yellow-paint); color: #15181d; font: 800 13px/1 var(--sign); letter-spacing: 0.04em; }
+.hud.studio .save-bar .count { order: 8; margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hud.studio .save-bar .count + .changed:not([hidden]) { margin-left: 0; }
+
+.hud.studio .var-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin: 10px 0 6px; padding: 0; }
+.hud.studio .var-add label.stack { margin: 0; }
+.hud.studio .var-add .btn { width: auto; height: 39px; padding: 0 14px; }
+.hud.studio table.vars code { font: 600 13px/1.4 ui-monospace, 'SF Mono', Menlo, monospace; }
+.hud.studio .danger-sec { border-color: var(--red); }
+.hud.studio .danger-sec > h3 { color: var(--red); }
+
+/* ── a bot's instructions: the page is the editor ────────────────────────────────── */
+
+.hud.studio .sheet-body.tall { display: flex; flex-direction: column; }
+.hud.studio .rules { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; margin: 0 8px; }
+.hud.studio .rules-edit { display: flex; flex-direction: column; min-height: 0; border: 2px solid var(--edge); border-top: 8px solid var(--bot, var(--edge)); border-radius: 8px; background: var(--raise); overflow: hidden; }
+.hud.studio .studio-sheet .rules .rules-edit textarea[data-part] {
+  flex: 1; min-height: 46vh; width: 100%; box-sizing: border-box; padding: 14px 16px; border: 0; border-radius: 0; resize: none;
+  background: var(--raise); color: var(--text); font: 13.5px/1.6 ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace; tab-size: 2; white-space: pre-wrap;
+}
+.hud.studio .studio-sheet .rules .rules-edit textarea[data-part]:focus-visible { outline: 0; box-shadow: inset 0 0 0 3px var(--accent); }
+.hud.studio .rules-edit .save-bar { margin: 0; position: static; box-shadow: none; background: var(--raise); }
+.hud.studio .rules-side { min-height: 0; overflow: auto; }
+.hud.studio .rules-side h3 { margin: 0 0 6px; padding: 0; border: 0; font: 800 17px/1 var(--sign); letter-spacing: 0.03em; }
+.hud.studio .rules-side .hint { margin: 0 0 10px; }
+.hud.studio .versions { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hud.studio .versions li { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; padding: 8px 9px; border: 2px solid var(--line-strong); border-radius: 7px; background: var(--raise); }
+.hud.studio .versions li:first-child { border-color: var(--edge); }
+.hud.studio .versions b { display: block; font: 600 13px/1.3 var(--body); }
+.hud.studio .versions small { display: block; font-size: 12px; color: var(--muted); }
+.hud.studio .versions .btn { width: auto; padding: 6px 9px; font-size: 12px; }
+.hud.studio .studio-sheet .versions .btn.ghost { grid-column: 1 / -1; justify-self: start; padding: 2px 0; border: 0; box-shadow: none; background: none; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.hud.studio .rules-side .diff { margin-top: 8px; }
+.hud.studio .rules-read { margin: 0 8px 12px; padding: 14px 16px; border: 2px solid var(--line-strong); border-radius: 8px; background: var(--raise); font: 13px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@container (max-width: 760px) {
+  .hud.studio .rules { grid-template-columns: 1fr; overflow: auto; }
+  .hud.studio .rules-edit textarea { min-height: 52vh; }
+  .hud.studio .rules-side { overflow: visible; padding-bottom: 12px; }
+}
+
+/* ── Setup: one row per thing a studio needs ─────────────────────────────────────── */
+
+.hud.studio .setup-group { margin: 0 8px 14px; }
+.hud.studio .setup-group > h3 { margin: 0 0 4px; padding: 0; font: 800 19px/1.1 var(--sign); letter-spacing: 0.03em; }
+.hud.studio .setup-group > .hint { margin: 0 0 8px; }
+.hud.studio .setup-row { display: grid; grid-template-columns: minmax(0, 1fr) 118px auto; gap: 6px 12px; align-items: center; padding: 10px 12px; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); }
+.hud.studio .setup-row + .setup-row { margin-top: 6px; }
+.hud.studio .setup-row .what b { display: block; font: 800 18px/1.15 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .setup-row .what span { display: block; font-size: 13px; line-height: 1.4; color: var(--text); }
+.hud.studio .setup-row .what small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.hud.studio .setup-row .what code { padding: 1px 5px; border-radius: 4px; background: var(--sunk); font: 12px/1.4 ui-monospace, Menlo, monospace; user-select: all; }
+.hud.studio .setup-row > .state { justify-self: start; text-align: center; }
+.hud.studio .setup-row .do { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; min-width: 150px; }
+.hud.studio .setup-row .do .btn { padding: 8px 12px; text-decoration: none; white-space: nowrap; }
+.hud.studio .setup-row .key-form { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; gap: 8px 10px; align-items: end; margin: 4px 0 0; padding: 10px 0 0; border-top: 2px solid var(--line); }
+.hud.studio .setup-row .key-form label.stack { margin: 0; }
+.hud.studio .setup-row .key-form .btn { width: auto; height: 39px; padding: 0 14px; }
+.hud.studio .setup-row .key-form .hint { grid-column: 1 / -1; margin: 0; }
+.hud.studio .acts .checked { align-self: center; font-size: 12px; }
+@container (max-width: 560px) {
+  .hud.studio .setup-row { grid-template-columns: 1fr auto; }
+  .hud.studio .setup-row .do { grid-column: 1 / -1; justify-content: flex-start; min-width: 0; }
+  .hud.studio .var-add { grid-template-columns: 1fr; }
+}
+
+/* ── the first run: a job card, punched at each station ──────────────────────────── */
+
+.hud.studio .first-run { margin: 0 8px; }
+.hud.studio .step-card { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin: 0 0 16px; padding: 0; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); overflow: hidden; }
+.hud.studio .step-card li + li { border-left: 2px dashed var(--line-strong); }
+.hud.studio .step-card button { display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; align-items: center; width: 100%; height: 100%; padding: 11px 10px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.hud.studio .step-card button:hover { background: var(--sunk); }
+.hud.studio .step-card i { grid-row: 1 / 3; display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid var(--edge); border-radius: 50%; background: var(--panel-solid); font: 800 16px/1 var(--sign); font-style: normal; }
+.hud.studio .step-card span { font: 800 16px/1.1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .step-card small { font-size: 11px; color: var(--muted); min-height: 14px; }
+/* Done is a hole punched through the card: the dark of the bench shows through it. */
+.hud.studio .step-card .done i { background: var(--edge); color: var(--green-paint); box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.6); }
+.hud.studio .step-card .skipped i { border-style: dashed; color: var(--dim); }
+.hud.studio .step-card .skipped span { color: var(--muted); }
+.hud.studio .step-card .now { background: var(--yellow-paint); }
+.hud.studio .step-card .now :is(span, small) { color: #15181d; }
+.hud.studio .step-card .now button:hover { background: none; }
+.hud.studio .step-card .now:not(.done) i { background: #15181d; color: var(--yellow-paint); border-color: #15181d; }
+.hud.studio .step-card button:focus-visible { outline-offset: -4px; }
+
+.hud.studio .first-step > h2 { margin: 0 0 6px; font: 800 34px/1.02 var(--sign); letter-spacing: 0.01em; color: var(--text); }
+.hud.studio .first-step > .lead { max-width: 62ch; margin: 0 0 14px; font-size: 15px; line-height: 1.5; color: var(--text); }
+.hud.studio .first-step :is(.fields, .acts, .flag, .setup-group, .hint) { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+.hud.studio .first-step > .fields, .hud.studio .first-step form.fields { max-width: 620px; }
+.hud.studio .first-step .fields .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; }
+.hud.studio .first-step .acts { flex-wrap: wrap; margin-top: 12px; }
+.hud.studio .first-step .acts .btn { width: auto; flex: none; padding: 9px 16px; }
+.hud.studio .plate-sec .acts .btn { width: auto; flex: none; }
+.hud.studio .choice-plates { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; }
+.hud.studio .choice-plate { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 2px solid var(--edge); border-radius: 8px; background: var(--raise); box-shadow: 0 3px 0 var(--edge); }
+.hud.studio .choice-plate h3 { margin: 0; padding: 0; border: 0; font: 800 21px/1 var(--sign); letter-spacing: 0.02em; }
+.hud.studio .choice-plate ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.hud.studio .choice-plate li { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; font-size: 13px; line-height: 1.4; }
+.hud.studio .choice-plate li b { font-weight: 600; }
+.hud.studio .choice-plate li span { grid-column: 1; color: var(--muted); }
+.hud.studio .choice-plate li i { grid-row: 1 / 3; grid-column: 2; align-self: start; font-style: normal; font-size: 12px; color: var(--muted); text-align: right; }
+.hud.studio .choice-plate .btn { width: auto; align-self: flex-start; margin-top: auto; padding: 9px 16px; }
+.hud.studio .choice-plate .hint { margin: 0; }
+.hud.studio .watch h3 { margin: 0 0 6px; padding: 0; border: 0; }
+.hud.studio .watch .line { width: 100%; }
+@container (max-width: 700px) {
+  .hud.studio .step-card { grid-template-columns: 1fr; }
+  .hud.studio .step-card li + li { border-left: 0; border-top: 2px dashed var(--line-strong); }
+  .hud.studio .step-card button { padding: 8px 10px; }
+  .hud.studio .choice-plates { grid-template-columns: 1fr; }
+  .hud.studio .first-step > h2 { font-size: 28px; }
+}
+
+/* ── when a routine runs ─────────────────────────────────────────────────────────── */
+
+.hud.studio .when { margin: 0 0 10px; padding: 8px 10px 4px; border: 2px solid var(--line-strong); border-radius: 8px; min-width: 0; }
+.hud.studio .when legend { padding: 0 6px; font: 800 15px/1 var(--sign); letter-spacing: 0.03em; color: var(--text); }
+.hud.studio .when-row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; padding: 4px 0; font-size: 14px; color: var(--text); cursor: pointer; }
+.hud.studio .when-row > input[type='radio'] { width: 18px; height: 18px; margin: 0; accent-color: var(--edge); }
+.hud.studio .when-row > span { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hud.studio .studio-sheet .fields .when-row :is(input[type='number'], input[type='time'], select) { width: auto; min-width: 0; padding: 5px 8px; }
+.hud.studio .when-row input[type='number'] { width: 68px; }
+.hud.studio .when-row input[name='cron'] { width: 190px; font: 13px/1.4 ui-monospace, Menlo, monospace; }
+.hud.studio .when-row:has(> input:checked) { font-weight: 600; }
+.hud.studio .when .advanced { margin: 4px 0 6px; }
+.hud.studio .when .advanced .hint { margin: 4px 0 0 30px; }
+.hud.studio .change-when .fields { padding: 8px 0 0; }
+
+/* ── a project: where it is ──────────────────────────────────────────────────────── */
+
+.hud.studio .project-add .seg { margin: 0 0 10px; }
+.hud.studio .project-add .flag .link, .hud.studio .plate-sec .flag .link { text-decoration: underline; font-weight: 600; }
+.hud.studio .studio-body .find.add { margin-bottom: 8px; }
+.hud.studio table.helpers td small { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hud.studio .ai-plate > span, .hud.studio .step-card button { transition: none; }
+}
+
+/* A question on a job's page: each choice reads from the left, its mark beside its words, however wide the page. */
+.hud.studio .studio-sheet .card label { justify-content: flex-start; text-align: left; }
+.hud.studio .studio-sheet .card label > input:is([type='radio'], [type='checkbox']) { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--edge); }
+.hud.studio .studio-sheet .card label > span { flex: 1; min-width: 0; align-items: flex-start; }
+.hud.studio .studio-sheet .card fieldset label.other { grid-template-columns: 1fr; }
+.hud.studio .studio-sheet .card fieldset label.other textarea { width: 100%; }

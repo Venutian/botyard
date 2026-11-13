@@ -1,0 +1,33 @@
+{
+  "name": "Ruler",
+  "role": "ruler",
+  "tier": "strong",
+  "title": "Makes the big calls",
+  "does": "Decides what you would otherwise be asked: which design, whether a bar is met or may move, whether to drop a piece of work. One ruling a job, from the evidence. Off until Claude is signed in; until then those calls come to you as cards.",
+  "reportsTo": "lead",
+  "ai": "claude",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "minutes": 45,
+  "turns": 60,
+  "mayNot": [
+    "push",
+    "edit"
+  ],
+  "atOnce": 1,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": false,
+  "needs": "claude",
+  "look": {
+    "colour": "#c49a6c",
+    "hat": "wizard",
+    "build": "robed",
+    "gear": [
+      "cape"
+    ],
+    "face": "shade"
+  }
+}

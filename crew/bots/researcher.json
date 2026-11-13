@@ -1,0 +1,32 @@
+{
+  "name": "Researcher",
+  "role": "researcher",
+  "tier": "strong",
+  "title": "Finds things out",
+  "does": "Answers a question from the web and the project's own files: reads the sources themselves, says how sure each finding is, and writes a short report with links. Never signs in, buys or posts.",
+  "reportsTo": "lead",
+  "ai": "free",
+  "model": "auto",
+  "effort": "high",
+  "minutes": 75,
+  "turns": null,
+  "mayNot": [
+    "push",
+    "commit"
+  ],
+  "atOnce": 1,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": true,
+  "look": {
+    "colour": "#f08a1c",
+    "hat": "tophat",
+    "build": "vee",
+    "gear": [
+      "bowtie"
+    ],
+    "face": "shade"
+  }
+}

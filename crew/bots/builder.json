@@ -1,0 +1,31 @@
+{
+  "name": "Builder",
+  "role": "builder",
+  "tier": "strong",
+  "title": "Builds on free models",
+  "does": "Builds what a job asks for on a free model, proves it by running it, and commits to the job's own branch. Costs nothing, so it gets every job a free model can try.",
+  "reportsTo": "lead",
+  "ai": "free",
+  "model": "auto",
+  "effort": "high",
+  "minutes": 120,
+  "turns": null,
+  "mayNot": [
+    "push"
+  ],
+  "atOnce": 2,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": true,
+  "look": {
+    "colour": "#2fbf5a",
+    "hat": "headphones",
+    "build": "slim",
+    "gear": [
+      "satchel"
+    ],
+    "face": "shade"
+  }
+}

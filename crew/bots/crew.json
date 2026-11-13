@@ -1,0 +1,18 @@
+{
+  "studio": "this studio",
+  "lead": "lead",
+  "bots": [
+    "lead",
+    "ruler",
+    "reviewer",
+    "senior-builder",
+    "claude-builder",
+    "builder",
+    "checker",
+    "researcher"
+  ],
+  "retired": [],
+  "renamed": {},
+  "places": {},
+  "variables": {}
+}

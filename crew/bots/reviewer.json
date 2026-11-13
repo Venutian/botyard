@@ -1,0 +1,31 @@
+{
+  "name": "Reviewer",
+  "role": "reviewer",
+  "tier": "strong",
+  "title": "Reviews with fresh eyes",
+  "does": "Reviews a finished build it has not seen before: reads the diff against the brief, runs the proof again, and fails it only on what a user would meet. Off until Claude is signed in; until then the Checker checks every build.",
+  "reportsTo": "lead",
+  "ai": "claude",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "minutes": 90,
+  "turns": 120,
+  "mayNot": [
+    "push",
+    "edit"
+  ],
+  "atOnce": 1,
+  "freshChat": null,
+  "folder": null,
+  "skills": "all",
+  "variables": [],
+  "on": false,
+  "needs": "claude",
+  "look": {
+    "colour": "#e2404d",
+    "hat": "beret",
+    "build": "curvy",
+    "gear": [],
+    "face": "shade"
+  }
+}

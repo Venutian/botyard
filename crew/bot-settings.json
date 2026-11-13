@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${BOTYARD_SCRIPTS:-$HOME/.botyard/crew}/loop-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${BOTYARD_SCRIPTS:-$HOME/.botyard/crew}/owner-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+node_modules/
+.expo/
+dist/
+*.jks
+*.keystore
+credentials.json
+*.apk
+*.aab
+.env
+
+# Built from the app by npm run build:web
+desktop/web/
+
+# Made by `wrangler types` in edge/
+edge/worker-configuration.d.ts
+.wrangler/
+__pycache__/
+
+# The folders the engine makes for jobs, one per job
+.botyard/
+.gstack/
+/build/
+.expo-build-id
+
+# made by expo prebuild for an APK build
+/android

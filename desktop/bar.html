@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  <title>Botyard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; }
+    body {
+      align-items: center; background: #000; border-bottom: 1px solid #262b33; color: #eef1f4;
+      display: flex; font: 500 14px system-ui, sans-serif; gap: 6px; padding: 0 12px; user-select: none;
+    }
+    .name { color: #9aa3ae; font-weight: 600; margin-right: 14px; }
+    button {
+      align-items: center; background: none; border: 0; border-radius: 8px; color: #9aa3ae; cursor: pointer;
+      display: flex; font: inherit; gap: 8px; height: 32px; padding: 0 13px;
+    }
+    button:hover { background: #171a1f; color: #eef1f4; }
+    button:focus-visible { outline: 2px solid #5fd0b5; outline-offset: 1px; }
+    button.active { background: #171a1f; color: #eef1f4; }
+    .dot { background: #ef7b6d; border-radius: 4px; height: 8px; width: 8px; }
+    .dot.up { background: #5fd0b5; }
+    .gap { flex: 1; }
+    .note { color: #f2b05e; font-size: 13px; }
+    button.start { background: #5fd0b5; color: #04110d; font-weight: 600; }
+    button.start:hover { background: #7fe0c8; color: #04110d; }
+    button[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <span class="name">Botyard</span>
+  <div id="tabs" style="display:flex;gap:6px;align-items:center"></div>
+  <span class="gap"></span>
+  <span class="note" id="note"></span>
+  <button id="start" class="start" title="Start Botyard's service on this computer" hidden>Start Botyard</button>
+  <button id="reload" title="Reload this tab">Reload</button>
+  <script>
+    const tabs = document.getElementById('tabs')
+    const note = document.getElementById('note')
+    const start = document.getElementById('start')
+    document.getElementById('reload').onclick = () => window.studio.reload()
+    start.onclick = () => window.studio.start()
+    window.studio.onState((state) => {
+      // One part only: no tabs to choose between, just whether the map answers.
+      if (state.tabs.length < 2) {
+        tabs.replaceChildren(...state.tabs.map((tab) => {
+          const dot = document.createElement('span')
+          dot.className = tab.up ? 'dot up' : 'dot'
+          dot.title = tab.up ? 'The map is running' : 'Starting the map'
+          return dot
+        }))
+        const down = state.tabs.some((tab) => !tab.up)
+        note.textContent = !down ? '' : state.starting ? 'Starting Botyard…' : 'Botyard is not running.'
+        start.hidden = !down || state.starting
+        return
+      }
+      tabs.replaceChildren(...state.tabs.map((tab) => {
+        const button = document.createElement('button')
+        button.setAttribute('role', 'tab')
+        button.setAttribute('aria-selected', String(tab.name === state.active))
+        button.className = tab.name === state.active ? 'active' : ''
+        const dot = document.createElement('span')
+        dot.className = tab.up ? 'dot up' : 'dot'
+        button.append(dot, tab.label)
+        button.onclick = () => window.studio.select(tab.name)
+        return button
+      }))
+      const down = state.tabs.filter((tab) => !tab.up).map((tab) => tab.label)
+      note.textContent = down.length ? `Starting ${down.join(' and ')}…` : ''
+    })
+  </script>
+</body>
+</html>
