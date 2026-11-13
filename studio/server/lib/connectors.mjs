@@ -11,6 +11,13 @@
  * given the connector; a tool that changes something is off until the owner ticks it, and then only
  * for bots given "may change things".
  *
+ * And whose account it is. A connector is the owner's own account (the default) or a business's
+ * account the bots may act in. On the owner's own account a tool that changes something (sends,
+ * posts, deletes, pays, publishes) is never called straight away: the call is held, a card in Needs
+ * you shows exactly what would be sent, and only the owner's yes sends it. The bot is told on its job
+ * what came of it. Reading is never held. A tool is taken as changing something unless the service
+ * itself marks it read-only.
+ *
  * This replaces the engine's Apps page, gallery, grants, profiles and per-bot gateways.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -21,6 +28,7 @@ import path from 'node:path'
 import { keysDir } from './home.mjs'
 import { crewFolder } from './models.mjs'
 import { fileURLToPath } from 'node:url'
+import { BUILTINS, StoreError, alwaysAsks, builtinTools, runBuiltin } from './store-apis.mjs'
 
 export class ConnectorError extends Error {
   constructor(status, message) {
@@ -42,18 +50,21 @@ const REFRESH_EARLY_MS = 2 * 60_000
 const PROTOCOL = '2025-06-18'
 const CLIENT = { name: 'Botyard', version: '1' }
 const LEVELS = new Set(['read', 'write'])
+/** Whose account a connector is: the owner's own, or a business's the bots may act in. */
+const OWNERS = new Set(['own', 'business'])
+const ownerOf = (c) => (c.owner === 'business' ? 'business' : 'own')
 
 const slug = (text) => String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 const b64url = (buf) => Buffer.from(buf).toString('base64url')
 
 // ── the store ───────────────────────────────────────────────────────────────────────
 
-const empty = () => ({ connectors: {}, passes: {} })
+const empty = () => ({ connectors: {}, passes: {}, held: {} })
 
 export function readStore(folder = keysFolder()) {
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(folder, 'connectors.json'), 'utf8'))
-    return { connectors: raw.connectors || {}, passes: raw.passes || {} }
+    return { connectors: raw.connectors || {}, passes: raw.passes || {}, held: raw.held || {} }
   } catch {
     return empty()
   }
@@ -86,6 +97,7 @@ function change(folder, fn) {
 const stateOf = (c, now) => {
   if (c.auth === 'signin' && !c.oauth?.accessToken) return c.pending && now - c.pending.at < SIGN_IN_WINDOW_MS ? 'signing-in' : 'signed-out'
   if (c.auth === 'key' && !c.key?.value) return 'signed-out'
+  if (c.auth === 'builtin' && !c.secret) return 'signed-out'
   if (c.health && c.health.ok === false) return c.health.signIn ? 'signed-out' : 'trouble'
   return 'ready'
 }
@@ -99,7 +111,7 @@ export function connectorView(c, { crew = [], now = Date.now() } = {}) {
     id: c.id,
     name: c.name,
     about: c.about || '',
-    address: c.url,
+    address: c.auth === 'builtin' ? 'Built into Botyard, on the store\'s own API' : c.url,
     how: c.auth,
     state,
     stateWords: STATE_WORDS[state],
@@ -107,6 +119,7 @@ export function connectorView(c, { crew = [], now = Date.now() } = {}) {
     signedInAt: c.signedInAt || 0,
     checkedAt: c.health?.at || 0,
     account: c.account || '',
+    owner: ownerOf(c),
     tools,
     reads: tools.filter((t) => t.reads).length,
     changes: tools.filter((t) => !t.reads).length,
@@ -120,7 +133,7 @@ export function connectorList({ crew = [], folder = keysFolder(), now = Date.now
   const have = new Set(mine.map((c) => c.from).filter(Boolean))
   return {
     connectors: mine.map((c) => connectorView(c, { crew, now })),
-    catalogue: CATALOGUE.filter((a) => !have.has(a.id)).map((a) => ({ id: a.id, name: a.name, about: a.about, kind: a.kind, ways: a.ways.map((w) => ({ kind: w.kind, keyLabel: w.keyLabel || '', keysPage: w.keysPage || '' })) })),
+    catalogue: CATALOGUE.filter((a) => !have.has(a.id)).map((a) => ({ id: a.id, name: a.name, about: a.about, kind: a.kind, official: a.official !== false, signs: a.signs || '', ways: a.ways.map((w) => ({ kind: w.kind, ownApp: Boolean(w.ownApp), appPage: w.appPage || '', fields: w.kind === 'builtin' ? BUILTINS[w.builtin].fields : [], keyLabel: w.keyLabel || '', keysPage: w.keysPage || '' })) })),
     engines: engines(),
   }
 }
@@ -202,11 +215,11 @@ const authHeaders = (c) => {
  * Where a service's sign-in lives, found the way the MCP rules say: the server names its sign-in
  * server (in its 401 or at a well-known address), and that one lists its own addresses.
  */
-export async function findSignIn(url, { fetcher = fetch } = {}) {
+export async function findSignIn(url, { fetcher = fetch, always = false } = {}) {
   const target = new URL(url)
   let metaUrl = ''
   const probe = await ask(fetcher, url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: CLIENT } }) })
-  if (probe.ok) return null // it answers without a sign-in
+  if (probe.ok && !always) return null // it answers without a sign-in
   metaUrl = /resource_metadata="([^"]+)"/.exec(probe.headers.get('www-authenticate') || '')?.[1] || ''
   const candidates = [metaUrl, `${target.origin}/.well-known/oauth-protected-resource${target.pathname === '/' ? '' : target.pathname}`, `${target.origin}/.well-known/oauth-protected-resource`].filter(Boolean)
   let resource = null
@@ -286,7 +299,14 @@ export async function loadTools(id, { folder = keysFolder(), fetcher = fetch } =
   let tools = []
   let health
   let account = c.account || ''
-  try {
+  if (c.auth === 'builtin') {
+    // Its tools are Botyard's own; the key is proved by one read from the store.
+    tools = builtinTools(c.builtin)
+    const first = BUILTINS[c.builtin].tools.find((t) => t.readOnly)
+    const tried = await runBuiltin(c.builtin, c.secret, first.name, {}, { fetcher })
+    health = tried.isError ? { ok: false, at: Date.now(), error: tried.content[0].text, signIn: /answered 401|answered 403|not accept/.test(tried.content[0].text) } : { ok: true, at: Date.now() }
+    account = BUILTINS[c.builtin].name
+  } else try {
     const hello = await rpc(c, 'initialize', { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: CLIENT }, { fetcher })
     account = hello.result?.serverInfo?.title || hello.result?.serverInfo?.name || account
     await rpc(c, 'notifications/initialized', undefined, { fetcher, session: hello.session }).catch(() => {})
@@ -323,6 +343,8 @@ export async function loadTools(id, { folder = keysFolder(), fetcher = fetch } =
  */
 export async function addConnector(input, { folder = keysFolder(), fetcher = fetch, crew = [] } = {}) {
   const known = CATALOGUE.find((a) => a.id === input.from)
+  const built = known?.ways.find((w) => w.kind === 'builtin')
+  if (built) return addBuiltin(known, built, input, { folder, fetcher, crew })
   const wanted = input.key ? 'key' : input.how
   const way = known ? known.ways.find((w) => w.kind === wanted) || known.ways.find((w) => w.kind !== 'key') || known.ways[0] : null
   const url = String(way?.url || input.address || '').trim()
@@ -335,9 +357,18 @@ export async function addConnector(input, { folder = keysFolder(), fetcher = fet
   let oauth = null
   if (auth === 'key' && !key) throw new ConnectorError(400, `Paste the ${way?.keyLabel || 'key'} first`)
   if (auth === 'signin') {
-    const found = await findSignIn(url, { fetcher })
+    // A service that registers no app by itself is signed in to through the owner's own app with it.
+    const clientId = String(input.clientId || '').trim()
+    if (way?.ownApp && !clientId) throw new ConnectorError(400, `${known?.name || 'This service'} needs an app of your own on its side: paste its client ID (and secret, if it gave one)`)
+    const found = await findSignIn(url, { fetcher, always: Boolean(way?.ownApp) })
     if (!found) auth = 'open'
-    else oauth = found
+    else {
+      oauth = found
+      if (way?.scope) oauth.scope = way.scope
+      if (way?.extra) oauth.extra = way.extra
+      if (way?.resource === false) oauth.resource = ''
+      if (clientId) Object.assign(oauth, { clientId, clientSecret: String(input.clientSecret || '').trim(), ownApp: true })
+    }
   }
   const id = await change(folder, (store) => {
     let id = slug(name) || 'service'
@@ -346,11 +377,33 @@ export async function addConnector(input, { folder = keysFolder(), fetcher = fet
       id, name, about: known?.about || '', url, auth, from: known?.id || '',
       ...(auth === 'key' ? { key: { header: way?.header || 'Authorization', prefix: way?.prefix ?? 'Bearer ', value: key } } : {}),
       ...(oauth ? { oauth } : {}),
+      owner: OWNERS.has(input.owner) ? input.owner : 'own',
       tools: [], writes: [], bots: {}, addedAt: Date.now(), ...(auth !== 'signin' ? { signedInAt: Date.now() } : {}),
     }
     return id
   })
   if (auth !== 'signin') await loadTools(id, { folder, fetcher })
+  return connectorView(readStore(folder).connectors[id], { crew })
+}
+
+/** A connector Botyard carries itself: its key's fields are checked, kept with it, and never shown again. */
+async function addBuiltin(known, way, input, { folder, fetcher, crew }) {
+  const def = BUILTINS[way.builtin]
+  const given = Object.fromEntries(def.fields.map((f) => [f.id, String(input.fields?.[f.id] ?? input[f.id] ?? '').trim()]))
+  const missing = def.fields.find((f) => !f.optional && !given[f.id])
+  if (missing) throw new ConnectorError(400, `Paste the ${missing.label} first`)
+  let secret
+  try { secret = def.check(given) } catch (err) { throw new ConnectorError(400, err instanceof StoreError ? err.message : 'That key could not be read') }
+  const id = await change(folder, (store) => {
+    let id = known.id
+    for (let n = 2; store.connectors[id]; n++) id = `${known.id}-${n}`
+    store.connectors[id] = {
+      id, name: known.name, about: known.about, url: `builtin:${way.builtin}`, auth: 'builtin', builtin: way.builtin, from: known.id, secret,
+      owner: OWNERS.has(input.owner) ? input.owner : 'own', tools: [], writes: [], bots: {}, addedAt: Date.now(), signedInAt: Date.now(),
+    }
+    return id
+  })
+  await loadTools(id, { folder, fetcher })
   return connectorView(readStore(folder).connectors[id], { crew })
 }
 
@@ -361,7 +414,8 @@ export async function startSignIn(id, { redirectUri, folder = keysFolder(), fetc
   if (c.auth !== 'signin') throw new ConnectorError(409, 'This connector does not use a sign-in page')
   const oauth = { ...c.oauth }
   // Botyard introduces itself to the service once per return address.
-  if (!oauth.clientId || oauth.redirectUri !== redirectUri) {
+  if (oauth.ownApp) oauth.redirectUri = redirectUri
+  else if (!oauth.clientId || oauth.redirectUri !== redirectUri) {
     if (!oauth.registrationUrl) throw new ConnectorError(422, 'This service wants an app registered with it by hand. Add it with a key instead')
     const res = await ask(fetcher, oauth.registrationUrl, {
       method: 'POST',
@@ -375,7 +429,7 @@ export async function startSignIn(id, { redirectUri, folder = keysFolder(), fetc
   const verifier = b64url(randomBytes(32))
   const state = b64url(randomBytes(24))
   const go = new URL(oauth.authorizationUrl)
-  for (const [k, v] of Object.entries({ response_type: 'code', client_id: oauth.clientId, redirect_uri: redirectUri, state, code_challenge: b64url(createHash('sha256').update(verifier).digest()), code_challenge_method: 'S256', resource: oauth.resource, ...(oauth.scope ? { scope: oauth.scope } : {}) })) go.searchParams.set(k, v)
+  for (const [k, v] of Object.entries({ response_type: 'code', client_id: oauth.clientId, redirect_uri: redirectUri, state, code_challenge: b64url(createHash('sha256').update(verifier).digest()), code_challenge_method: 'S256', ...(oauth.resource ? { resource: oauth.resource } : {}), ...(oauth.scope ? { scope: oauth.scope } : {}), ...(oauth.extra || {}) })) go.searchParams.set(k, v)
   await change(folder, (store) => {
     const live = store.connectors[id]
     if (!live) throw new ConnectorError(404, 'That connector is not set up here')
@@ -407,10 +461,14 @@ export async function finishSignIn({ state, code, error }, { folder = keysFolder
 }
 
 /** Which bots may use it, and which of its changing tools are allowed at all. */
-export async function setAccess(id, { bots, writes } = {}, { folder = keysFolder(), crew = [], out = botConfigFolder() } = {}) {
+export async function setAccess(id, { bots, writes, owner } = {}, { folder = keysFolder(), crew = [], out = botConfigFolder() } = {}) {
   await change(folder, (store) => {
     const c = store.connectors[id]
     if (!c) throw new ConnectorError(404, 'That connector is not set up here')
+    if (owner !== undefined) {
+      if (!OWNERS.has(owner)) throw new ConnectorError(400, 'Say whether it is your own account or a business account')
+      c.owner = owner
+    }
     if (bots && typeof bots === 'object') {
       for (const [bot, level] of Object.entries(bots)) {
         if (LEVELS.has(level)) c.bots[bot] = level
@@ -463,6 +521,115 @@ export function writeBotConfigs({ folder = keysFolder(), out = botConfigFolder()
   }
 }
 
+// ── the owner's own accounts: a change waits for a yes ─────────────────────────────
+
+const MAX_SHOWN = 3200
+const GATE_MARK = '\n\n<!-- botyard-script: Connector gate -->'
+
+/** What a call would send, as the owner reads it on the card: every field, nothing left out but length. */
+export function whatWouldBeSent(args = {}) {
+  const lines = []
+  for (const [key, value] of Object.entries(args || {})) {
+    const text = typeof value === 'string' ? value : JSON.stringify(value, null, 1)
+    lines.push(`${key}: ${text}`)
+  }
+  const all = lines.join('\n') || '(nothing: the call has no fields)'
+  return all.length > MAX_SHOWN ? `${all.slice(0, MAX_SHOWN)}\n… and ${all.length - MAX_SHOWN} more characters` : all
+}
+
+/**
+ * How a held call reaches the owner and how the bot hears back, through the engine: the card is a
+ * yes-or-no on the job the bot is running, and the outcome is a comment on it, which wakes the bot.
+ */
+export function engineCards() {
+  const engine = import('./engine.mjs')
+  return {
+    async place({ bot, title, prompt }) {
+      const { call, companyId } = await engine
+      const runs = await call(`/companies/${await companyId()}/live-runs`)
+      const job = (runs || []).find((r) => r.agentId === bot && r.issueId)?.issueId
+      if (!job) return null
+      const card = await call(`/issues/${job}/interactions`, { method: 'POST', body: { kind: 'request_confirmation', title, continuationPolicy: 'none', payload: { prompt, acceptLabel: 'Yes, send it', rejectLabel: 'No' } } })
+      return { job, card: card.id }
+    },
+    async tell(job, text) {
+      const { call } = await engine
+      await call(`/issues/${job}/comments`, { method: 'POST', body: { body: `${text}${GATE_MARK}` } })
+    },
+  }
+}
+
+/** Hold a call on the owner's own account: a card for the owner, a plain answer for the bot. */
+async function hold(c, bot, message, { folder, cards }) {
+  const tool = message.params?.name
+  const args = message.params?.arguments || {}
+  const title = `${c.name}: ${tool}, on your own account`
+  const prompt = `A bot wants to use your own ${c.name} account. It is not done until you say yes.\n\nWhat it would do: ${tool}\n\nExactly what would be sent:\n${whatWouldBeSent(args)}`
+  let placed = null
+  try { placed = await cards.place({ bot, title, prompt }) } catch { placed = null }
+  if (!placed) return refuse(message.id, `${c.name} is the owner's own account, and "${tool}" changes something, so it needs the owner's yes on a card. Botyard could not find the job you are on to put the card on. Ask the owner in a comment instead, saying exactly what you would send.`)
+  await change(folder, (store) => {
+    store.held ||= {}
+    store.held[placed.card] = { card: placed.card, job: placed.job, connector: c.id, tool, args, bot, at: Date.now() }
+  })
+  return {
+    jsonrpc: '2.0',
+    id: message.id,
+    result: {
+      content: [{ type: 'text', text: `Not done yet. ${c.name} is the owner's own account, so "${tool}" waits for the owner's yes on a card in Needs you, showing exactly what would be sent. Do not call it again. When the owner answers, the outcome is written on your job and you are woken.` }],
+    },
+  }
+}
+
+/**
+ * The owner answered a card. If it held a call, the call is made on a yes and not on a no, and the
+ * bot is told on its job either way. Any other card is left alone.
+ * @returns {Promise<null | { sent: boolean, error?: string }>}
+ */
+export async function settleHeld(cardId, verb, { reason = '', folder = keysFolder(), fetcher = fetch, cards = engineCards() } = {}) {
+  const held = readStore(folder).held?.[cardId]
+  if (!held || (verb !== 'accept' && verb !== 'reject')) return null
+  await change(folder, (store) => { delete store.held[cardId] })
+  const name = readStore(folder).connectors[held.connector]?.name || held.connector
+  if (verb === 'reject') {
+    await cards.tell(held.job, `The owner said no to ${name} "${held.tool}". It was not sent.${reason ? ` Their reason: ${reason}` : ''}`)
+    return { sent: false }
+  }
+  try {
+    const c = await fresh(held.connector, { folder, fetcher })
+    let result
+    if (c.auth === 'builtin') result = await runBuiltin(c.builtin, c.secret, held.tool, held.args, { fetcher })
+    else {
+      const hello = await rpc(c, 'initialize', { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: CLIENT }, { fetcher })
+      await rpc(c, 'notifications/initialized', undefined, { fetcher, session: hello.session }).catch(() => {})
+      result = (await rpc(c, 'tools/call', { name: held.tool, arguments: held.args }, { fetcher, session: hello.session })).result
+    }
+    const said = (result?.content || []).filter((p) => p.type === 'text').map((p) => p.text).join('\n').slice(0, 6000)
+    await cards.tell(held.job, `The owner said yes, and ${name} "${held.tool}" was ${result?.isError ? 'sent, but the service answered with an error' : 'done'}.${said ? `\n\nWhat ${name} answered:\n${said}` : ''}`)
+    return { sent: !result?.isError }
+  } catch (err) {
+    await cards.tell(held.job, `The owner said yes to ${name} "${held.tool}", but it could not be sent: ${err.message}`).catch(() => {})
+    return { sent: false, error: err.message }
+  }
+}
+
+/** A built-in connector answers the bot's MCP questions here, as a remote server would. */
+async function builtinAnswer(c, message, allowed, { fetcher }) {
+  const json = (body, status = 200) => ({ status, headers: { 'Content-Type': 'application/json' }, body: body === '' ? '' : JSON.stringify(body) })
+  if (!message) return json('', 202)
+  const answer = async (one) => {
+    if (one?.id === undefined) return null
+    if (one.method === 'initialize') return { jsonrpc: '2.0', id: one.id, result: { protocolVersion: one.params?.protocolVersion || PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: c.name, version: '1' } } }
+    if (one.method === 'ping') return { jsonrpc: '2.0', id: one.id, result: {} }
+    if (one.method === 'tools/list') return { jsonrpc: '2.0', id: one.id, result: { tools: builtinTools(c.builtin).filter((t) => allowed.has(t.name)) } }
+    if (one.method === 'tools/call') return { jsonrpc: '2.0', id: one.id, result: await runBuiltin(c.builtin, c.secret, one.params?.name, one.params?.arguments, { fetcher }) }
+    return { jsonrpc: '2.0', id: one.id, error: { code: -32601, message: `${one.method} is not offered` } }
+  }
+  if (Array.isArray(message)) return json((await Promise.all(message.map(answer))).filter(Boolean))
+  const out = await answer(message)
+  return out ? json(out) : json('', 202)
+}
+
 const allowedFor = (c, level) => new Set((c.tools || []).filter((t) => t.readOnly || (level === 'write' && (c.writes || []).includes(t.name))).map((t) => t.name))
 const refuse = (id, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code: -32001, message } })
 
@@ -471,7 +638,7 @@ const refuse = (id, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code
  * tools shows only the allowed ones, and a call to any other is refused here and never sent.
  * Returns what to answer the bot: `{ status, headers, body }`.
  */
-export async function gateway(id, pass, { method = 'POST', body = '', headers = {} } = {}, { folder = keysFolder(), fetcher = fetch } = {}) {
+export async function gateway(id, pass, { method = 'POST', body = '', headers = {} } = {}, { folder = keysFolder(), fetcher = fetch, cards = engineCards() } = {}) {
   const store = readStore(folder)
   const bot = Object.keys(store.passes).find((b) => store.passes[b] === pass)
   const known = store.connectors[id]
@@ -491,6 +658,15 @@ export async function gateway(id, pass, { method = 'POST', body = '', headers = 
       }
     }
   }
+  // On the owner's own account, a change is held for the owner's yes and never sent from here.
+  // A store's submissions, releases, listings and replies always wait for the owner's yes, whoever's account it is.
+  const asks = (one) => one?.method === 'tools/call' && c.auth === 'builtin' && alwaysAsks(c.builtin, one.params?.name)
+  if (message && (ownerOf(c) === 'own' || (Array.isArray(message) ? message.some(asks) : asks(message)))) {
+    const changing = (one) => one?.method === 'tools/call' && !(c.tools || []).find((t) => t.name === one.params?.name)?.readOnly
+    if (Array.isArray(message) && message.some(changing)) return { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refuse(null, 'Call a tool that changes something on its own, not in a batch: it waits for the owner\'s yes')) }
+    if (!Array.isArray(message) && changing(message)) return { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await hold(c, bot, message, { folder, cards })) }
+  }
+  if (c.auth === 'builtin') return builtinAnswer(c, message, allowed, { fetcher })
   const pass2 = {}
   for (const name of ['mcp-session-id', 'mcp-protocol-version', 'last-event-id']) if (headers[name]) pass2[name] = headers[name]
   const res = await ask(fetcher, c.url, {

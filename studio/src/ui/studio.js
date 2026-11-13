@@ -548,7 +548,7 @@ export class Studio {
       if (e.target.dataset.part === 'attach') return this._attach(e.target)
       if (this._shapeChange(e.target)) return
       if (e.target.closest('[data-part="bot-edit"], [data-part="bot-add"], .when')) return
-      if (e.target.dataset.part === 'connector-level' || e.target.dataset.part === 'connector-write') return this._connectorAccess()
+      if (['connector-level', 'connector-write', 'connector-owner'].includes(e.target.dataset.part)) return this._connectorAccess()
       if (e.target.dataset.part === 'skill-file' && this._skill) return this.openSkill(this._skill.id, e.target.value)
       const pick = e.target.dataset.jobs
       if (pick) { this._jobs.filter[pick] = e.target.value; this._jobs.page = 0; return this._loadJobs() }
@@ -1429,8 +1429,10 @@ setView(view) {
   async _connectorAdd(input) {
     if (this._connecting) return
     this._connecting = true
+    // Whose account it is, asked once on the page that adds it: the owner's own unless they say otherwise.
+    const owner = this._colOf('connector-new')?.el.querySelector('input[name="owner"]:checked')?.value || input.owner || 'own'
     try {
-      const made = await call('/api/studio/connector', { action: 'add', ...input })
+      const made = await call('/api/studio/connector', { action: 'add', ...input, owner })
       this.openConnector(made.id)
       this._refreshConnectorList()
       if (made.state === 'signed-out') await this._connectorSignIn(made.id)
@@ -1472,8 +1474,9 @@ setView(view) {
     if (!col || !c) return
     const bots = Object.fromEntries(c.bots.map((b) => [b.id, col.el.querySelector(`input[data-bot="${CSS.escape(b.id)}"]:checked`)?.value || 'off']))
     const writes = [...col.el.querySelectorAll('input[data-part="connector-write"]:checked')].map((i) => i.value)
+    const owner = col.el.querySelector('input[data-part="connector-owner"]:checked')?.value || c.owner
     try {
-      this._connector = await call('/api/studio/connector', { action: 'access', id: c.id, bots, writes })
+      this._connector = await call('/api/studio/connector', { action: 'access', id: c.id, bots, writes, owner })
       const count = col.el.querySelector('h3 small')
       if (count) count.textContent = `${writes.length} of ${c.changes} allowed`
       this.actions.toast('Saved. It reaches each bot at its next run')

@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  addConnector, connectorList, engineSignIns, finishSignIn, gateway, loadTools, readAnswer, readStore, removeConnector, setAccess, startSignIn, writeBotConfigs,
+  addConnector, connectorList, engineSignIns, finishSignIn, gateway, loadTools, readAnswer, readStore, removeConnector, setAccess, settleHeld, startSignIn, whatWouldBeSent, writeBotConfigs,
 } from '../server/lib/connectors.mjs'
 
 const CREW = [{ id: 'bot-lead', name: 'Lead' }, { id: 'bot-freelancer', name: 'Freelancer' }]
@@ -117,7 +117,8 @@ test('a bot reaches a connector only when given it, sees only the tools it may u
   assert.equal((await call('no-such-pass', { jsonrpc: '2.0', id: 1, method: 'tools/list' })).status, 403)
   assert.equal(svc.seen.calls.length, before)
 
-  await setAccess(id, { bots: { 'bot-lead': 'read', 'bot-freelancer': 'write' }, writes: ['deploy', 'whoami', 'no-such-tool'] }, { folder: where.folder, crew: CREW, out: where.out })
+  // A business's account: an allowed change is made straight away (the owner's own account is tested below).
+  await setAccess(id, { bots: { 'bot-lead': 'read', 'bot-freelancer': 'write' }, writes: ['deploy', 'whoami', 'no-such-tool'], owner: 'business' }, { folder: where.folder, crew: CREW, out: where.out })
   const store = readStore(where.folder)
   assert.deepEqual(store.connectors[id].writes, ['deploy'], 'only a real tool that changes things can be ticked')
   const lead = store.passes['bot-lead']
@@ -225,4 +226,125 @@ test('the engines\' sign-ins are read from where each keeps them, without readin
   list = engineSignIns({ home, crew })
   assert.equal(list.find((e) => e.id === 'claude').ok, true)
   assert.doesNotMatch(JSON.stringify(list), /secret-token-value/)
+})
+
+// ── the owner's own account: a change waits for the owner's yes on a card ────────────
+
+/** Cards as the engine would keep them: what was put on which job, and what the bot was told there. */
+function fakeCards({ job = 'job-1' } = {}) {
+  const seen = { cards: [], told: [] }
+  return {
+    seen,
+    place: async ({ bot, title, prompt }) => { if (!job) return null; const card = `card-${seen.cards.length + 1}`; seen.cards.push({ card, bot, title, prompt, job }); return { job, card } },
+    tell: async (to, text) => { seen.told.push({ job: to, text }) },
+  }
+}
+
+async function ownAccount() {
+  const svc = service()
+  const where = room()
+  const { id } = await signedIn(svc, where)
+  await setAccess(id, { bots: { 'bot-lead': 'read', 'bot-freelancer': 'write' }, writes: ['deploy'] }, { folder: where.folder, crew: CREW, out: where.out })
+  const store = readStore(where.folder)
+  return { svc, where, id, lead: store.passes['bot-lead'], freelancer: store.passes['bot-freelancer'] }
+}
+
+test('a connector is the owner\'s own account unless they say it is a business\'s, and that can be changed', async () => {
+  const { where, id } = await ownAccount()
+  assert.equal(connectorList({ crew: CREW, folder: where.folder }).connectors[0].owner, 'own')
+  await setAccess(id, { owner: 'business' }, { folder: where.folder, crew: CREW, out: where.out })
+  assert.equal(connectorList({ crew: CREW, folder: where.folder }).connectors[0].owner, 'business')
+  await assert.rejects(setAccess(id, { owner: 'mine' }, { folder: where.folder, crew: CREW, out: where.out }), /own account or a business/)
+})
+
+test('on the owner\'s own account a change becomes a card showing exactly what would be sent, and is never sent before the yes', async () => {
+  const { svc, where, id, freelancer } = await ownAccount()
+  const cards = fakeCards()
+  const before = svc.seen.calls.filter((m) => m.method === 'tools/call').length
+  const args = { to: 'buyer@example.com', text: 'Your order ships Monday', amount: 12.5 }
+  const answer = JSON.parse((await gateway(id, freelancer, { body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'deploy', arguments: args } }) }, { folder: where.folder, fetcher: svc.fetcher, cards })).body)
+  assert.match(answer.result.content[0].text, /^Not done yet\./, 'the bot is told it waits, as an answer and not a failure')
+  assert.equal(svc.seen.calls.filter((m) => m.method === 'tools/call').length, before, 'nothing reaches the service before the yes')
+  assert.equal(cards.seen.cards.length, 1)
+  const card = cards.seen.cards[0]
+  assert.equal(card.bot, 'bot-freelancer')
+  assert.match(card.title, /deploy, on your own account/)
+  for (const line of ['to: buyer@example.com', 'text: Your order ships Monday', 'amount: 12.5']) assert.ok(card.prompt.includes(line), `the card shows ${line}`)
+  assert.ok(readStore(where.folder).held[card.card], 'the call is kept until the owner answers')
+
+  // The yes sends it, exactly as asked, and the bot is told on its job what came back.
+  const out = await settleHeld(card.card, 'accept', { folder: where.folder, fetcher: svc.fetcher, cards })
+  assert.deepEqual(out, { sent: true })
+  const sent = svc.seen.calls.filter((m) => m.method === 'tools/call')
+  assert.equal(sent.length, before + 1)
+  assert.deepEqual(sent.at(-1).params, { name: 'deploy', arguments: args })
+  assert.equal(cards.seen.told[0].job, 'job-1')
+  assert.match(cards.seen.told[0].text, /said yes.*done[\s\S]*ran deploy/)
+  assert.equal(readStore(where.folder).held[card.card], undefined)
+  assert.equal(await settleHeld(card.card, 'accept', { folder: where.folder, fetcher: svc.fetcher, cards }), null, 'a card is settled once')
+})
+
+test('a no on the card reaches the bot and nothing is sent', async () => {
+  const { svc, where, id, freelancer } = await ownAccount()
+  const cards = fakeCards()
+  await gateway(id, freelancer, { body: JSON.stringify({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'deploy', arguments: { to: 'x' } } }) }, { folder: where.folder, fetcher: svc.fetcher, cards })
+  const before = svc.seen.calls.filter((m) => m.method === 'tools/call').length
+  const out = await settleHeld(cards.seen.cards[0].card, 'reject', { reason: 'Wrong buyer', folder: where.folder, fetcher: svc.fetcher, cards })
+  assert.deepEqual(out, { sent: false })
+  assert.equal(svc.seen.calls.filter((m) => m.method === 'tools/call').length, before)
+  assert.match(cards.seen.told[0].text, /said no to .*deploy.*not sent.*Wrong buyer/)
+})
+
+test('reads pass straight through on the owner\'s own account; a tool with no read-only mark counts as a change', async () => {
+  const { svc, where, id, freelancer } = await ownAccount()
+  const cards = fakeCards()
+  const read = JSON.parse((await gateway(id, freelancer, { body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'whoami' } }) }, { folder: where.folder, fetcher: svc.fetcher, cards })).body)
+  assert.equal(read.result.content[0].text, 'ran whoami')
+  assert.equal(cards.seen.cards.length, 0)
+  // "deploy" has no annotation at all: it is held like any change.
+  assert.equal(readStore(where.folder).connectors[id].tools.find((t) => t.name === 'deploy').readOnly, false)
+  // In a batch a change is refused outright, never sent.
+  const batch = JSON.parse((await gateway(id, freelancer, { body: JSON.stringify([{ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'deploy' } }]) }, { folder: where.folder, fetcher: svc.fetcher, cards })).body)
+  assert.match(batch.error.message, /on its own/)
+})
+
+test('a change with no job to hold it on is refused with what to do instead, and nothing is sent', async () => {
+  const { svc, where, id, freelancer } = await ownAccount()
+  const cards = fakeCards({ job: '' })
+  const before = svc.seen.calls.filter((m) => m.method === 'tools/call').length
+  const answer = JSON.parse((await gateway(id, freelancer, { body: JSON.stringify({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'deploy' } }) }, { folder: where.folder, fetcher: svc.fetcher, cards })).body)
+  assert.match(answer.error.message, /Ask the owner in a comment/)
+  assert.equal(svc.seen.calls.filter((m) => m.method === 'tools/call').length, before)
+})
+
+test('what would be sent is written out in full, field by field, and cut only past a long length', () => {
+  assert.equal(whatWouldBeSent({ to: 'a@b.c', body: 'Hi' }), 'to: a@b.c\nbody: Hi')
+  assert.match(whatWouldBeSent({}), /nothing/)
+  assert.match(whatWouldBeSent({ text: 'x'.repeat(5000) }), /more characters$/)
+})
+
+test('a service that registers no app is signed in to through the owner\'s own app: no registration, its scope and fields asked for', async () => {
+  const where = room()
+  const seen = []
+  const fetcher = async (url, init = {}) => {
+    seen.push(url)
+    const u = new URL(url)
+    const reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+    if (u.host === 'gmailmcp.googleapis.com' && u.pathname === '/mcp/v1') return reply({ jsonrpc: '2.0', id: 0, result: {} })
+    if (u.pathname === '/.well-known/oauth-protected-resource/mcp/v1') return reply({ resource: 'https://gmailmcp.googleapis.com/mcp/v1', authorization_servers: ['https://accounts.google.com/'] })
+    if (u.host === 'accounts.google.com' && u.pathname === '/.well-known/openid-configuration') return reply({ issuer: 'https://accounts.google.com', authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth', token_endpoint: 'https://oauth2.googleapis.com/token' })
+    return reply({}, 404)
+  }
+  await assert.rejects(addConnector({ from: 'gmail', how: 'signin' }, { folder: where.folder, fetcher, crew: CREW }), /client ID/)
+  const made = await addConnector({ from: 'gmail', how: 'signin', clientId: 'my-app.apps.googleusercontent.com', clientSecret: 'shh' }, { folder: where.folder, fetcher, crew: CREW })
+  assert.equal(made.state, 'signed-out', 'it waits for the owner to sign in, though the server answered a first question without one')
+  const { url } = await startSignIn(made.id, { redirectUri: 'http://localhost:5274/api/studio/connect/callback', folder: where.folder, fetcher })
+  const go = new URL(url)
+  assert.equal(go.origin + go.pathname, 'https://accounts.google.com/o/oauth2/v2/auth')
+  assert.equal(go.searchParams.get('client_id'), 'my-app.apps.googleusercontent.com')
+  assert.match(go.searchParams.get('scope'), /gmail\.modify/)
+  assert.equal(go.searchParams.get('access_type'), 'offline')
+  assert.equal(go.searchParams.get('resource'), null, 'no resource where the service would refuse it')
+  assert.ok(!seen.some((u) => /register/.test(u)), 'nothing is registered on the service')
+  assert.ok(!JSON.stringify(connectorList({ crew: CREW, folder: where.folder })).includes('shh'), 'the secret is never shown')
 })

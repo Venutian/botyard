@@ -17,7 +17,110 @@
     "keyLabel": "Airtable personal access token",
     "keysPage": "https://airtable.com/create/tokens"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Airtable personal access token)"
+ },
+ {
+  "id": "algolia",
+  "name": "Algolia",
+  "about": "Search, configure and analyse Algolia indices.",
+  "kind": "data",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.algolia.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "amplitude",
+  "name": "Amplitude",
+  "about": "Query product analytics: charts, cohorts, experiments and events in Amplitude.",
+  "kind": "analytics",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.amplitude.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "apify",
+  "name": "Apify",
+  "about": "Run Apify scrapers and crawlers and read their results.",
+  "kind": "data",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.apify.com"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "app-store-connect",
+  "name": "App Store Connect",
+  "about": "Read sales, downloads, reviews, crashes, builds and review status of your iOS and Mac apps; replies, listing edits, submissions and releases wait for your yes.",
+  "kind": "commerce",
+  "official": false,
+  "ways": [
+   {
+    "kind": "builtin",
+    "builtin": "app-store-connect",
+    "keysPage": "https://appstoreconnect.apple.com/access/integrations/api"
+   }
+  ],
+  "signs": "Its API key, pasted here"
+ },
+ {
+  "id": "asana",
+  "name": "Asana",
+  "about": "Read and update tasks, projects and goals in Asana.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.asana.com/v2/mcp",
+    "ownApp": true,
+    "appPage": "https://app.asana.com/0/my-apps"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "jira",
+  "name": "Atlassian: Jira and Confluence",
+  "about": "Read and update Jira issues and Confluence pages.",
+  "kind": "productivity",
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.atlassian.com/v2/mcp"
+   }
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "basecamp",
+  "name": "Basecamp",
+  "about": "Read and post to Basecamp projects, to-dos, messages and schedules.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.basecamp.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "bitly",
@@ -37,7 +140,53 @@
     "keyLabel": "Bitly API key",
     "keysPage": "https://bitly.com/settings/api"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Bitly API key)"
+ },
+ {
+  "id": "box",
+  "name": "Box",
+  "about": "Find, read and save files and folders in Box.",
+  "kind": "data",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.box.com",
+    "ownApp": true,
+    "appPage": "https://app.box.com/developers/console"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "brevo",
+  "name": "Brevo",
+  "about": "Manage contacts, lists and email and SMS campaigns in Brevo.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.brevo.com/v1/brevo/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "cal-com",
+  "name": "Cal.com",
+  "about": "See event types, bookings and free time on Cal.com, and book or move meetings.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.cal.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "calendly",
@@ -49,7 +198,23 @@
     "kind": "signin",
     "url": "https://mcp.calendly.com"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "canva",
+  "name": "Canva",
+  "about": "Find, create and export designs in Canva.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.canva.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "clickhouse",
@@ -61,7 +226,23 @@
     "kind": "signin",
     "url": "https://mcp.clickhouse.cloud/clickstack"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "clickup",
+  "name": "ClickUp",
+  "about": "Read and update tasks, lists and docs in ClickUp.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.clickup.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "cloudflare",
@@ -81,7 +262,9 @@
     "keyLabel": "Cloudflare API key",
     "keysPage": "https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Cloudflare API key)"
  },
  {
   "id": "cloudinary",
@@ -93,7 +276,23 @@
     "kind": "signin",
     "url": "https://asset-management.mcp.cloudinary.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "coda",
+  "name": "Coda",
+  "about": "Read and edit Coda docs, pages and tables.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://coda.io/apis/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "composio",
@@ -105,7 +304,23 @@
     "kind": "open",
     "url": "https://connect.composio.dev/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "No sign-in"
+ },
+ {
+  "id": "contentful",
+  "name": "Contentful",
+  "about": "Read and edit entries, assets and content types in Contentful.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.contentful.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "context7",
@@ -117,7 +332,111 @@
     "kind": "open",
     "url": "https://mcp.context7.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "No sign-in"
+ },
+ {
+  "id": "datadog",
+  "name": "Datadog",
+  "about": "Query logs, metrics, traces, monitors and incidents in Datadog.",
+  "kind": "analytics",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.datadoghq.com/v1/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "deepwiki",
+  "name": "DeepWiki",
+  "about": "Read and ask questions about the documentation of any public GitHub repository.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.deepwiki.com/mcp"
+   }
+  ],
+  "signs": "No sign-in"
+ },
+ {
+  "id": "descript",
+  "name": "Descript",
+  "about": "Edit audio and video projects in Descript.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.descript.com/v2/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "digitalocean",
+  "name": "DigitalOcean",
+  "about": "See and manage droplets, apps, databases and domains on DigitalOcean.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.digitalocean.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "docusign",
+  "name": "Docusign",
+  "about": "Prepare, send and track agreements in Docusign.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.docusign.com/mcp",
+    "ownApp": true,
+    "appPage": "https://developers.docusign.com/platform/configure-app/"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "dropbox",
+  "name": "Dropbox",
+  "about": "Find, read and save files in Dropbox.",
+  "kind": "data",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.dropbox.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "elevenlabs",
+  "name": "ElevenLabs",
+  "about": "Make speech, voices and sound effects with ElevenLabs.",
+  "kind": "ai",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.elevenlabs.io/v1/mcp",
+    "ownApp": true,
+    "appPage": "https://elevenlabs.io/app/developers"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
  },
  {
   "id": "enterpret",
@@ -137,7 +456,23 @@
     "kind": "signin",
     "url": "https://wisdom-api.enterpret.com/server/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "A key you paste (Enterpret auth token) or sign in on its own page"
+ },
+ {
+  "id": "etsy-api",
+  "name": "Etsy API guide",
+  "about": "Look up Etsy's seller API: endpoints, schemas and guides, for building a shop integration.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.api.etsycloud.com/mcp"
+   }
+  ],
+  "signs": "No sign-in"
  },
  {
   "id": "exa",
@@ -149,7 +484,23 @@
     "kind": "open",
     "url": "https://mcp.exa.ai/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "No sign-in"
+ },
+ {
+  "id": "figma",
+  "name": "Figma",
+  "about": "Read Figma designs, components and variables to build from them.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.figma.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "firecrawl",
@@ -173,7 +524,9 @@
     "kind": "open",
     "url": "https://mcp.firecrawl.dev/v2/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Use a Firecrawl API key) or no sign-in"
  },
  {
   "id": "fireflies",
@@ -193,7 +546,39 @@
     "keyLabel": "Fireflies API key",
     "keysPage": "https://app.fireflies.ai/settings"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Fireflies API key)"
+ },
+ {
+  "id": "fly-io",
+  "name": "Fly.io",
+  "about": "See and manage apps, machines and logs on Fly.io.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.fly.io/"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "front",
+  "name": "Front",
+  "about": "Read and answer conversations in Front's shared inboxes.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.frontapp.com/mcp",
+    "ownApp": true,
+    "appPage": "https://dev.frontapp.com/docs/create-and-manage-apps"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
  },
  {
   "id": "gauge",
@@ -213,14 +598,22 @@
     "keyLabel": "Gauge API key",
     "keysPage": "https://docs.withgauge.com/help/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Gauge API key)"
  },
  {
   "id": "github",
   "name": "GitHub",
-  "about": "Give agents access to GitHub repositories, issues, and pull requests.",
+  "about": "Read and work with repositories, issues, pull requests and actions on GitHub.",
   "kind": "developer",
   "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "ownApp": true,
+    "appPage": "https://github.com/settings/developers"
+   },
    {
     "kind": "key",
     "url": "https://api.githubcopilot.com/mcp/",
@@ -229,7 +622,132 @@
     "keyLabel": "GitHub token",
     "keysPage": ""
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page, through an app of your own you make there once or a key you paste (GitHub token)"
+ },
+ {
+  "id": "gitlab",
+  "name": "GitLab",
+  "about": "Work with issues, merge requests, pipelines and code on GitLab.com.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://gitlab.com/api/v4/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "gmail",
+  "name": "Gmail",
+  "about": "Read and search mail, label and file it, write drafts and send email from a Gmail account.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "ownApp": true,
+    "appPage": "https://console.cloud.google.com/apis/credentials",
+    "scope": "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose",
+    "extra": {
+     "access_type": "offline",
+     "prompt": "consent"
+    },
+    "resource": false
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "google-calendar",
+  "name": "Google Calendar",
+  "about": "See calendars and events, find free time, and add or change events.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://calendarmcp.googleapis.com/mcp/v1",
+    "ownApp": true,
+    "appPage": "https://console.cloud.google.com/apis/credentials",
+    "scope": "https://www.googleapis.com/auth/calendar",
+    "extra": {
+     "access_type": "offline",
+     "prompt": "consent"
+    },
+    "resource": false
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "google-drive",
+  "name": "Google Drive",
+  "about": "Find, read and create files in Google Drive.",
+  "kind": "data",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://drivemcp.googleapis.com/mcp/v1",
+    "ownApp": true,
+    "appPage": "https://console.cloud.google.com/apis/credentials",
+    "scope": "https://www.googleapis.com/auth/drive",
+    "extra": {
+     "access_type": "offline",
+     "prompt": "consent"
+    },
+    "resource": false
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "google-play",
+  "name": "Google Play Console",
+  "about": "Read reviews, installs, crash and ANR rates, tracks and listings of your Android apps; replies, listing edits, uploads and rollouts wait for your yes.",
+  "kind": "commerce",
+  "official": false,
+  "ways": [
+   {
+    "kind": "builtin",
+    "builtin": "google-play",
+    "keysPage": "https://play.google.com/console/developers"
+   }
+  ],
+  "signs": "Its API key, pasted here"
+ },
+ {
+  "id": "grafana",
+  "name": "Grafana Cloud",
+  "about": "Search dashboards and query metrics, logs and alerts in Grafana Cloud.",
+  "kind": "analytics",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.grafana.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "granola",
+  "name": "Granola",
+  "about": "Read your meeting notes and transcripts from Granola.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.granola.ai/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "gsc-wizard",
@@ -249,7 +767,53 @@
     "keyLabel": "Use a GSC Wizard MCP key",
     "keysPage": "https://www.gscwizard.com/claude-search-console-mcp.html"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Use a GSC Wizard MCP key)"
+ },
+ {
+  "id": "gumroad",
+  "name": "Gumroad",
+  "about": "See products, sales and customers on Gumroad.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://gumroad.com/claude/v1/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "help-scout",
+  "name": "Help Scout",
+  "about": "Read and answer customer conversations and docs in Help Scout.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.helpscout.net/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "hubspot",
+  "name": "HubSpot",
+  "about": "Read and update contacts, companies, deals and tickets in HubSpot.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.hubspot.com",
+    "ownApp": true,
+    "appPage": "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-the-remote-hubspot-mcp-server"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
  },
  {
   "id": "hugging-face",
@@ -265,19 +829,37 @@
     "kind": "open",
     "url": "https://huggingface.co/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or no sign-in"
  },
  {
-  "id": "jira",
-  "name": "Jira",
-  "about": "Use Jira from a bot: look things up and, where you allow it, change them.",
-  "kind": "productivity",
+  "id": "intercom",
+  "name": "Intercom",
+  "about": "Read customer conversations, contacts and help articles in Intercom.",
+  "kind": "communication",
+  "official": true,
   "ways": [
    {
     "kind": "signin",
-    "url": "https://mcp.atlassian.com/v1/mcp/authv2"
+    "url": "https://mcp.intercom.com/mcp"
    }
-  ]
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "klaviyo",
+  "name": "Klaviyo",
+  "about": "Manage email and SMS lists, segments, flows and campaigns in Klaviyo.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.klaviyo.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "linear",
@@ -297,7 +879,9 @@
     "keyLabel": "Linear API key",
     "keysPage": "https://linear.app/docs/api-and-webhooks"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Linear API key)"
  },
  {
   "id": "make",
@@ -309,7 +893,23 @@
     "kind": "signin",
     "url": "https://mcp.make.com"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "meta-ads",
+  "name": "Meta Ads",
+  "about": "See and manage Facebook and Instagram ad campaigns, budgets and results.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.facebook.com/ads"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "miro",
@@ -321,7 +921,9 @@
     "kind": "signin",
     "url": "https://mcp.miro.com/"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
  },
  {
   "id": "mixpanel",
@@ -333,7 +935,23 @@
     "kind": "signin",
     "url": "https://mcp.mixpanel.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "monday",
+  "name": "monday.com",
+  "about": "Read and update boards, items and updates in monday.com.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.monday.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "neon",
@@ -353,7 +971,9 @@
     "keyLabel": "Neon API key",
     "keysPage": "https://console.neon.tech/app/settings/api-keys"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Neon API key)"
  },
  {
   "id": "netlify",
@@ -365,7 +985,9 @@
     "kind": "signin",
     "url": "https://netlify-mcp.netlify.app/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
  },
  {
   "id": "notion",
@@ -377,7 +999,23 @@
     "kind": "signin",
     "url": "https://mcp.notion.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "paddle",
+  "name": "Paddle",
+  "about": "See and manage products, prices, customers, subscriptions and transactions in Paddle.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.paddle.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "pagerduty",
@@ -393,7 +1031,9 @@
     "keyLabel": "PagerDuty API key",
     "keysPage": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "A key you paste (PagerDuty API key)"
  },
  {
   "id": "parallel-search",
@@ -405,7 +1045,51 @@
     "kind": "open",
     "url": "https://search.parallel.ai/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "No sign-in"
+ },
+ {
+  "id": "perplexity",
+  "name": "Perplexity",
+  "about": "Search the web and get cited answers from Perplexity.",
+  "kind": "ai",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.perplexity.ai/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "pipedream",
+  "name": "Pipedream",
+  "about": "Reach the APIs of thousands of apps through accounts connected in Pipedream.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://remote.mcp.pipedream.net/v3"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "plaid",
+  "name": "Plaid",
+  "about": "Look into a Plaid integration: Link sessions, items, errors and usage.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.dashboard.plaid.com/mcp/"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "posthog",
@@ -425,7 +1109,9 @@
     "keyLabel": "PostHog personal API key",
     "keysPage": "https://posthog.com/docs/model-context-protocol/faq"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (PostHog personal API key)"
  },
  {
   "id": "postman",
@@ -445,7 +1131,9 @@
     "keyLabel": "Postman API key",
     "keysPage": "https://learning.postman.com/latest-v-12/docs/reference/postman-api/postman-mcp-server/postman-mcp-remote-server"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Postman API key)"
  },
  {
   "id": "railway",
@@ -457,7 +1145,27 @@
     "kind": "signin",
     "url": "https://mcp.railway.com"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "render",
+  "name": "Render",
+  "about": "See services, deploys, logs and metrics on Render.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://mcp.render.com/mcp",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Render API key",
+    "keysPage": "https://dashboard.render.com/u/settings#api-keys"
+   }
+  ],
+  "signs": "A key you paste (Render API key)"
  },
  {
   "id": "resend",
@@ -469,7 +1177,37 @@
     "kind": "signin",
     "url": "https://mcp.resend.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "sanity",
+  "name": "Sanity",
+  "about": "Query and edit documents and schemas in Sanity.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.sanity.io"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "semgrep",
+  "name": "Semgrep",
+  "about": "Scan code for security problems with Semgrep.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://semgrep.dev/api/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "sentry",
@@ -481,7 +1219,85 @@
     "kind": "signin",
     "url": "https://mcp.sentry.dev/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "slack",
+  "name": "Slack",
+  "about": "Read channels and threads, search messages, and post in Slack.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.slack.com/mcp",
+    "ownApp": true,
+    "appPage": "https://api.slack.com/apps"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "smartsheet",
+  "name": "Smartsheet",
+  "about": "Read and update sheets, rows and reports in Smartsheet.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "key",
+    "url": "https://mcp.smartsheet.com",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Smartsheet API token",
+    "keysPage": "https://help.smartsheet.com/articles/2482389-generate-API-key"
+   }
+  ],
+  "signs": "A key you paste (Smartsheet API token)"
+ },
+ {
+  "id": "socket",
+  "name": "Socket",
+  "about": "Check open-source packages for supply-chain risk before they are used.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.socket.dev/"
+   }
+  ],
+  "signs": "No sign-in"
+ },
+ {
+  "id": "square",
+  "name": "Square",
+  "about": "See payments, orders, catalog, customers and inventory in Square.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.squareup.com/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "squarespace-domains",
+  "name": "Squarespace Domains",
+  "about": "Search domain names and suggest available ones at Squarespace.",
+  "kind": "other",
+  "official": true,
+  "ways": [
+   {
+    "kind": "open",
+    "url": "https://mcp.squarespace.com/mcp"
+   }
+  ],
+  "signs": "No sign-in"
  },
  {
   "id": "stripe",
@@ -501,7 +1317,9 @@
     "keyLabel": "Stripe API key",
     "keysPage": "https://docs.stripe.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Stripe API key)"
  },
  {
   "id": "supabase",
@@ -521,7 +1339,9 @@
     "keyLabel": "Supabase API key",
     "keysPage": "https://supabase.com/docs/guides/ai-tools/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Supabase API key)"
  },
  {
   "id": "superagent",
@@ -537,19 +1357,23 @@
     "keyLabel": "Superagent API key",
     "keysPage": "https://www.superagent.sh/app/settings#api-keys"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "A key you paste (Superagent API key)"
  },
  {
   "id": "tavily",
   "name": "Tavily",
-  "about": "Search the public web and extract page content with Tavily\u2019s hosted MCP server.",
+  "about": "Search the public web and extract page content with Tavily’s hosted MCP server.",
   "kind": "analytics",
   "ways": [
    {
     "kind": "signin",
     "url": "https://mcp.tavily.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
  },
  {
   "id": "telem",
@@ -565,7 +1389,9 @@
     "keyLabel": "Telem.AI API key",
     "keysPage": "https://app.telem.ai"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "A key you paste (Telem.AI API key)"
  },
  {
   "id": "todoist",
@@ -577,7 +1403,51 @@
     "kind": "signin",
     "url": "https://ai.todoist.net/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "trello",
+  "name": "Trello",
+  "about": "Read and update Trello boards, lists and cards.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.trello.com/v1"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "v0",
+  "name": "v0",
+  "about": "Generate and refine web pages and components with v0.",
+  "kind": "ai",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://v0.app/api/mcp"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "vercel",
+  "name": "Vercel",
+  "about": "See projects and deployments on Vercel, with their build and runtime logs.",
+  "kind": "developer",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.vercel.com"
+   }
+  ],
+  "signs": "Sign in on its own page"
  },
  {
   "id": "webflow",
@@ -589,7 +1459,9 @@
     "kind": "signin",
     "url": "https://mcp.webflow.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
  },
  {
   "id": "windsor-ai",
@@ -609,7 +1481,9 @@
     "keyLabel": "Use a Windsor.ai API key",
     "keysPage": "https://mcp.windsor.ai/"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (Use a Windsor.ai API key)"
  },
  {
   "id": "wix",
@@ -621,7 +1495,79 @@
     "kind": "signin",
     "url": "https://mcp.wix.com/mcp"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "wordpress-com",
+  "name": "WordPress.com",
+  "about": "Read and write posts, pages and media on WordPress.com sites.",
+  "kind": "content",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"
+   }
+  ],
+  "signs": "Sign in on its own page"
+ },
+ {
+  "id": "wrike",
+  "name": "Wrike",
+  "about": "Read and update tasks, projects and folders in Wrike.",
+  "kind": "productivity",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://mcp.wrike.com/v2",
+    "ownApp": true,
+    "appPage": "https://www.wrike.com/frontend/apps/index.html#/api"
+   },
+   {
+    "kind": "key",
+    "url": "https://mcp.wrike.com/v2",
+    "header": "Authorization",
+    "prefix": "Bearer ",
+    "keyLabel": "Wrike permanent access token",
+    "keysPage": "https://www.wrike.com/frontend/apps/index.html#/api"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once or a key you paste (Wrike permanent access token)"
+ },
+ {
+  "id": "x",
+  "name": "X",
+  "about": "Read posts and timelines on X, and post.",
+  "kind": "communication",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.x.com/mcp",
+    "ownApp": true,
+    "appPage": "https://developer.x.com/en/portal/dashboard"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
+ },
+ {
+  "id": "xero",
+  "name": "Xero",
+  "about": "Read and create invoices, contacts, payments and reports in Xero.",
+  "kind": "commerce",
+  "official": true,
+  "ways": [
+   {
+    "kind": "signin",
+    "url": "https://api.xero.com/mcp/v1",
+    "ownApp": true,
+    "appPage": "https://developer.xero.com/app/manage"
+   }
+  ],
+  "signs": "Sign in on its own page, through an app of your own you make there once"
  },
  {
   "id": "youcom",
@@ -645,6 +1591,8 @@
     "kind": "open",
     "url": "https://api.you.com/mcp?profile=free"
    }
-  ]
+  ],
+  "official": true,
+  "signs": "Sign in on its own page or a key you paste (You.com API key) or no sign-in"
  }
 ]

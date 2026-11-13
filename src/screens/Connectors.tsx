@@ -13,6 +13,7 @@ import { Button, Group, Label, Row, Segmented, Toggle, Txt } from '../ui/kit';
 import { ago, Line, Page, Tag, useLoad } from '../ui/page';
 
 const LEVELS = [{ id: 'off' as const, name: 'No' }, { id: 'read' as const, name: 'May look' }, { id: 'write' as const, name: 'May change' }];
+const OWNERS = [{ id: 'own' as const, name: 'My own' }, { id: 'business' as const, name: 'A business' }];
 
 function stateTone(c: Connector, t: { good: string; bad: string; warn: string }) {
   return c.state === 'ready' ? t.good : c.state === 'signing-in' ? t.warn : t.bad;
@@ -56,7 +57,7 @@ export function ConnectorScreen({ id, connection, nav }: { id: string; connectio
   const [busy, setBusy] = useState(false);
   const c = data?.connectors.find((x) => x.id === id);
   const put = (next: Connector) => setData(data ? { ...data, connectors: data.connectors.map((x) => (x.id === id ? next : x)) } : data);
-  const save = async (change: { bots?: Record<string, string>; writes?: string[] }) => {
+  const save = async (change: { bots?: Record<string, string>; writes?: string[]; owner?: 'own' | 'business' }) => {
     try {
       put(await setConnectorAccess(connection, id, change));
     } catch (err) {
@@ -85,6 +86,13 @@ export function ConnectorScreen({ id, connection, nav }: { id: string; connectio
             <Row title="Address" detail={c.address} last />
           </Group>
           <Button label="Check it now" kind="quiet" onPress={check} busy={busy} />
+          <Label>Whose account</Label>
+          <Group>
+            <Row title="Is this your own account, or a business's the bots may act in?" last>
+              <Segmented value={c.owner ?? 'own'} options={OWNERS} onChange={(owner) => save({ owner })} />
+            </Row>
+          </Group>
+          <Txt size={13} color={t.ink2}>{(c.owner ?? 'own') === 'own' ? 'Bots may read. Anything that sends, posts, deletes, pays or publishes waits for your yes on a card, showing exactly what would be sent.' : 'Bots given May change use the tools you switch on without asking each time: answer buyers, list items, run ads.'}</Txt>
           <Label>Who may use it</Label>
           <Txt size={13} color={t.ink2}>May look gives a bot the tools that only read. May change adds the tools you switch on below, and nothing else. A change reaches a bot at its next run.</Txt>
           <Group>

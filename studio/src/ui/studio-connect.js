@@ -35,6 +35,14 @@ export function connectorsScreen(d, { q = '' } = {}) {
       <button class="pick-row other" data-act="connector-new" data-from=""><b>Another service</b><span>Any service with an MCP server, by its address</span><i>Address</i></button></div>`
 }
 
+/** Whose account a service is: asked once when it is added, and changed on its own page. */
+const OWNER_WORDS = {
+  own: ['Your own account', 'Bots may read. Anything that sends, posts, deletes, pays or publishes waits for your yes on a card, showing exactly what would be sent.'],
+  business: ['A business\'s account the bots may act in', 'Bots given "may change things" use the tools you tick without asking each time: answer buyers, list items, run ads.'],
+}
+const ownerChoice = (current, part = '') => `<fieldset class="owner-choice"><legend>Is this your own account, or a business's account the bots may act in?</legend>
+  ${Object.entries(OWNER_WORDS).map(([v, [title, hint]]) => `<label><input type="radio" name="owner" value="${v}"${part ? ` data-part="${part}"` : ''} ${current === v ? 'checked' : ''}><span><b>${title}</b><small>${hint}</small></span></label>`).join('')}</fieldset>`
+
 /** The page that adds one: how you sign in to it, said before anything is sent. */
 export function connectorNewScreen(app) {
   if (!app) {
@@ -43,26 +51,59 @@ export function connectorNewScreen(app) {
       <label class="stack">What to call it<input name="name" maxlength="60" required placeholder="The service's name"></label>
       <label class="stack">Address<input name="address" type="url" required placeholder="https://…/mcp"></label>
       <label class="stack">Key, if it uses one<input name="key" type="password" autocomplete="off" placeholder="Leave empty to sign in on its page"></label>
+      ${ownerChoice('own')}
       <div class="acts"><button class="btn primary" type="submit">Add it</button></div>
     </form>`
+  }
+  const built = app.ways.find((w) => w.kind === 'builtin')
+  if (built) {
+    return `<p class="lead">${esc(app.about)}</p>
+    <p class="hint">Built into Botyard on ${esc(app.name)}'s own API. Reading is open to the bots you choose; a reply, a listing edit, a submission, a release or an upload waits for your yes on a card every time, whoever's account it is.</p>
+    ${ownerChoice('own')}
+    <form class="fields" data-part="connector-add" data-from="${esc(app.id)}">
+      <p class="hint">The key is kept on this computer, readable by you alone, and never shown again.${built.keysPage ? ` <a href="${esc(built.keysPage)}" target="_blank" rel="noopener noreferrer">Where to make it</a>` : ''}</p>
+      ${built.fields.map((f) => `<label class="stack">${esc(f.label)}${f.long ? `<textarea name="${esc(f.id)}" rows="5" autocomplete="off" spellcheck="false" ${f.optional ? '' : 'required'}></textarea>` : `<input name="${esc(f.id)}" autocomplete="off" spellcheck="false" ${f.optional ? '' : 'required'}>`}<small>${esc(f.hint || '')}</small></label>`).join('')}
+      <div class="acts"><button class="btn primary" type="submit">Add ${esc(app.name)}</button></div>
+    </form>`
+  }
+  const own = app.ways.find((w) => w.kind === 'signin' && w.ownApp)
+  if (own) {
+    const back = `${location.origin.replace('127.0.0.1', 'localhost')}/api/studio/connect/callback`
+    return `<p class="lead">${esc(app.about)}</p>
+    ${ownerChoice('own')}
+    <section class="way"><h3>Sign in through an app of your own</h3>
+      <p class="hint">${esc(app.name)} does not let Botyard register itself, so you make a small app on ${esc(app.name)} once${own.appPage ? ` (<a href="${esc(own.appPage)}" target="_blank" rel="noopener noreferrer">where</a>)` : ''}, give it this return address, and paste its client ID and secret here. Then you sign in on ${esc(app.name)}'s own page as usual.</p>
+      <p><code>${esc(back)}</code></p>
+      <form class="fields" data-part="connector-add" data-from="${esc(app.id)}">
+        <input type="hidden" name="how" value="signin">
+        <label class="stack">Client ID<input name="clientId" required autocomplete="off" spellcheck="false"></label>
+        <label class="stack">Client secret, if it gave one<input name="clientSecret" type="password" autocomplete="off"></label>
+        <div class="acts"><button class="btn primary" type="submit">Add ${esc(app.name)} and sign in</button></div>
+      </form></section>
+    ${app.ways.some((w) => w.kind === 'key') ? keyWay(app, app.ways.find((w) => w.kind === 'key'), true) : ''}`
   }
   const signin = app.ways.find((w) => w.kind === 'signin')
   const open = app.ways.find((w) => w.kind === 'open')
   const key = app.ways.find((w) => w.kind === 'key')
   return `<p class="lead">${esc(app.about)}</p>
+    ${app.official === false ? '<p class="hint">Not made by the service itself: a server others publish for it.</p>' : ''}
+    ${ownerChoice('own')}
     ${signin ? `<section class="way"><h3>Sign in on ${esc(app.name)}'s own page</h3>
       <p class="hint">A tab opens on ${esc(app.name)}. You sign in there and say what Botyard may reach; Botyard never sees your password. No bot can use it until you choose which.</p>
       <div class="acts"><button class="btn primary" data-act="connector-add" data-from="${esc(app.id)}" data-how="signin">Sign in to ${esc(app.name)}</button></div></section>` : ''}
     ${open && !signin ? `<section class="way"><h3>No sign-in needed</h3>
       <p class="hint">${esc(app.name)} is open to anyone. No bot can use it until you choose which.</p>
       <div class="acts"><button class="btn primary" data-act="connector-add" data-from="${esc(app.id)}" data-how="open">Add ${esc(app.name)}</button></div></section>` : ''}
-    ${key ? `<section class="way"><h3>${signin || open ? 'Or use a key' : 'Use a key'}</h3>
+    ${key ? keyWay(app, key, Boolean(signin || open)) : ''}`
+}
+
+/** Adding a service with a key made on it. */
+const keyWay = (app, key, second) => `<section class="way"><h3>${second ? 'Or use a key' : 'Use a key'}</h3>
       <form class="fields" data-part="connector-add" data-from="${esc(app.id)}">
         <p class="hint">A key made on ${esc(app.name)}, limited there to what the bots should reach. It is kept on this computer, outside every project folder, and no bot can read it.${key.keysPage ? ` <a href="${esc(key.keysPage)}" target="_blank" rel="noopener">Where keys are made</a>` : ''}</p>
         <label class="stack">${esc(key.keyLabel || 'Key')}<input name="key" type="password" autocomplete="off" required></label>
-        <div class="acts"><button class="btn${signin || open ? '' : ' primary'}" type="submit">Add ${esc(app.name)} with this key</button></div>
-      </form></section>` : ''}`
-}
+        <div class="acts"><button class="btn${second ? '' : ' primary'}" type="submit">Add ${esc(app.name)} with this key</button></div>
+      </form></section>`
 
 /** One connector: is its sign-in good, who may use it, and which of its tools. */
 export function connectorScreen(c) {
@@ -73,18 +114,21 @@ export function connectorScreen(c) {
   const facts = [
     ['Sign-in', `${stateHtml(c)}${c.trouble ? `<small class="warnish">${esc(c.trouble)}</small>` : c.state === 'signing-in' ? '<small>Finish on the service\'s page, in the tab that opened.</small>' : c.signedInAt ? `<small>${c.how === 'key' ? 'Key added' : c.how === 'open' ? 'Added' : 'Signed in'} ${esc(when(c.signedInAt))}${c.checkedAt ? `, checked ${esc(when(c.checkedAt))}` : ''}</small>` : ''}`],
     ['Address', `<code>${esc(c.address)}</code>`],
+    ['Account', esc(OWNER_WORDS[c.owner || 'own'][0])],
   ]
   const who = c.bots.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td><span class="seg" role="radiogroup" aria-label="${esc(b.name)}">${LEVELS.map(([v, words]) => `<label><input type="radio" name="level-${esc(b.id)}" data-part="connector-level" data-bot="${esc(b.id)}" value="${v}" ${b.level === v ? 'checked' : ''}><span>${words}</span></label>`).join('')}</span></td></tr>`).join('')
   const reads = c.tools.filter((t) => t.reads)
   const changes = c.tools.filter((t) => !t.reads)
   const tool = (t) => `<li><code>${esc(t.name)}</code><span>${esc(t.about)}</span></li>`
   return `<dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>${acts}
+    <h3>Whose account</h3>
+    ${ownerChoice(c.owner || 'own', 'connector-owner')}
     <h3>Who may use it</h3>
     <p class="hint">"May look" gives a bot the tools that only read. "May change things" adds the tools you tick below, and nothing else. A change here reaches a bot at its next run.</p>
     <div class="grid-wrap"><table class="grid slim who"><tbody>${who}</tbody></table></div>
     ${c.tools.length ? `
     <h3>Tools that change things <small>${changes.filter((t) => t.allowed).length} of ${changes.length} allowed</small></h3>
-    ${changes.length ? `<p class="hint">Off until you tick them. A tool that sends, posts or publishes for you still asks you on a card first.</p>
+    ${changes.length ? `<p class="hint">Off until you tick them.${(c.owner || 'own') === 'own' ? ' On your own account each one still waits for your yes on a card before anything is sent.' : ''}</p>
     <ul class="tools ticks">${changes.map((t) => `<li><label><input type="checkbox" data-part="connector-write" value="${esc(t.name)}" ${t.allowed ? 'checked' : ''}><code>${esc(t.name)}</code><span>${esc(t.about)}</span></label></li>`).join('')}</ul>` : '<p class="none">It has none.</p>'}
     <details class="fold"><summary>Tools that only look <small>${reads.length}</small></summary><ul class="tools">${reads.map(tool).join('')}</ul></details>`
     : `<p class="none">${c.state === 'ready' ? 'It offers no tools.' : 'Its tools are read once it is signed in.'}</p>`}`

@@ -22,7 +22,7 @@ import { cameThroughEdge, edgeFile, readEdge, signPlay } from './lib/edge.mjs'
 import { addDevice, deviceView, devicesFile, findDevice, readDevices, retireShared, revokeDevice, touchDevice } from './lib/devices.mjs'
 import { guardFolder, readGuard, writeGuard } from './lib/guard.mjs'
 import { companySettings } from './lib/company.mjs'
-import { ConnectorError, connectorList, loadTools, setAccess } from './lib/connectors.mjs'
+import { ConnectorError, connectorList, loadTools, setAccess, settleHeld } from './lib/connectors.mjs'
 import { activityPage, botList, botPage, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -506,8 +506,11 @@ export function phoneHandler({ token, connectors = {}, engine = {}, sessions = l
         const [, jobId, questionId, verb] = question
         const body = await readBody(req)
         if (verb === 'respond') return send(res, 200, await answerQuestion(jobId, questionId, body.answers, options))
-        if (verb === 'accept') return send(res, 200, await acceptQuestion(jobId, questionId, options))
-        return send(res, 200, await rejectQuestion(jobId, questionId, body.reason, options))
+        // A card that held a bot's call on the owner's own account: the yes sends it, the no tells the bot.
+        if (verb === 'accept') { const out = await acceptQuestion(jobId, questionId, options); await settleHeld(questionId, 'accept', connectors.options).catch(() => null); return send(res, 200, out) }
+        const out = await rejectQuestion(jobId, questionId, body.reason, options)
+        await settleHeld(questionId, 'reject', { reason: body.reason || '', ...connectors.options }).catch(() => null)
+        return send(res, 200, out)
       }
       if (decision && req.method === 'POST') {
         const body = await readBody(req)
@@ -565,7 +568,7 @@ export function phoneHandler({ token, connectors = {}, engine = {}, sessions = l
       if (connectorAct && req.method === 'POST') {
         const crew = connectors.crew ?? (await crewOf(await companyId(options), options)).map((a) => ({ id: a.id, name: a.name }))
         const body = await readBody(req)
-        if (connectorAct[2] === 'access') return send(res, 200, await setAccess(connectorAct[1], { bots: body.bots, writes: body.writes }, { crew, ...connectors.options }))
+        if (connectorAct[2] === 'access') return send(res, 200, await setAccess(connectorAct[1], { bots: body.bots, writes: body.writes, owner: body.owner }, { crew, ...connectors.options }))
         await loadTools(connectorAct[1], connectors.options)
         return send(res, 200, connectorList({ crew, ...connectors.options }).connectors.find((c) => c.id === connectorAct[1]) || {})
       }

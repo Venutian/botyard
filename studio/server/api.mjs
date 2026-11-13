@@ -1,4 +1,4 @@
-import { ConnectorError, addConnector, connectorList, finishSignIn, gateway, loadTools, removeConnector, setAccess, startSignIn, writeBotConfigs } from './lib/connectors.mjs'
+import { ConnectorError, addConnector, connectorList, finishSignIn, gateway, loadTools, removeConnector, setAccess, settleHeld, startSignIn, writeBotConfigs } from './lib/connectors.mjs'
 import { markCards, withCardState } from './lib/cards.mjs'
 import { dataDir } from './lib/home.mjs'
 import path from 'node:path'
@@ -177,8 +177,9 @@ async function studioRoute(req, res, url) {
     // A card a bot put in a conversation, answered where it is shown.
     if (url.pathname === '/api/studio/card' && req.method === 'POST') {
       if (body.verb === 'respond') return send(res, 200, await answerQuestion(body.chat, body.card, body.answers))
-      if (body.verb === 'accept') return send(res, 200, await acceptQuestion(body.chat, body.card))
-      if (body.verb === 'reject') return send(res, 200, await rejectQuestion(body.chat, body.card, body.reason))
+      // A card that held a bot's call on the owner's own account: the yes sends it, the no tells the bot.
+      if (body.verb === 'accept') { const out = await acceptQuestion(body.chat, body.card); await settleHeld(body.card, 'accept').catch(() => null); return send(res, 200, out) }
+      if (body.verb === 'reject') { const out = await rejectQuestion(body.chat, body.card, body.reason); await settleHeld(body.card, 'reject', { reason: body.reason || '' }).catch(() => null); return send(res, 200, out) }
       if (body.verb === 'connected' || body.verb === 'not-connected') return send(res, 200, await settleConnectCard(String(body.card || ''), { connected: body.verb === 'connected', service: body.service }))
     }
     if (url.pathname === '/api/studio/bot' && req.method === 'POST' && ['pause', 'resume'].includes(body.action)) {
@@ -278,7 +279,7 @@ async function connectorRoute(req, res, url) {
       const id = String(body.id || '')
       if (body.action === 'add') send(res, 201, await addConnector(body, { crew }))
       else if (body.action === 'signin') send(res, 200, await startSignIn(id, { redirectUri: `http://localhost:${req.socket.localPort}/api/studio/connect/callback` }))
-      else if (body.action === 'access') send(res, 200, await setAccess(id, { bots: body.bots, writes: body.writes }, { crew }))
+      else if (body.action === 'access') send(res, 200, await setAccess(id, { bots: body.bots, writes: body.writes, owner: body.owner }, { crew }))
       else if (body.action === 'check') { await loadTools(id); send(res, 200, connectorList({ crew }).connectors.find((c) => c.id === id) || {}) }
       else if (body.action === 'remove') send(res, 200, await removeConnector(id, { crew }))
       else send(res, 400, { ok: false, error: 'Unknown action' })

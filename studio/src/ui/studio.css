@@ -1335,3 +1335,12 @@
   .studio-sheet ul.tools.ticks li label { grid-template-columns: auto 1fr; }
   .studio-sheet ul.tools.ticks li label span { grid-column: 2; }
 }
+
+/* Whose account a connector is: asked when it is added, changed on its page. */
+.owner-choice { display: grid; gap: 6px; margin: 4px 0 14px; padding: 0; border: 0; }
+.owner-choice legend { margin-bottom: 6px; font-weight: 600; }
+.hud .owner-choice label { display: flex; justify-content: flex-start; align-items: flex-start; gap: 10px; text-align: left; padding: 8px 10px; border: 2px solid var(--line-strong); border-radius: 6px; cursor: pointer; }
+.owner-choice label:has(input:checked) { border-color: var(--edge); box-shadow: 0 2px 0 var(--edge); }
+.hud .owner-choice input { flex: none; margin: 3px 0 0; }
+.hud .owner-choice label > span { flex: 1; min-width: 0; }
+.owner-choice small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }

@@ -421,10 +421,12 @@ export type Connector = {
   state: 'ready' | 'signed-out' | 'signing-in' | 'trouble'; stateWords: string; trouble: string; signedInAt: number; checkedAt: number;
   tools: { name: string; about: string; reads: boolean; allowed: boolean }[]; reads: number; changes: number;
   bots: { id: string; name: string; level: 'off' | 'read' | 'write' }[];
+  /** The owner's own account (a change waits for a yes on a card) or a business's the bots may act in. */
+  owner?: 'own' | 'business';
 };
 export type EngineSignIn = { id: string; name: string; for: string; ok: boolean; words: string; fix: string };
 export const getConnectors = (c: Connection) => call<{ connectors: Connector[]; engines: EngineSignIn[] }>(c, '/connectors');
-export const setConnectorAccess = (c: Connection, id: string, change: { bots?: Record<string, string>; writes?: string[] }) => call<Connector>(c, `/connectors/${id}/access`, 'POST', change);
+export const setConnectorAccess = (c: Connection, id: string, change: { bots?: Record<string, string>; writes?: string[]; owner?: 'own' | 'business' }) => call<Connector>(c, `/connectors/${id}/access`, 'POST', change);
 export const checkConnector = (c: Connection, id: string) => call<Connector>(c, `/connectors/${id}/check`, 'POST', {});
 /** Settles a bot's request for a service: connected on the PC, or no. */
 export const settleConnectCard = (c: Connection, card: string, connected: boolean, service?: string) => call(c, `/connect-cards/${card}`, 'POST', { connected, service });
