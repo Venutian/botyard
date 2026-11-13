@@ -345,6 +345,14 @@ export const requestId = () =>
   'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 
 /** Mark "Needs you" cards read or archived; the map on the PC shows the same marks. */
+/** Pages of the owner's own on the PC (their own-pages folder): the list, and a page's own calls to its server file. */
+export type OwnPage = { name: string; title: string; does: string };
+export const getOwnPages = (c: Connection) => call<{ pages: OwnPage[] }>(c, '/own');
+/** A call to one own page's server file, `/own/<page>/api/...`. A studio's own screens use this. */
+export const ownCall = <T>(c: Connection, path: string, method = 'GET', body?: unknown) => {
+  if (!/^\/own\/[a-z0-9][a-z0-9-]{0,31}\/api(\/|$)/.test(path)) throw new Error('Not an own page\'s call');
+  return call<T>(c, path, method, body);
+};
 export const markCards = (c: Connection, keys: string[], change: { read?: boolean; archived?: boolean }) =>
   call(c, '/cards', 'POST', { keys, ...change });
 

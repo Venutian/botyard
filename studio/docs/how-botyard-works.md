@@ -115,8 +115,10 @@ never a change to this repository. The folder may be a link to wherever you keep
 Each page is one more entry at the end of the map's rail. Its paths are
 `/api/studio/own` (the list), `/api/studio/own/<name>/files/...` (the folder's scripts, styles and
 pictures) and `/api/studio/own/<name>/api/...` (your server file, `GET` and `POST`). They are the
-map's own paths, so they answer the page on this computer and nobody else; the phone's door does not
-pass them on, and the sample yard (`--demo`) shows none.
+map's own paths, so they answer the page on this computer and nobody else, and the sample yard
+(`--demo`) shows none. A paired phone reaches the list (`/v1/own`) and a page's own calls
+(`/v1/own/<name>/api/...`) through its door, never the page's files: a studio that builds its own phone
+screen calls its page through `ownCall` in the app's `src/api.ts`.
 
 **An own page is code you trust.** Its server file runs with everything Botyard itself may do on
 this computer, and its script runs inside the map. Botyard loads nothing unless the folder is there,
