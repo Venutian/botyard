@@ -27,6 +27,8 @@ export type Portrait = {
   state: BotState;
   /** The owner's own picture for this bot on this phone, shown in place of the drawing. */
   photo?: string;
+  /** What the photo is loaded with: the door's key, for a portrait from the PC. */
+  photoHeaders?: Record<string, string>;
   frame: 'plate' | 'round';
 };
 
@@ -71,6 +73,12 @@ export const STATE_WORDS: Record<BotState, string> = { free: 'Free', working: 'W
 type Known = { id?: string; name: string; role?: BotRole | string; look?: Look; status?: string };
 
 /** A bot's picture: its settings' look first, then its role's, with the owner's own changes on this phone on top. */
+/** The portraits the PC shows, by bot id, once the phone has read them through its door. */
+let shared: Record<string, { uri: string; headers?: Record<string, string> }> = {};
+export function setSharedFaces(faces: typeof shared) {
+  shared = faces;
+}
+
 export function portraitOf(bot: Known, own?: OwnLook & { color?: string }): Portrait {
   const role = (bot.role && bot.role in BY_ROLE ? bot.role : 'general') as BotRole;
   const base = BY_ROLE[role];
@@ -87,7 +95,9 @@ export function portraitOf(bot: Known, own?: OwnLook & { color?: string }): Port
     gear: Array.isArray(look.gear) ? look.gear : [],
     screen: look.face === 'light' || look.face === 'shade' ? look.face : base.screen,
     state: stateOf(bot.status),
-    photo: own?.photo,
+    // A photo chosen on this phone wins; else the portrait the PC shows, if the bot has one.
+    photo: own?.photo ?? shared[bot.id ?? '']?.uri,
+    photoHeaders: own?.photo ? undefined : shared[bot.id ?? '']?.headers,
     frame: own?.frame ?? 'plate',
   };
 }

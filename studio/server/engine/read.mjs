@@ -365,7 +365,10 @@ export function comments(store, ref, query = {}) {
   const asc = String(query.order ?? '').trim().toLowerCase() === 'asc'
   const wanted = typeof query.limit === 'string' && query.limit.trim() ? Number(query.limit) : null
   const limit = wanted && Number.isFinite(wanted) && wanted > 0 ? Math.min(Math.floor(wanted), COMMENT_LIST_MAX) : null
-  const all = store.objects(`SELECT raw FROM comments WHERE job_id = ? ORDER BY position ${asc ? 'DESC' : 'ASC'}`, found.id)
+  // By when each was written: a job brought over from the old engine kept its comments numbered newest first,
+  // so the number alone does not say which came last.
+  const way = asc ? 'ASC' : 'DESC'
+  const all = store.objects(`SELECT raw FROM comments WHERE job_id = ? ORDER BY created_at ${way}, position ${way}`, found.id)
   return limit ? all.slice(0, limit) : all
 }
 

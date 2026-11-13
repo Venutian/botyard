@@ -388,3 +388,22 @@ test('a job told a commit to start from has its branch cut there, not from the m
   assert.equal(createJob(s.store, COMPANY, { title: 'Plain' }).startFrom, null)
   assert.throws(() => createJob(s.store, COMPANY, { title: 'Bad', baseRef: '--upload-pack=x' }), (err) => err instanceof Refused && err.status === 400)
 })
+
+test('in a chat, what the bot says at the end of its run is posted as its answer, once, and not where it already wrote', async () => {
+  const { answer } = await import('../server/engine/api.mjs')
+  const s = studio()
+  const ask = (method, url, body) => answer(s.store, { method, url, body }, { dataDir: s.dataDir, now: NOW })
+  const chat = ask('POST', `/api/companies/${COMPANY}/chats/bot-builder`, {}).body
+  ask('POST', `/api/issues/${chat.id}/comments`, { body: 'Status?' })
+  await until(s, (r) => r.finished?.length)
+  const said = s.store.objects('SELECT raw FROM comments WHERE job_id = ? ORDER BY position', chat.id)
+  assert.equal(said.length, 2, 'the question and its answer')
+  assert.equal(said[1].authorAgentId, 'bot-builder')
+  assert.equal(said[1].body, 'Built it. COMMIT abc123', 'the run\'s last words, as the tool gave them')
+  assert.equal(s.store.objects("SELECT raw FROM wakes WHERE status = 'queued'").length, 0, 'its own answer does not wake it again')
+
+  // A job that is not a chat gets no such message: there the bot reports in its own words.
+  const job = createJob(s.store, COMPANY, { title: 'Fix the map crash', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
+  await until(s, (r) => r.finished?.length)
+  assert.equal(s.store.rows('SELECT id FROM comments WHERE job_id = ?', job.id).length, 0)
+})

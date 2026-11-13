@@ -216,7 +216,7 @@ export const BotBadge = memo(function BotBadge({ who, size, state, tag }: Props)
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={label} style={{ width: size, height: size, opacity: now === 'off' ? 0.62 : 1 }}>
       {who.photo ? (
-        <Image source={{ uri: who.photo }} style={[StyleSheet.absoluteFill, { borderColor: trim, borderRadius: round ? size / 2 : size * 0.16, borderWidth: Math.max(1, size * 0.03) }]} resizeMode="cover" />
+        <Image source={{ uri: who.photo, headers: who.photoHeaders }} style={[StyleSheet.absoluteFill, { borderColor: trim, borderRadius: round ? size / 2 : size * 0.16, borderWidth: Math.max(1, size * 0.03) }]} resizeMode="cover" />
       ) : null}
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         {who.photo ? null : (

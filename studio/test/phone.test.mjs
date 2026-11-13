@@ -139,8 +139,12 @@ function engine({ calls = [], attentionDelay = 0, chatDelay = 0, summaryDelay = 
   return { fetcher }
 }
 
-async function withDoor(run, { calls, away, edge, build, sessions, attentionDelay, chatDelay, summaryDelay, crew, research, state = {}, warm = true } = {}) {
+async function withDoor(run, { calls, away, edge, build, sessions, attentionDelay, chatDelay, summaryDelay, crew, research, faces, state = {}, warm = true } = {}) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-door-'))
+  if (faces) {
+    fs.mkdirSync(path.join(folder, 'faces'))
+    for (const [name, bytes] of Object.entries(faces)) fs.writeFileSync(path.join(folder, 'faces', name), bytes)
+  }
   if (crew) {
     fs.mkdirSync(path.join(folder, 'crew'))
     for (const [name, content] of Object.entries(crew)) fs.writeFileSync(path.join(folder, 'crew', name), typeof content === 'string' ? content : JSON.stringify(content))
@@ -157,6 +161,7 @@ async function withDoor(run, { calls, away, edge, build, sessions, attentionDela
   }
   const handler = phoneHandler({
     token: TOKEN,
+    faces: { folder: path.join(folder, 'faces') },
     engine: engine({ calls, attentionDelay, chatDelay, summaryDelay, state }),
     sessions: sessions || (async () => [{ title: 'Harbour build', harness: 'claude-code', project: 'harbour' }]),
     previews: path.join(folder, 'previews'),
@@ -907,4 +912,16 @@ test('the phone lists the connectors and changes who may use one; adding and sig
     assert.equal((await ask('/v1/connectors', { method: 'POST', body: { from: 'github', key: 'x' } })).status, 404)
     assert.equal((await ask('/v1/connectors/nope/access', { method: 'POST', body: {} })).status, 404)
   })
+})
+
+test('the phone gets the same bot portraits the map shows: which bots have one, and each picture by its name only', async () => {
+  const png = Buffer.from('89504e470d0a1a0a', 'hex')
+  await withDoor(async (ask) => {
+    const listed = await ask('/v1/faces')
+    assert.equal(listed.status, 200)
+    assert.deepEqual(listed.body.faces, { lead: 'lead', bot: 'scout' }, 'a bot with no picture is left out; a file that is no portrait is not offered')
+    assert.equal((await ask('/v1/faces/nobody')).status, 404)
+    assert.equal((await ask('/v1/faces/..%2Fdevices.json')).status, 404, 'only a name from the folder is read, never a path')
+    assert.equal((await ask('/v1/faces', { token: '' })).status, 401)
+  }, { faces: { 'lead.png': png, 'scout.webp': png, 'notes.txt': 'x' } })
 })

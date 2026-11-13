@@ -58,7 +58,7 @@ function filled() {
   // A chat is a job with a bot on the other end. The job list never showed it, so it has no list row.
   store.put('jobs', page(CHAT, 2, 'Chat with Lead', { status: 'in_progress', projectId: null, assigneeAgentId: LEAD, conversationAgentId: LEAD, conversationUserId: 'local-board', conversationState: 'active', description: 'the map again', updatedAt: '2026-11-12T00:00:00.000Z' }))
 
-  store.replace('comments', 'job_id', JOB, [{ id: 'c3', issueId: JOB, body: 'Third: the frame budget is met' }, { id: 'c2', issueId: JOB, body: 'Second' }, { id: 'c1', issueId: JOB, body: 'First' }])
+  store.replace('comments', 'job_id', JOB, [{ id: 'c3', issueId: JOB, body: 'Third: the frame budget is met', createdAt: '2026-11-10T12:03:00.000Z' }, { id: 'c2', issueId: JOB, body: 'Second', createdAt: '2026-11-10T12:02:00.000Z' }, { id: 'c1', issueId: JOB, body: 'First', createdAt: '2026-11-10T12:01:00.000Z' }])
   store.replace('cards', 'job_id', JOB, [{ id: 'card1', issueId: JOB, kind: 'ask_user_questions', status: 'pending' }, { id: 'card2', issueId: JOB, kind: 'request_confirmation', status: 'accepted' }])
   store.put('documents', { id: DOC, issueId: JOB, key: 'plan', title: 'Plan', format: 'markdown', body: '# Plan v2 with a turbine', latestRevisionNumber: 2 })
   store.put('documents', { id: 'summary-doc', issueId: JOB, key: 'continuation-summary', title: 'Where the bot left off', body: 'Next: measure the gearbox' })
@@ -197,6 +197,10 @@ test('a job is found by its id or its code, with everything under it in order', 
   assert.deepEqual(ids(read.comments(store, JOB)), ['c3', 'c2', 'c1'])
   assert.deepEqual(ids(read.comments(store, 'LH-7', { limit: '2' })), ['c3', 'c2'])
   assert.deepEqual(ids(read.comments(store, JOB, { limit: '2', order: 'asc' })), ['c1', 'c2'])
+  // Comments numbered oldest first, as a job made in Botyard has them, read the same: by when they were written.
+  store.replace('comments', 'job_id', JOB, [{ id: 'c1', issueId: JOB, body: 'First', createdAt: '2026-11-10T12:01:00.000Z' }, { id: 'c2', issueId: JOB, body: 'Second', createdAt: '2026-11-10T12:02:00.000Z' }, { id: 'c3', issueId: JOB, body: 'Third', createdAt: '2026-11-10T12:03:00.000Z' }])
+  assert.deepEqual(ids(read.comments(store, JOB, { limit: '2' })), ['c3', 'c2'], 'the newest, whatever their numbers')
+  store.replace('comments', 'job_id', JOB, [{ id: 'c3', issueId: JOB, body: 'Third: the frame budget is met', createdAt: '2026-11-10T12:03:00.000Z' }, { id: 'c2', issueId: JOB, body: 'Second', createdAt: '2026-11-10T12:02:00.000Z' }, { id: 'c1', issueId: JOB, body: 'First', createdAt: '2026-11-10T12:01:00.000Z' }])
   assert.deepEqual(read.comments(store, CHILD), [])
   assert.throws(() => read.comments(store, NOBODY), { status: 404, message: 'Issue not found' })
   assert.deepEqual(ids(read.cards(store, JOB)), ['card1', 'card2'])

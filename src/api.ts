@@ -302,6 +302,19 @@ export const revokeDevice = (c: Connection, id: string) => call(c, `/devices/${i
 export const retireSharedKey = (c: Connection) => call(c, '/devices/retire-shared', 'POST', {});
 export const getChanges = (c: Connection, id: string) => call<Changes>(c, `/jobs/${id}/changes`);
 
+export const getFaces = (c: Connection) => call<{ faces: Record<string, string> }>(c, '/faces');
+
+/** Where to load a bot's portrait from, the same picture the map shows; null where it cannot be shown. */
+export async function faceSource(c: Connection, name: string) {
+  if (Platform.OS !== 'web') {
+    const way = await route(c).catch(() => ways(c)[0]);
+    return { uri: `${way.base}/v1/faces/${encodeURIComponent(name)}`, headers: { ...way.headers, Authorization: `Bearer ${c.token}` } };
+  }
+  const door = bridge();
+  const uri = door ? await door.image(`/faces/${encodeURIComponent(name)}`) : null;
+  return uri ? { uri } : null;
+}
+
 /** Where to load a screenshot from. On a phone the image loader sends the token itself. */
 export async function proofSource(c: Connection, id: string) {
   if (Platform.OS !== 'web') {

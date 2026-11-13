@@ -22,6 +22,7 @@ import { cameThroughEdge, edgeFile, readEdge, signPlay } from './lib/edge.mjs'
 import { addDevice, deviceView, devicesFile, findDevice, readDevices, retireShared, revokeDevice, touchDevice } from './lib/devices.mjs'
 import { guardFolder, readGuard, writeGuard } from './lib/guard.mjs'
 import { companySettings } from './lib/company.mjs'
+import { crewFaces, readFace } from './lib/studio.mjs'
 import { ConnectorError, connectorList, loadTools, setAccess, settleHeld } from './lib/connectors.mjs'
 import { activityPage, botList, botPage, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
@@ -158,7 +159,7 @@ const phoneCompany = ({ name, about, code, members, invites }) => ({
   invites: invites.map(({ id, role, expires }) => ({ id, role, expires })),
 })
 
-export function phoneHandler({ token, connectors = {}, engine = {}, sessions = liveSessions, previews = previewRoot(), previewPort = PREVIEW_PORT, devices = devicesFile(), guard = guardFolder(), firstRunFile = path.join(process.env.BOTYARD_DATA || dataDir(), 'first-run.json'), shape = {}, away = awayFile(), edge = edgeFile(), port = 5288, crew = crewFolder(), plans = readPlans, timers = readTimers }) {
+export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, sessions = liveSessions, previews = previewRoot(), previewPort = PREVIEW_PORT, devices = devicesFile(), guard = guardFolder(), firstRunFile = path.join(process.env.BOTYARD_DATA || dataDir(), 'first-run.json'), shape = {}, away = awayFile(), edge = edgeFile(), port = 5288, crew = crewFolder(), plans = readPlans, timers = readTimers }) {
   const failures = new Map()
   const seen = new Map()
   // Read and archived marks are added as each answer goes out, so a mark shows at once though the
@@ -358,6 +359,7 @@ export function phoneHandler({ token, connectors = {}, engine = {}, sessions = l
     const comment = /^\/v1\/jobs\/([^/]+)\/comments$/.exec(pathname)
     const changes = /^\/v1\/jobs\/([^/]+)\/changes$/.exec(pathname)
     const proof = /^\/v1\/proof\/([^/]+)$/.exec(pathname)
+    const face = /^\/v1\/faces\/([\w.-]+)$/.exec(pathname)
     const jobAction = /^\/v1\/jobs\/([^/]+)\/(stop|cancel|reopen)$/.exec(pathname)
     const question = /^\/v1\/jobs\/([^/]+)\/questions\/([^/]+)\/(respond|accept|reject)$/.exec(pathname)
     const routineAction = /^\/v1\/routines\/([^/]+)\/(run|pause|resume|remove)$/.exec(pathname)
@@ -471,6 +473,17 @@ export function phoneHandler({ token, connectors = {}, engine = {}, sessions = l
         return detail ? send(res, 200, detail) : send(res, 404, { error: 'This job has no branch to read' })
       }
       if (proof && req.method === 'GET') return sendImage(res, await proofImage(proof[1], options))
+      // The bots' portraits in the home folder's faces folder: the same pictures the map shows.
+      if (pathname === '/v1/faces' && req.method === 'GET') {
+        const bots = (await crewOf(await companyId(options), options)).map((a) => ({ id: a.id, name: a.name }))
+        const found = await crewFaces(bots, faces)
+        return send(res, 200, { faces: Object.fromEntries(Object.entries(found).map(([id, url]) => [id, new URL(url, 'http://x').searchParams.get('name')])) })
+      }
+      if (face && req.method === 'GET') {
+        const picture = await readFace(face[1], faces)
+        if (!picture) return send(res, 404, { error: 'No such picture' })
+        return sendImage(res, { type: picture.type, bytes: picture.data })
+      }
       if (comment && req.method === 'POST') {
         const body = await readBody(req)
         return send(res, 201, await addComment(comment[1], body.text, options))

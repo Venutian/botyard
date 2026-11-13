@@ -3,7 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, AppState, BackHandler, Easing, Linking, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { claimDevice, Connection, getFirstRun, hello, onPC } from './src/api';
+import { claimDevice, Connection, faceSource, getFaces, getFirstRun, hello, onPC } from './src/api';
+import { setSharedFaces } from './src/mascot/look';
 import { ChatBot } from './src/api';
 import { Crew, leadOf, Nav, Route, Tab, useCrew } from './src/crew';
 import { JobLinks } from './src/ui/Markdown';
@@ -260,6 +261,23 @@ function Studio({ connection, onForget }: { connection: Connection; onForget: ()
 function Root() {
   const { p, t } = useLook();
   const [connection, setConnection] = useState<Connection | null>(null);
+  // The bots' portraits, as the map on the PC shows them: read once per connection, shown wherever a bot is.
+  const [, facesRead] = useState(0);
+  useEffect(() => {
+    if (!connection) return;
+    let gone = false;
+    getFaces(connection).then(async ({ faces }) => {
+      const out: Record<string, { uri: string; headers?: Record<string, string> }> = {};
+      for (const [id, name] of Object.entries(faces)) {
+        const source = await faceSource(connection, name).catch(() => null);
+        if (source) out[id] = source;
+      }
+      if (gone) return;
+      setSharedFaces(out);
+      facesRead((n) => n + 1);
+    }).catch(() => {});
+    return () => { gone = true; };
+  }, [connection]);
   const [ready, setReady] = useState(false);
   // The newest connection, so answers that arrive late change it rather than an older copy.
   const latest = useRef<Connection | null>(null);

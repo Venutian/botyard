@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
+import { addComment } from './write.mjs'
 import { instructionsOf, wakePrompt } from './prompt.mjs'
 import { MAY_NOT_VAR, PASS_PREFIX, PROVIDER_KEYS, isHidden, keysDir, runLogsDir, runVars, runsDir, worktreeDir } from './names.mjs'
 
@@ -375,6 +376,7 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
     store.put('activity', { id: randomUUID(), action: `heartbeat.${status}`, entityType: 'heartbeat_run', entityId: made.id, actorType: 'system', actorId: 'engine', agentId: made.agentId, runId: made.id, details: { issueId: made.issueId }, createdAt: iso(now) })
   })
   dropToken(store, made.id)
+  answerInChat(store, made, job, status, read.said, now)
   // A run that failed because the session it was to carry on is gone is tried once more from a fresh one.
   if (status === 'failed' && made.sessionIdBefore && !read.session && sessionIsGone(`${why}\n${log.stderr}\n${log.stdout}`) && job && !['done', 'cancelled'].includes(job.status)) {
     store.tx(() => {
@@ -387,6 +389,17 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
     })
   }
   return done
+}
+
+/**
+ * In a chat, what the bot said at the end of its run is its answer: it is put in the conversation as the
+ * bot's message, unless the bot already wrote there itself during the run.
+ */
+function answerInChat(store, made, job, status, said, now) {
+  if (status !== 'succeeded' || !job || job.conversationAgentId !== made.agentId || !String(said || '').trim()) return
+  const wrote = store.row('SELECT COUNT(*) AS n FROM comments WHERE job_id = ? AND created_by_run_id = ?', job.id, made.id).n
+  if (wrote) return
+  addComment(store, job.id, { body: said }, { now, actor: { agent: made.agentId, run: made.id } })
 }
 
 /** Ask a live run to stop. Its keeper ends the tool and leaves the result, which the next tick books. */
