@@ -244,7 +244,7 @@ export function runFeed(content, { fromStart = true, cwd = '' } = {}) {
       if (e.part || 'sessionID' in e || e.type === 'step_start' || e.type === 'step_finish') return opencode(e)
       return gemini(e)
     }
-    say('note', text.replace(/^\[(engine|paperclip)\]\s*/, ''))
+    say('note', text.replace(/^\[engine\]\s*/, ''))
   }
 
   /** A line of the tool's stderr: an error if it reads like one, else a note. */
