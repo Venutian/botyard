@@ -168,6 +168,9 @@ export function patchJob(store, id, body = {}, { now = Date.now(), actor } = {})
   }
   const given = body.assigneeAgentId !== undefined && body.assigneeAgentId !== job.assigneeAgentId
   if (given) { if (body.assigneeAgentId && !canHave(store, body.assigneeAgentId)) throw new Refused(400, 'That bot is not in this studio'); next.assigneeAgentId = body.assigneeAgentId || null }
+  // A chat with a bot is never closed: a bot that ends its run by closing its job would leave the owner
+  // writing to a bot that is never woken again. A chat asked to close stays in progress.
+  if (job.conversationAgentId && ['done', 'cancelled'].includes(body.status)) body = { ...body, status: 'in_progress' }
   if (body.status !== undefined && body.status !== job.status) {
     if (!STATUSES.has(body.status)) throw new Refused(400, 'Unknown status')
     next.status = body.status
@@ -213,12 +216,15 @@ export function addComment(store, jobId, body = {}, { now = Date.now(), actor, q
     createdByRunId: actor?.run || null, clientRequestId: body.clientRequestId || null, origin: 'comment', metadata: {}, deletedAt: null,
     createdAt: iso(now), updatedAt: iso(now),
   }
+  // A chat closed before chats could not be closed is opened again by the next word in it.
+  const chat = Boolean(job.conversationAgentId)
+  const reopen = chat && ['done', 'cancelled'].includes(job.status)
   store.tx(() => {
     store.put('comments', comment, { position })
-    store.put('jobs', { ...job, updatedAt: iso(now), lastActivityAt: iso(now) })
+    store.put('jobs', { ...job, ...(reopen ? { status: 'in_progress', completedAt: null, cancelledAt: null } : {}), updatedAt: iso(now), lastActivityAt: iso(now) })
   })
-  // Words from anyone but the bot that has the job wake that bot, unless the job is closed.
-  const closed = ['done', 'cancelled'].includes(job.status)
+  // Words from anyone but the bot that has the job wake that bot, unless the job is closed. A chat is never closed.
+  const closed = !chat && ['done', 'cancelled'].includes(job.status)
   if (!quiet && job.assigneeAgentId && job.assigneeAgentId !== actor?.agent && !closed) wake(store, job.assigneeAgentId, { issueId: job.id, source: 'automation', reason: 'issue_commented', payload: { commentId: comment.id } }, { now, actor })
   return comment
 }

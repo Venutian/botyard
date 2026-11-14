@@ -225,7 +225,8 @@ function hold(store, wake, agent, job) {
   if (agent.status === 'terminated') return { skip: 'That bot was removed' }
   if (!canRun(agent)) return { skip: `Botyard's engine cannot start a ${agent.adapterType} bot yet` }
   if (!job) return { skip: 'A wake needs a job' }
-  if (['done', 'cancelled'].includes(job.status)) return { skip: 'The job is closed' }
+  // A chat with a bot is never closed, so a word in it always reaches the bot.
+  if (!job.conversationAgentId && ['done', 'cancelled'].includes(job.status)) return { skip: 'The job is closed' }
   if (agent.status === 'paused') return { wait: 'The bot is paused' }
   if ((job.blockedBy || []).length) return { wait: 'The job waits on another job' }
   if (liveRuns(store, 'job_id = ?', job.id).length) return { wait: 'A run is already going on this job' }

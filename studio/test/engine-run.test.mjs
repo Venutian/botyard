@@ -13,7 +13,7 @@ import { openStore } from '../server/engine/store.mjs'
 import { readOutput } from '../server/engine/adapters.mjs'
 import { wakePrompt } from '../server/engine/prompt.mjs'
 import { botEnv, cancelRun, tick, whoHolds } from '../server/engine/runner.mjs'
-import { Refused, addComment, createCard, createJob, patchJob, putDocument, setPaused, settleCard, wake } from '../server/engine/write.mjs'
+import { Refused, addComment, createCard, createJob, patchJob, putDocument, setPaused, settleCard, wake, openChat } from '../server/engine/write.mjs'
 
 const COMPANY = 'co-1'
 const NOW = Date.parse('2026-11-12T12:00:00Z')
@@ -406,4 +406,22 @@ test('in a chat, what the bot says at the end of its run is posted as its answer
   const job = createJob(s.store, COMPANY, { title: 'Fix the map crash', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
   await until(s, (r) => r.finished?.length)
   assert.equal(s.store.rows('SELECT id FROM comments WHERE job_id = ?', job.id).length, 0)
+})
+
+test('a chat is never closed: a bot closing it leaves it open, and a closed one is opened by the next word', () => {
+  const s = studio()
+  const chat = openChat(s.store, COMPANY, 'bot-builder')
+  // The bot ends its run by closing its job, as it does with any job.
+  assert.equal(patchJob(s.store, chat.id, { status: 'done' }, { actor: { agent: 'bot-builder', run: 'r1' } }).status, 'in_progress')
+  // A chat closed before this rule is opened again by the owner's next message, which wakes the bot.
+  s.store.put('jobs', { ...s.store.object('SELECT raw FROM jobs WHERE id = ?', chat.id), status: 'done', completedAt: new Date(NOW).toISOString() })
+  s.store.remove('wakes', 'agent_id', 'bot-builder')
+  addComment(s.store, chat.id, { body: 'Are you there?' }, { actor: { user: 'local-board' } })
+  assert.equal(s.store.object('SELECT raw FROM jobs WHERE id = ?', chat.id).status, 'in_progress')
+  assert.equal(s.store.rows("SELECT id FROM wakes WHERE status = 'queued' AND agent_id = 'bot-builder'").length, 1)
+  // An ordinary closed job still wakes nobody.
+  const job = createJob(s.store, COMPANY, { title: 'Old work', status: 'done', assigneeAgentId: 'bot-builder' })
+  s.store.remove('wakes', 'agent_id', 'bot-builder')
+  addComment(s.store, job.id, { body: 'Thanks.' }, { actor: { user: 'local-board' } })
+  assert.equal(s.store.rows("SELECT id FROM wakes WHERE status = 'queued'").length, 0)
 })
