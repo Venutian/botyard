@@ -82,7 +82,12 @@ Then set your job to `in_review` and end your run: you are woken with the answer
 went stale (`POST $api/api/issues/$job/interactions/<card id>/withdraw`), and do not repeat an open
 question in later messages.
 
-## Attach a file as proof
+## Attach what you make
+
+The owner sees your work in the Library, and the Library shows only files attached to a job. A file
+saved in a repository or folder is not there. So attach every picture, gallery sheet, screenshot and
+document the owner should see as soon as it is made, before you end a run that waits for something.
+Do not keep them for the closing report.
 
 ```sh
 curl -sf -F "file=@shot.png" -H "Authorization: Bearer $key" "$api/api/companies/$studio/issues/$job/attachments"
