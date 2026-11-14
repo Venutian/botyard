@@ -55,7 +55,15 @@ account of its own and no server of its own.
 
 ## Start in five minutes
 
-You need **Node.js 22.13 or newer** (24 recommended) and **Git**.
+**The quickest way:** download the desktop app for Windows, macOS or Linux from the
+[latest release](https://github.com/Venutian/botyard/releases/latest), install one AI tool (OpenCode
+is free: `npm install -g opencode-ai`), open Botyard and follow its first-run guide. It walks you
+from an empty yard to a bot answering you, a first job and a paired phone, and says what to do when
+something is missing. [`docs/getting-started.md`](docs/getting-started.md) has the same steps, how to
+open an unsigned app on each system, and what to do when something goes wrong.
+
+**From the source**, to change Botyard or keep it running without a window, you need
+**Node.js 22.13 or newer** (24 recommended) and **Git**.
 
 **1. Look first.** This starts Botyard itself on the made-up studio in the pictures above, in a
 throwaway folder, with nothing signed in and no bot started:
@@ -79,8 +87,8 @@ npm start
 ```
 
 Then open **http://127.0.0.1:5274**. It makes an empty yard and walks you through the rest: name it,
-look at setup, take the starter crew, add a project (a folder on your computer or a GitHub address),
-and give the crew its first job.
+connect an AI, take the starter crew, say hello to a bot, add a project (a folder on your computer or
+a GitHub address), give the crew its first job, and pair a phone if you like.
 
 After you pull a newer version, run `npm install` and `npm run build`, then start again.
 
@@ -135,19 +143,22 @@ shown again.
 
 ## The phone app
 
-The app in this folder (Expo, Android first) talks only to the phone's door on port 5288. Build it
-with your own signing key: `npm install`, then `npm run build:apk`; `npm run web` shows it in a
-browser on sample data.
+The app in this folder (Expo, Android first) talks only to the phone's door on port 5288. Each
+release has a ready APK; to build it yourself with your own signing key: `npm install`, then
+`npm run build:apk`; `npm run web` shows it in a browser on sample data.
 
-The door is locked with a key per phone and stays closed until a phone has been paired:
+The door is locked with a key per phone and stays closed until a phone has been paired. Pair one
+from the map (the first-run guide's last step, or **Setup**): it shows a code to point the phone's
+camera at, and the door opens at once. From a terminal instead:
 
 ```bash
 npm install
 npm run pair -- --name "My phone"
 ```
 
-It shows a code to scan with the phone. The first pairing makes the door's settings, so start
-Botyard again afterwards and the door opens. Each phone's key can be taken away again on the map.
+A first pairing from the terminal makes the door's settings, so start Botyard again afterwards and
+the door opens. The phone has to be on the same Wi-Fi as the computer, and the computer's firewall
+has to let port 5288 in. Each phone's key can be taken away again on the map.
 
 **Away from home.** On your home network pairing is all it needs. From elsewhere there are two ways,
 and the app keeps whichever answers first:
