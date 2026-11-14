@@ -110,7 +110,8 @@ export function jobScreen(job, { line, steps, cards = '', bot, editing = false, 
     <form class="fields comment"><label class="stack">Add a comment<textarea name="text" rows="2" required placeholder="The bot on it is woken to read it"></textarea></label><button class="btn primary" type="submit">Comment</button></form>
     ${job.description ? `<details class="doc-box"><summary><b>The brief</b></summary><div class="said doc">${md(job.description)}</div></details>` : ''}
     ${docs}
-    ${job.runs.length ? `<h3>Runs</h3><div class="grid-wrap"><table class="grid"><thead><tr><th>When</th><th>Bot</th><th>Job</th><th>How it ended</th><th class="n">Took</th><th class="n">Tokens</th></tr></thead><tbody>${job.runs.map((r) => runRowHtml(r)).join('')}</tbody></table></div>` : ''}`
+    ${job.runs.length ? `<h3>Runs</h3><div class="grid-wrap"><table class="grid runs"><thead><tr><th>When</th><th>Bot</th><th>How it ended</th><th class="n">Took</th><th class="n">Tokens</th></tr></thead><tbody>${job.runs.map((r) => runRowHtml(r, true, false)).join('')}</tbody></table></div>
+      <div data-part="job-feed"></div>` : ''}`
 }
 
 /** A document's earlier versions, each one restorable. */

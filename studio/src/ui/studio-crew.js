@@ -5,6 +5,7 @@
  */
 import { botStyle } from './crew-colours.js'
 import { markdown } from './markdown.js'
+import { feedFrameHtml } from './run-feed.js'
 
 export const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
@@ -83,7 +84,7 @@ export function botScreen(b, live) {
   ]
   const ins = b.instructions
   const paused = b.status === 'paused'
-  const runs = b.runs.length ? `<div class="grid-wrap"><table class="grid">
+  const runs = b.runs.length ? `<div class="grid-wrap"><table class="grid runs">
       <thead><tr><th>When</th><th>Job</th><th>How it ended</th><th class="n">Took</th><th class="n">Tokens</th></tr></thead>
       <tbody>${b.runs.map((r) => runRowHtml(r, false)).join('')}</tbody></table></div>` : '<p class="none">No runs yet.</p>'
   const instructions = !ins && b.pending ? '<p class="hint">Its instructions are still being read.</p>' : ins ? `<details class="instructions"><summary>What it is told (${ins.content.split('\n').length} lines)</summary>
@@ -120,14 +121,14 @@ export function editSummary(before, after) {
 
 // ── Runs and activity ───────────────────────────────────────────────────────────
 
-export function runRowHtml(r, withBot = true) {
+export function runRowHtml(r, withBot = true, withJob = true) {
   return `<tr class="go-row ${r.failed ? 'failed' : ''}" data-act="open-run" data-id="${esc(r.id)}" tabindex="0">
     <td class="t">${esc(when(r.at))}</td>
-    ${withBot ? `<td class="nowrap">${esc(r.bot)}</td>` : ''}
-    <td class="job">${r.job ? `<b>${esc(r.job.ref)}</b> ${esc(r.job.title)}` : '<span class="dim">No job</span>'}</td>
+    ${withBot ? `<td class="nowrap run-bot">${esc(r.bot)}</td>` : ''}
+    ${withJob ? `<td class="job">${r.job ? `<b>${esc(r.job.ref)}</b> ${esc(r.job.title)}` : '<span class="dim">No job</span>'}</td>` : ''}
     <td><span class="state ${r.failed ? 'bad' : r.status === 'running' ? 'go' : ''}">${esc(r.state)}</span>${r.why ? `<small>${esc(r.why)}</small>` : ''}</td>
-    <td class="n">${esc(duration(r.seconds))}</td>
-    <td class="n">${r.tokens ? tokens(r.tokens) : ''}</td>
+    <td class="n took">${esc(duration(r.seconds))}</td>
+    <td class="n toks">${r.tokens ? `${tokens(r.tokens)}<span class="unit"> tokens</span>` : ''}</td>
   </tr>`
 }
 
@@ -150,7 +151,7 @@ export function runsScreen({ view, filter, data }) {
     </tr>`).join('')}</tbody></table>` : '<p class="none">Nothing happened in the last week.</p>') + pager
   }
   const runs = data.runs || []
-  return head + (runs.length ? `<div class="grid-wrap"><table class="grid">
+  return head + (runs.length ? `<div class="grid-wrap"><table class="grid runs">
     <thead><tr><th>When</th><th>Bot</th><th>Job</th><th>How it ended</th><th class="n">Took</th><th class="n">Tokens</th></tr></thead>
     <tbody>${runs.map((r) => runRowHtml(r)).join('')}</tbody></table></div>` : '<p class="none">No runs match.</p>') + pager
 }
@@ -164,11 +165,10 @@ export function runScreen(r) {
     ['Used', `${tokens(r.tokens)} tokens${r.cached ? `, ${tokens(r.cached)} read from cache` : ''}${r.usd ? `; $${r.usd.toFixed(2)} at API prices` : ''}`],
     ...(r.model ? [['Model', esc(r.model)]] : []),
   ]
-  const SIGN = { said: '', tool: '›', note: '·', error: '!' }
   return `<dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <div class="acts"><button class="btn" data-act="open-bot" data-id="${esc(r.botId)}">${esc(r.bot)}'s page</button></div>
-    <h3>${r.trimmed ? 'The end of its log' : 'Its log'}</h3>
-    ${r.log.length ? `<ol class="log">${r.log.map((l) => `<li class="${l.kind}"><i>${SIGN[l.kind]}</i><span>${esc(l.text)}</span></li>`).join('')}</ol>` : '<p class="none">The run wrote nothing a person reads.</p>'}`
+    <h3>${r.live ? 'What it is doing' : 'What it did'}</h3>
+    ${feedFrameHtml({ trimmed: r.feedTrimmed })}`
 }
 
 // ── Models, limits and money ────────────────────────────────────────────────────

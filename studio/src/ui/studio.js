@@ -5,6 +5,7 @@ import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
 import { rankProjects } from './rank.js'
 import { botScreen, botsScreen, editSummary, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
+import { FeedView, feedFrameHtml } from './run-feed.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
 import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, projectExtras, projectGoal, projectPlan, routineScreen, routinesScreen, skillScreen, skillsScreen } from './studio-work.js'
 import './lightbox.js'
@@ -470,7 +471,7 @@ export class Studio {
   _mountChat() {
     this.chat.addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act
-      if (act === 'close') this.actions.closed()
+      if (act === 'close') return this.closeChat()
       if (act === 'pause') this.pause()
       if (act === 'bot-page' && this.chatBot) { const id = this.chatBot; this._beside(() => this.openBot(id)) }
       if (act === 'open-job') { const id = e.target.closest('[data-id]').dataset.id; this._beside(() => this.openJob(id)) }
@@ -492,7 +493,7 @@ export class Studio {
       // The map's own keys (R, A, H…) must not fire while a message is being written.
       e.stopPropagation()
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send() }
-      if (e.key === 'Escape') this.actions.closed()
+      if (e.key === 'Escape') { e.preventDefault(); this.closeChat() }
     })
   }
 
@@ -1210,6 +1211,15 @@ setView(view) {
     })
     const col = this._colOf('job')
     if (!job || !col) return
+    // Under its runs, what the bot on it is doing now, or did in its last run, read like its own transcript.
+    const shown = job.runs.find((r) => r.status === 'running' || r.status === 'queued') || job.runs[0]
+    const spot = col.el.querySelector('[data-part="job-feed"]')
+    if (shown && spot) {
+      const live = shown.status === 'running' || shown.status === 'queued'
+      spot.innerHTML = `<h3>${live ? `What ${esc(shown.bot.split(' ')[0])} is doing now` : `${esc(shown.bot.split(' ')[0])}'s last run`} <button class="link" data-act="open-run" data-id="${esc(shown.id)}">Open the run</button></h3>${feedFrameHtml()}`
+      const jobSeq = col.seq
+      this._followRun(spot.querySelector('[data-part="run-feed"]'), shown.id, () => this._colOf('job') === col && col.seq === jobSeq && this._job?.id === job.id)
+    }
     col.el.querySelector('.col-head strong').textContent = `${job.ref} ${job.title}`
     if (!line) col.el.querySelector('.col-head p').textContent = [job.project || 'No project', job.bot].filter(Boolean).join(', ')
   }
@@ -2144,6 +2154,7 @@ setView(view) {
     }
     this.chat.hidden = false
     this.root.classList.add('studio-chatting')
+    if (this.view) this._putCrew()
     this._syncChatHead()
     this._loadChat()
   }
@@ -2167,11 +2178,13 @@ setView(view) {
   }
 
   closeChat() {
-    if (!this.chatBot) return
+    if (!this.chatBot) return false
     this.chatBot = null
     this.chat.hidden = true
     this.root.classList.remove('studio-chatting')
     clearTimeout(this._chatTimer)
+    if (this.view) this._putCrew()
+    return true
   }
 
   async _loadChat() {
@@ -2453,8 +2466,40 @@ setView(view) {
     const run = await this._fill('run', seq, () => call(`/api/studio/run?id=${encodeURIComponent(id)}`), runScreen)
     const col = this._colOf('run')
     if (!run || !col) return
+    const here = () => this._colOf('run') === col && col.seq === seq
+    // When a run it was following ends, the page is read again for how it ended.
+    this._followRun(col.el.querySelector('[data-part="run-feed"]'), run, here, () => { if (here()) { this.cur = col; this._navigating = true; try { this.openRun(id) } finally { this._navigating = false } } })
     col.el.querySelector('.col-head strong').textContent = `${run.bot}${run.job ? ` on ${run.job.ref}` : ''}`
     col.el.querySelector('.col-head p').textContent = `${run.state}${run.at ? `, ${new Date(run.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}`
+  }
+
+  /**
+   * Show a run's feed in `root` and keep it current while the run goes: read every few seconds while
+   * `here()` holds and the feed is on the page. `run` is a run already read, or its id.
+   */
+  async _followRun(root, run, here, ended) {
+    if (!root) return
+    const view = new FeedView(root)
+    let wasLive = false
+    let data = typeof run === 'object' ? run : null
+    const id = typeof run === 'object' ? run.id : run
+    for (let misses = 0; root.isConnected && here();) {
+      if (!data) {
+        try { data = await call(`/api/studio/run?id=${encodeURIComponent(id)}`); misses = 0 } catch (err) {
+          // A read that fails is tried again; three in a row and the feed says so.
+          if (++misses >= 3) { root.querySelector('.feed-says').textContent = err.message || 'The run could not be read'; return }
+        }
+      }
+      if (!root.isConnected || !here()) return
+      if (data) {
+        view.update(data)
+        if (wasLive && !data.live) return void ended?.()
+        wasLive = data.live
+        if (!data.live) return
+      }
+      data = null
+      await new Promise((go) => setTimeout(go, document.hidden ? 8000 : 2500))
+    }
   }
 
   async openMoney() {

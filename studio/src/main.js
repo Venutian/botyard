@@ -174,6 +174,9 @@ function nextBot() {
   shell.hint(`${robot.thread?.crew?.name || 'A bot'}: ${robot.state}`)
 }
 
+// Nothing on the page scrolls as a whole: a focus or scrollIntoView that tries slides every panel and the crew bar sideways.
+window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0) })
+
 // ── keys ───────────────────────────────────────────────────────────────────────────
 
 const typing = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
@@ -182,6 +185,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (shell.helpOpen) return void shell.toggleHelp(false)
     if (shell.settingsOpen) return void shell.toggleSettings(false)
+    // The panel the owner is in closes first: a chat when the focus is in it, else the top column, then the chat.
+    if (studio.chatBot && studio.chat.contains(document.activeElement)) return void studio.closeChat()
     if (studio.on && (studio.closeSheet() || studio.closePanel())) return
     if (studio.chatBot) studio.closeChat()
     return

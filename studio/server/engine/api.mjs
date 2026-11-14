@@ -94,6 +94,15 @@ function runLog(store, runId, query, { dataDir }) {
   const limit = Math.min(1024 * 1024, Math.max(1, Number(query.get('limitBytes')) || 256 * 1024))
   let size = 0
   try { size = fs.statSync(file).size } catch { throw new Refused(404, 'This run has no log yet') }
+  // `tail` asks for the last bytes of the file as it is now: a run still going has no length booked yet.
+  const tail = Number(query.get('tail')) || 0
+  if (tail > 0) {
+    const from = Math.max(0, size - Math.min(1024 * 1024, tail))
+    const piece = Buffer.alloc(size - from)
+    const fd = fs.openSync(file, 'r')
+    try { fs.readSync(fd, piece, 0, piece.length, from) } finally { fs.closeSync(fd) }
+    return { runId, store: 'local_file', logRef: run.logRef, content: piece.toString('utf8'), offset: from, size }
+  }
   const buffer = Buffer.alloc(Math.max(0, Math.min(limit, size - offset)))
   const fd = fs.openSync(file, 'r')
   try { fs.readSync(fd, buffer, 0, buffer.length, offset) } finally { fs.closeSync(fd) }

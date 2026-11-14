@@ -369,7 +369,7 @@
 }
 
 /* With a conversation open the roster folds to faces, so nobody is cut off by it. */
-.hud.studio.studio-chatting .studio-crew { left: 14px; transform: none; max-width: calc(100% - 402px); }
+.hud.studio.studio-chatting .studio-crew { max-width: calc(100% - 402px); }
 @media (max-width: 1500px) {
   .hud.studio.studio-chatting .studio-crew .mate { width: auto; padding-right: 5px; }
   .hud.studio.studio-chatting .studio-crew .mate .text { display: none; }
@@ -763,3 +763,76 @@
 }
 /* At a narrow width the two map buttons sit under the top bar, off the bays. */
 @media (max-width: 900px) { .hud.studio .rail { top: 86px; right: 14px; transform: none; } }
+
+/* ── a run's feed: what the bot said, thought and ran, like its own transcript ─── */
+
+.studio-sheet .run-feed { position: relative; margin: 0 8px 12px; }
+.studio-sheet .run-feed .feed-state { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+.studio-sheet .run-feed .live-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--green-paint, var(--green)); box-shadow: 0 0 0 2px var(--edge); animation: feed-pulse 1.6s ease-in-out infinite; }
+@keyframes feed-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .studio-sheet .run-feed .live-dot { animation: none; } }
+.studio-sheet .run-feed .feed-box { max-height: min(62vh, 640px); overflow: auto; overscroll-behavior: contain; border: 2px solid var(--edge); border-radius: 8px; background: var(--sunk); padding: 6px 0; }
+.studio-sheet .run-feed .feed-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.studio-sheet .run-feed .feed-cut { margin: 2px 12px 6px; }
+.studio-sheet .run-feed ol.feed { margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.45; }
+.studio-sheet .run-feed ol.feed > li { padding: 3px 12px; min-width: 0; }
+.studio-sheet .run-feed ol.feed > li.sub { padding-left: 30px; border-left: 3px solid var(--line-strong); margin-left: 12px; }
+.studio-sheet .run-feed ol.feed > li.said { padding-top: 7px; padding-bottom: 7px; }
+.studio-sheet .run-feed ol.feed > li.said .said { margin: 0; color: var(--text); overflow-wrap: break-word; }
+.studio-sheet .run-feed ol.feed > li.said .said > :first-child { margin-top: 0; }
+.studio-sheet .run-feed ol.feed > li.said .said > :last-child { margin-bottom: 0; }
+.studio-sheet .run-feed ol.feed pre { margin: 0; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: break-word; }
+.studio-sheet .run-feed ol.feed details { margin: 0; padding: 0; border: 0; background: none; }
+.studio-sheet .run-feed ol.feed > li.tool, .studio-sheet .run-feed ol.feed > li.thinking { padding-top: 1px; padding-bottom: 1px; }
+.studio-sheet .run-feed ol.feed summary { display: flex; align-items: baseline; gap: 7px; min-width: 0; cursor: pointer; list-style: none; border-radius: 4px; }
+.studio-sheet .run-feed ol.feed summary::-webkit-details-marker { display: none; }
+.studio-sheet .run-feed ol.feed summary:hover { background: var(--raise); }
+.studio-sheet .run-feed ol.feed summary:focus-visible { outline: 2px solid var(--accent); }
+/* A tool: one line, its name then what it was given, cut with an ellipsis; open, its input and result. */
+.studio-sheet .run-feed li.tool summary { font: 12.5px/1.6 ui-monospace, Menlo, monospace; }
+.studio-sheet .run-feed li.tool summary b { flex: none; font-weight: 700; color: var(--text); }
+.studio-sheet .run-feed li.tool .sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.studio-sheet .run-feed li.tool .dot { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.studio-sheet .run-feed li.tool.running .dot { background: var(--amber); animation: feed-pulse 1.2s ease-in-out infinite; }
+.studio-sheet .run-feed li.tool.failed .dot { background: var(--red); }
+.studio-sheet .run-feed li.tool.unfinished .dot { background: var(--line-strong); }
+.studio-sheet .run-feed li.tool.failed summary b { color: var(--red); }
+.studio-sheet .run-feed li.tool details.empty summary { cursor: default; }
+.studio-sheet .run-feed li.tool .io { margin: 4px 0 6px 15px; padding: 6px 10px; border-left: 2px solid var(--line-strong); }
+.studio-sheet .run-feed li.tool .io h5 { margin: 4px 0 2px; font: 600 11px/1.2 var(--body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+.studio-sheet .run-feed li.tool .io pre { max-height: 320px; overflow: auto; color: var(--muted); }
+.studio-sheet .run-feed li.tool .io pre.bad { color: var(--red); }
+.studio-sheet .run-feed li.thinking summary { color: var(--dim); font-style: italic; }
+.studio-sheet .run-feed li.thinking summary span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-sheet .run-feed li.thinking summary i { flex: none; font-style: normal; color: var(--accent); }
+.studio-sheet .run-feed li.thinking pre { margin: 4px 0 6px 15px; padding-left: 10px; border-left: 2px solid var(--line); color: var(--dim); font: italic 12.5px/1.5 var(--body); }
+.studio-sheet .run-feed li.note { display: flex; gap: 7px; color: var(--dim); font-size: 12px; }
+.studio-sheet .run-feed li.note span { min-width: 0; overflow-wrap: break-word; }
+.studio-sheet .run-feed li.error { display: flex; gap: 8px; margin: 3px 8px; padding: 6px 8px; border: 2px solid var(--red); border-radius: 6px; background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.studio-sheet .run-feed li.error i { flex: none; font: 800 14px/1.2 var(--sign); font-style: normal; }
+.studio-sheet .run-feed li.error pre { font-family: var(--body); font-size: 12.5px; color: var(--text); }
+.studio-sheet .run-feed .feed-jump { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 5px 12px; font-size: 12px; background: var(--accent); color: var(--accent-ink); border: 2px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+.studio-sheet h3 .link { margin-left: 8px; font: 500 12.5px/1 var(--body); text-transform: none; letter-spacing: 0; }
+
+/* ── runs tables at any width: no column is ever squeezed to a letter a line ── */
+
+.studio-sheet table.grid.runs td.t, .studio-sheet table.grid.runs td.run-bot, .studio-sheet table.grid.runs td.n { white-space: nowrap !important; }
+.studio-sheet table.grid.runs .unit { display: none; }
+@container (max-width: 760px) {
+  /* `anywhere` lets a column shrink to one letter; `break-word` breaks only a word too long for its line. */
+  .studio-sheet table.grid :is(th, td) { overflow-wrap: break-word; }
+  .studio-sheet .grid-wrap { overflow-x: auto; }
+}
+/* Too narrow for six columns: each run is two lines, the job first, then when, who, how it ended and its cost. */
+@container (max-width: 620px) {
+  .studio-sheet table.grid.runs, .studio-sheet table.grid.runs tbody { display: block; width: 100%; }
+  .studio-sheet table.grid.runs thead { display: none; }
+  .studio-sheet table.grid.runs tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  .studio-sheet table.grid.runs td { display: block; padding: 0 !important; border: 0 !important; background: none !important; }
+  .studio-sheet table.grid.runs td.job { order: -1; flex: 1 1 100%; min-width: 0 !important; white-space: normal !important; overflow-wrap: break-word; }
+  .studio-sheet table.grid.runs td.t, .studio-sheet table.grid.runs td.run-bot { color: var(--muted); font-size: 12.5px; }
+  .studio-sheet table.grid.runs td.n { font: 600 12.5px/1.3 var(--body) !important; letter-spacing: 0 !important; color: var(--muted); text-align: left; }
+  .studio-sheet table.grid.runs td.n:empty { display: none; }
+  .studio-sheet table.grid.runs .unit { display: inline; }
+  .studio-sheet table.grid.runs td small { display: inline; margin-left: 6px; }
+}

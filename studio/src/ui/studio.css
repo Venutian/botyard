@@ -301,10 +301,10 @@
 /* ── the crew along the bottom ───────────────────────────────────────────────────── */
 
 .studio-crew {
+  /* Anchored to the left edge, never centred: its place must not move when a panel, a chat or a menu opens. */
   position: absolute;
-  left: 50%;
+  left: 14px;
   bottom: 14px;
-  transform: translateX(-50%);
   max-width: calc(100% - 28px);
   display: flex;
   gap: 2px;
@@ -879,7 +879,7 @@
 .studio-sheet input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Talking to a bot takes the right edge: the crew slides over rather than under it. */
-.hud.studio-chatting .studio-crew { left: calc((100% - 374px) / 2); max-width: calc(100% - 402px); }
+.hud.studio-chatting .studio-crew { max-width: calc(100% - 402px); }
 
 @media (max-width: 820px) {
   .studio-top .meters, .studio-state { display: none; }

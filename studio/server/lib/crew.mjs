@@ -14,6 +14,7 @@ import path from 'node:path'
 import { ALL_JOBS, EngineError, call, companyId, crewOf, orElse, plainTitle, refOf, withRefs } from './engine.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks } from './looks.mjs'
+import { runFeed, scrub, toolLine } from './run-feed.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -25,6 +26,8 @@ const RUN_LIST = 200
 const RUNS_PAGE = 50
 const ACTIVITY_PAGE = 40
 const LOG_TAIL_BYTES = 96 * 1024
+// How much of a run's log its feed reads: the last half megabyte, which is hundreds of steps.
+const FEED_TAIL_BYTES = 512 * 1024
 const SHOWN_LOG = 60
 const LOG_LINE_CHARS = 400
 const TOOL_LINE_CHARS = 200
@@ -392,14 +395,7 @@ export async function runList({ bot = '', status = '', page = 0, ...options } = 
   }
 }
 
-const SECRET = /\b(sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{20,})\b|(Bearer\s+)[A-Za-z0-9._~+/-]{16,}=*/g
-const scrub = (text) => String(text).replace(SECRET, (m, key, bearer) => (bearer ? `${bearer}[hidden]` : '[hidden]'))
 
-/** What a tool call did, in a few words: the command, the file or the search. */
-function toolLine(name, input = {}) {
-  const what = input.command || input.file_path || input.filePath || input.path || input.pattern || input.url || input.description || input.prompt || ''
-  return `${name}${what ? `: ${what}` : ''}`
-}
 
 /**
  * The tail of a run's log as lines a person reads: what the bot said, what it ran, and errors. The
@@ -450,24 +446,34 @@ export function readableLog(content) {
 export async function runDetail(runId, options = {}) {
   if (!ID.test(runId)) throw new EngineError(400, 'That is not a run id')
   const run = await call(`/heartbeat-runs/${runId}`, options)
-  const size = num(run.logBytes)
-  const offset = Math.max(0, size - LOG_TAIL_BYTES)
+  const live = run.status === 'running' || run.status === 'queued'
+  // The end of the log as the file stands now: a run still going has booked no length yet, and is read all the same.
   const [agents, names, log] = await Promise.all([
     crewOf(run.companyId, options),
     jobNames(run.companyId, options),
-    size ? orElse(call(`/heartbeat-runs/${runId}/log?offset=${offset}&limitBytes=${LOG_TAIL_BYTES}`, options), null) : null,
+    run.logRef || num(run.logBytes) ? orElse(call(`/heartbeat-runs/${runId}/log?tail=${FEED_TAIL_BYTES}`, options), null) : null,
   ])
+  const content = log?.content || ''
+  const from = Number(log?.offset) || 0
+  // The short log (the phone's) keeps to its own tail.
+  const shortFrom = Math.max(0, content.length - LOG_TAIL_BYTES)
+  const shortContent = content.slice(shortFrom)
   const nameOf = new Map(agents.map((a) => [a.id, a.name]))
   const usage = run.usageJson && typeof run.usageJson === 'object' ? run.usageJson : {}
   const row = runRow({ ...run, inputTokens: run.inputTokens ?? usage.inputTokens, outputTokens: run.outputTokens ?? usage.outputTokens, cachedInputTokens: run.cachedInputTokens ?? usage.cachedInputTokens, costUsd: run.costUsd ?? usage.costUsd }, nameOf, names.jobs)
   // A log read from its start has no fragment to drop: give it a blank first line.
-  const lines = log ? readableLog(offset ? log.content : `\n${log.content}`) : []
+  const lines = log ? readableLog(from || shortFrom ? shortContent : `\n${shortContent}`) : []
+  const feed = log ? runFeed(content, { fromStart: from === 0, cwd: run.contextSnapshot?.cwd || '' }) : { items: [], cut: 0 }
   return {
     ...row,
     model: usage.model ? modelLabel(usage.model) : '',
     started: { assignment: 'Given a job', automation: 'Woken by the crew', on_demand: 'Started by hand', timer: 'On a timer' }[run.invocationSource] || '',
-    trimmed: offset > 0,
+    trimmed: from + shortFrom > 0,
     log: lines,
+    live,
+    feed: feed.items,
+    feedTrimmed: from > 0 || feed.cut > 0,
+    logSize: Number(log?.size) || num(run.logBytes),
   }
 }
 

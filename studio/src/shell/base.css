@@ -12,7 +12,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html, body, #app { height: 100%; margin: 0; overflow: hidden; }
+/* `clip`, not `hidden`: a hidden box can still be scrolled by a focus or scrollIntoView, which slid every panel sideways. */
+html, body, #app { height: 100%; margin: 0; overflow: clip; }
 body {
   background: #15181d;
   color: #15181d;
@@ -30,7 +31,7 @@ body {
 .yard-canvas.over-bot { cursor: pointer; }
 
 /* The layer the panels sit in: the window's size, open to the yard below except where a panel is. */
-.hud { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.hud { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
 .hud :is(.panel, .btn, .toggle, select, input, textarea, a, .help.open, .toast) { pointer-events: auto; }
 .hud.hidden > :not(.boot):not(.toasts) { visibility: hidden; }
 

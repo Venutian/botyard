@@ -256,6 +256,10 @@ echo "{\\"type\\":\\"result\\",\\"subtype\\":\\"success\\",\\"result\\":\\"patch
     // The run's log is read through the door too.
     const log = await ask('GET', `/api/heartbeat-runs/${run.id}/log?offset=0&limitBytes=4096`)
     assert.match(log.body.content, /patched 200/)
+    // Its end, as the file stands: what the map reads of a run still going, whose length is not booked yet.
+    const end = await ask('GET', `/api/heartbeat-runs/${run.id}/log?tail=64`)
+    assert.ok(end.body.content.length <= 64 && end.body.content.length > 0)
+    assert.equal(end.body.offset + Buffer.byteLength(end.body.content), end.body.size)
     assert.equal((await ask('POST', `/api/heartbeat-runs/${run.id}/cancel`)).status, 409)
     assert.equal((await ask('DELETE', `/api/issues/${made.body.id}`)).status, 404)
   } finally {
