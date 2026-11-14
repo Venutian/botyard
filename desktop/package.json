@@ -1,14 +1,17 @@
 {
   "name": "botyard-desktop",
   "productName": "Botyard",
-  "version": "2.5.0",
-  "description": "Botyard's map, your whole yard in one window",
+  "version": "2.6.0",
+  "description": "Botyard's map and Botyard itself, in one window",
   "author": "Botyard contributors",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --linux AppImage"
+    "dist": "electron-builder --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
     "electron": "44.9.0",
@@ -17,13 +20,92 @@
   "build": {
     "appId": "org.botyard.desktop",
     "productName": "Botyard",
-    "artifactName": "Botyard-${version}.${ext}",
-    "directories": { "output": "dist" },
-    "files": ["main.cjs", "preload.cjs", "bar.html"],
+    "artifactName": "Botyard-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "bar.html"
+    ],
+    "afterPack": "./after-pack.cjs",
+    "extraResources": [
+      {
+        "from": "../studio",
+        "to": "botyard/studio",
+        "filter": [
+          "package.json",
+          "server/**",
+          "dist/**",
+          "tools/sample-yard.mjs",
+          "!**/*.test.mjs"
+        ]
+      },
+      {
+        "from": "../crew",
+        "to": "botyard/crew",
+        "filter": [
+          "**/*",
+          "!tests/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../LICENSE",
+        "to": "botyard/LICENSE"
+      }
+    ],
+    "publish": null,
     "linux": {
-      "target": "AppImage",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Development",
+      "icon": "../assets/icon.png",
+      "maintainer": "Botyard contributors <noreply@botyard.invalid>",
+      "synopsis": "A crew of AI bots that works on your projects, on your own computer"
+    },
+    "deb": {
+      "depends": [
+        "git"
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "../assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Botyard"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "../assets/icon.png",
+      "identity": null
     }
-  }
+  },
+  "homepage": "https://github.com/Venutian/botyard"
 }

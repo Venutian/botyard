@@ -90,6 +90,7 @@ export function probes({ env = process.env } = {}) {
     keys: keysDir(env),
     studio: studioRoot(),
     nodeVersion: process.versions.node,
+    desktop: Boolean(process.versions.electron),
     which: (name) => findCommand(name, env),
     exists: (file) => fs.existsSync(file),
     /** Run a tool for its own answer. `code` is null when it could not be run or did not answer in time. */
@@ -124,7 +125,10 @@ async function checkTool(tool, p) {
 }
 
 async function check(p) {
-  const [major, minor] = p.nodeVersion.split('.').map(Number)
+  // The desktop app carries its own Node.js for Botyard itself; the AI tools are installed with npm
+  // and run on the computer's own, so that is the one to look at there.
+  const own = p.desktop ? (p.which('node') ? version((await p.run('node', ['--version'])).stdout) : '') : p.nodeVersion
+  const [major, minor] = (own || '0.0').split('.').map(Number)
   const nodeOk = major > NODE_NEEDED[0] || (major === NODE_NEEDED[0] && minor >= NODE_NEEDED[1])
   const built = p.exists(path.join(p.studio, 'dist', 'index.html'))
   const python = process.platform === 'win32' ? 'python' : 'python3'
@@ -138,9 +142,13 @@ async function check(p) {
     ...TOOLS.map((tool) => checkTool(tool, p)),
   ])
   const items = [
-    item('node', 'Node.js', 'needed', true, 'Botyard itself runs on it.', nodeOk ? 'ok' : 'missing',
-      nodeOk ? `Version ${p.nodeVersion}.` : `Version ${p.nodeVersion} is too old: Botyard needs ${NODE_NEEDED.join('.')} or newer.`,
-      nodeOk ? null : { kind: 'link', label: 'Get a newer Node.js', url: 'https://nodejs.org' }),
+    p.desktop
+      ? item('node', 'Node.js', 'other', false, 'The AI tools are installed with npm and run on Node.js. Botyard itself brings its own.', nodeOk ? 'ok' : 'missing',
+        nodeOk ? `Version ${own}.` : own ? `Version ${own} is old: get ${NODE_NEEDED.join('.')} or newer before installing the AI tools.` : 'Not installed on this computer. Install it before the AI tools below: their install commands use npm, which comes with it.',
+        nodeOk ? null : { kind: 'link', label: 'Get Node.js', url: 'https://nodejs.org' })
+      : item('node', 'Node.js', 'needed', true, 'Botyard itself runs on it.', nodeOk ? 'ok' : 'missing',
+        nodeOk ? `Version ${p.nodeVersion}.` : `Version ${p.nodeVersion} is too old: Botyard needs ${NODE_NEEDED.join('.')} or newer.`,
+        nodeOk ? null : { kind: 'link', label: 'Get a newer Node.js', url: 'https://nodejs.org' }),
     item('git', 'Git', 'needed', true, 'Every job is done in a copy of your project and ends in a commit.', git ? 'ok' : 'missing',
       git ? `Found, version ${version(git.stdout)}.` : 'Not installed on this computer.',
       git ? null : { kind: 'link', label: 'Get Git', url: 'https://git-scm.com/downloads' }),

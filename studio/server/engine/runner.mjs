@@ -282,6 +282,8 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
     // The names the crew's rules and scripts already use, pointing at this engine.
     ...runVars({ apiUrl, apiKey: token, runId, jobId: job.id, botId: agent.id, studioId: company.id, wakeReason: wake.reason, wakeCommentId: wake.payload?.commentId, cwd, branch: workspace?.branchName, scratch, command }),
     ...(agent.adapterType === 'opencode_local' ? { OPENCODE_DISABLE_PROJECT_CONFIG: 'true' } : {}),
+    // In the desktop app, Node.js is the app's own program run as plain Node: a run started with it has to be told so.
+    ...(process.versions.electron && command === process.execPath ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
   }
   if (agent.adapterType === 'opencode_local') runEnv.XDG_CONFIG_HOME = openCodeSettings(scratch, env)
   if (mayNot.length) {

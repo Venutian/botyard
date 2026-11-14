@@ -34,11 +34,14 @@
   <span class="gap"></span>
   <span class="note" id="note"></span>
   <button id="start" class="start" title="Start Botyard's service on this computer" hidden>Start Botyard</button>
+  <button id="logs" title="Open the folder with Botyard's log" hidden>Log</button>
   <button id="reload" title="Reload this tab">Reload</button>
   <script>
     const tabs = document.getElementById('tabs')
     const note = document.getElementById('note')
     const start = document.getElementById('start')
+    const logs = document.getElementById('logs')
+    logs.onclick = () => window.studio.logs()
     document.getElementById('reload').onclick = () => window.studio.reload()
     start.onclick = () => window.studio.start()
     window.studio.onState((state) => {
@@ -51,8 +54,10 @@
           return dot
         }))
         const down = state.tabs.some((tab) => !tab.up)
-        note.textContent = !down ? '' : state.starting ? 'Starting Botyard…' : 'Botyard is not running.'
+        note.textContent = !down ? '' : state.problem ? 'Botyard did not start: see below.' : state.starting ? 'Starting Botyard…' : 'Botyard is not running.'
+        note.title = state.problem || ''
         start.hidden = !down || state.starting
+        logs.hidden = !down || !state.problem
         return
       }
       tabs.replaceChildren(...state.tabs.map((tab) => {
