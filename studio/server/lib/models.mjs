@@ -122,7 +122,60 @@ function plain(text, labels) {
   return out
 }
 
-function freeModels({ folder, now, listed }) {
+/**
+ * What the providers publish of their free limits, by the start of a model's id: the same table as
+ * free-limits.py's PUBLISHED, first match wins.
+ */
+export const PUBLISHED_LIMITS = [
+  ['opencode/longcat', '100 requests a day, which one long build can use up'],
+  ['opencode/', 'No limit published; free for a limited time with no end date given'],
+  ['zai/', 'No limit published; said to allow one request at a time'],
+  ['cloudflare-workers-ai/', '10,000 neurons a day shared by all its models (about 1.2M tokens on GLM 4.7 Flash), a new day at 01:00'],
+  ['nvidia/', 'About 40 requests a minute shared by every NVIDIA model on the key, no daily cap published'],
+  ['openrouter/', '20 requests a minute and 1,000 a day shared by all its free models, a new day at 01:00'],
+]
+export const publishedLimit = (model) => PUBLISHED_LIMITS.find(([start]) => String(model).startsWith(start))?.[1] || ''
+
+/** The provider a free model's id belongs to, by the name the usage rows give it. */
+const FREE_PROVIDERS = [['opencode/', 'OpenCode free'], ['openrouter/', 'OpenRouter free'], ['nvidia/', 'NVIDIA'], ['cloudflare-workers-ai/', 'Cloudflare'], ['zai/', 'Z.ai']]
+export const freeProvider = (model) => FREE_PROVIDERS.find(([start]) => String(model).startsWith(start))?.[1] || 'Other free'
+
+const MIN_SEEN = 2
+function typical(values) {
+  const v = values.filter((x) => Number(x) > 0).map(Number).sort((a, b) => a - b)
+  if (v.length < MIN_SEEN) return null
+  const mid = Math.floor(v.length / 2)
+  return { usual: v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2, low: v[0], high: v[v.length - 1], seen: v.length }
+}
+
+/**
+ * What free-limits.py has learned of each free model, as its forecast() gives it: the work it did this
+ * round, the work it usually gives before it stops (and so what is left), and when one that is out is
+ * usually back. Every number is a typical value from its own history, never a promise.
+ */
+export function freeForecast(state, now) {
+  const out = new Map()
+  for (const [model, m] of Object.entries(state?.models || {})) {
+    if (!m || typeof m !== 'object') continue
+    const rounds = (Array.isArray(m.rounds) ? m.rounds : []).filter((r) => r && !r.fixed)
+    const seconds = typical(rounds.map((r) => r.seconds))
+    const tokens = typical(rounds.map((r) => r.tokens))
+    const rest = typical(rounds.filter((r) => r.back).map((r) => r.back - r.out))
+    const row = { state: m.state === 'out' ? 'out' : 'up', since: Number(m.since) || null, round: { seconds: Number(m.seconds) || 0, tokens: Number(m.tokens) || 0, runs: Number(m.runs) || 0 } }
+    if (seconds) row.usualSeconds = Math.round(seconds.usual)
+    if (tokens) row.usualTokens = Math.round(tokens.usual)
+    if (row.state === 'up' && seconds) row.leftSeconds = Math.max(0, Math.round(seconds.usual - row.round.seconds))
+    if (row.state === 'up' && tokens) row.leftTokens = Math.max(0, Math.round(tokens.usual - row.round.tokens))
+    if (row.state === 'out') {
+      const back = Number(m.fixed_until) || (rest && row.since ? row.since + rest.usual : 0)
+      if (back) row.back = Math.floor(back)
+    }
+    out.set(model, row)
+  }
+  return out
+}
+
+function freeModels({ folder, now, listed, detail = false }) {
   const found = readJson(path.join(folder, 'free-found.json'), [])
     .filter((row) => Array.isArray(row) && row.length === 3 && row.every((v) => typeof v === 'string'))
     .filter((row) => !listed.some((r) => r.model === row[0]))
@@ -130,6 +183,8 @@ function freeModels({ folder, now, listed }) {
   const scores = readJson(path.join(folder, 'free-scores.json'), {})
   const ok = readJson(path.join(folder, 'free-ok.json'), {})
   const out = readJson(path.join(folder, 'free-out.json'), {})
+  // What each model's history says, for the top bar's usage list: the phone's answer stays small without it.
+  const learned = detail ? freeForecast(readJson(path.join(folder, 'free-limits.json'), {}), now) : new Map()
   const ids = []
   const rows = [...listed, ...found].map((row) => {
     ids.push(row.model)
@@ -150,6 +205,8 @@ function freeModels({ folder, now, listed }) {
       ...(checkedAt ? { checkedAt } : {}),
       ...(aside ? { until: Math.floor(Number(aside.until)), why: String(aside.error || 'did not answer').slice(0, 120) } : {}),
       ...(checked ? { pass, fail } : {}),
+      ...(detail ? { provider: freeProvider(row.model), published: publishedLimit(row.model) } : {}),
+      ...(learned.has(row.model) ? { learned: learned.get(row.model) } : {}),
     }
   })
   const rank = { answering: 0, unchecked: 1, aside: 2 }
@@ -224,7 +281,7 @@ function health({ bots, free, plans, now }) {
  * their models, `plans` what readPlans() gives. Every file may be missing: each part then shows
  * less, and the free list says why when it cannot be read.
  */
-export async function readModels({ folder = crewFolder(), agents, plans = null, now = Math.floor(Date.now() / 1000) } = {}) {
+export async function readModels({ folder = crewFolder(), agents, plans = null, now = Math.floor(Date.now() / 1000), detail = false } = {}) {
   let listed = []
   let freeListError = null
   try {
@@ -232,7 +289,7 @@ export async function readModels({ folder = crewFolder(), agents, plans = null, 
   } catch (err) {
     freeListError = err.code === 'ENOENT' ? 'The free model list is not on this machine' : err.message
   }
-  const { ids, rows: free } = freeModels({ folder, now, listed })
+  const { ids, rows: free } = freeModels({ folder, now, listed, detail })
   const freeIds = new Set(ids)
   const agentList = await agents()
   const order = { error: 0, running: 1, idle: 2, paused: 3 }

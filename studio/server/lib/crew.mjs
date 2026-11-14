@@ -530,6 +530,24 @@ const PROVIDER_NAMES = { anthropic: 'Claude', openai: 'Codex', opencode: 'OpenCo
 const providerName = (p) => PROVIDER_NAMES[p] || (p ? p[0].toUpperCase() + p.slice(1) : 'Unknown')
 const spendRow = (r) => ({ tokens: tokensOf(r), cached: num(r.cachedInputTokens), cents: num(r.costCents), runs: num(r.eventCount) })
 
+/** The engine's tokens by provider and window as one row a provider: `{ name, '5h', '24h', '7d' }`, busiest first. */
+function windowRows(windowsSpend) {
+  const limits = new Map()
+  for (const w of windowsSpend || []) {
+    const name = providerName(w.provider)
+    const row = limits.get(name) || { name }
+    row[w.window] = (row[w.window] || 0) + tokensOf(w)
+    limits.set(name, row)
+  }
+  return [...limits.values()].sort((a, b) => (b['7d'] || 0) - (a['7d'] || 0))
+}
+
+/** Each provider's new tokens in the last 5 hours, day and week, for the top bar's usage list. */
+export async function tokenWindows(options = {}) {
+  const id = await companyId(options)
+  return windowRows(await cached(`money:${id}:costs/window-spend`, READ_TTL_MS, options, () => orElse(call(`/companies/${id}/costs/window-spend`, options), [])))
+}
+
 /** Merges rows that share a name, so two the engine billers of one engine read as one line. */
 function byName(rows, nameOf) {
   const out = new Map()
@@ -571,20 +589,13 @@ export async function moneyView({ folder = crewFolder(), now = Date.now(), ...op
     return { id: r.agentId, name: agent.name, engine: ENGINE[agent.adapterType] || 'Other', model: typeof agent.adapterConfig?.model === 'string' ? modelLabel(agent.adapterConfig.model) : '', today: day.get(r.agentId) || 0, ...spendRow(r), waste: files.waste.bots[agent.name]?.wastedTokens || 0 }
   }).sort((a, b) => b.tokens - a.tokens)
   const order = ['5h', '24h', '7d']
-  const limits = new Map()
-  for (const w of windowsSpend) {
-    const name = providerName(w.provider)
-    const row = limits.get(name) || { name }
-    row[w.window] = (row[w.window] || 0) + tokensOf(w)
-    limits.set(name, row)
-  }
   const pace = files.pace
   return {
     bots,
     models: byName(models, (r) => modelLabel(r.model)),
     providers: byName(providers, (r) => providerName(r.provider)),
     projects: byName(projects, (r) => r.projectName || 'No project'),
-    windows: { order, rows: [...limits.values()].sort((a, b) => (b['7d'] || 0) - (a['7d'] || 0)) },
+    windows: { order, rows: windowRows(windowsSpend) },
     quotas: quotas.filter((q) => q.ok && Array.isArray(q.windows) && q.windows.length).map((q) => ({
       name: providerName(q.provider),
       windows: q.windows.map((w) => ({ label: String(w.label || w.window || w.name || ''), used: num(w.usedPercent ?? w.percentUsed ?? w.utilization), resets: w.resetsAt || null })),

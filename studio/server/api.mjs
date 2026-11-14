@@ -13,7 +13,9 @@ import { changeDetail } from './lib/changes.mjs'
 import { readTimers } from './lib/library.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 import { crewFolder, readModels } from './lib/models.mjs'
-import { activityPage, botList, botPage, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions } from './lib/crew.mjs'
+import { activityPage, botList, botPage, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions, tokenWindows } from './lib/crew.mjs'
+import { openrouterLeft, usageRows } from './lib/usage.mjs'
+import { readPlans } from './lib/plans.mjs'
 import { deviceView, devicesFile, readDevices, revokeDevice } from './lib/devices.mjs'
 import { companySettings, inviteMember, revokeInvite } from './lib/company.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
@@ -79,6 +81,16 @@ async function studioRoute(req, res, url) {
     // What only the phone app could do before: the map is now the whole studio on this machine.
     if (url.pathname === '/api/studio/needs' && read) return send(res, 200, { needs: withCardState((await studioSummary()).needsYou) })
     if (url.pathname === '/api/studio/models' && read) return send(res, 200, await readModels({ folder: crewFolder(), agents: () => agentModels() }))
+    if (url.pathname === '/api/studio/usage' && read) {
+      // Every part may be missing (no crew scripts, no key, the engine slow): the list then shows less.
+      const [plans, windows, models, openrouter] = await Promise.all([
+        readPlans().catch(() => null),
+        tokenWindows().catch(() => []),
+        readModels({ folder: crewFolder(), agents: async () => [], detail: true }).catch(() => ({ free: [], subscriptions: { antigravityUsedUp: [] } })),
+        openrouterLeft().catch(() => null),
+      ])
+      return send(res, 200, { at: Date.now(), providers: usageRows({ plans, windows, free: models.free, usedUp: models.subscriptions?.antigravityUsedUp || [], openrouter }) })
+    }
     // The crew in full: bots, their runs, the activity timeline, and what it all used.
     const q = (name) => url.searchParams.get(name) || ''
     if (url.pathname === '/api/studio/bots' && read) return send(res, 200, await botList())

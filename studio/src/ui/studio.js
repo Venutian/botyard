@@ -6,6 +6,7 @@ import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pa
 import { rankProjects } from './rank.js'
 import { botScreen, botsScreen, editSummary, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
 import { FeedView, feedFrameHtml } from './run-feed.js'
+import { usageHtml } from './usage.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
 import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, projectExtras, projectGoal, projectPlan, routineScreen, routinesScreen, skillScreen, skillsScreen } from './studio-work.js'
 import './lightbox.js'
@@ -191,12 +192,13 @@ const TEMPLATE = `
   <strong class="mark">Botyard</strong>
   <p class="studio-state"></p>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
-  <div class="meters" data-part="meters"></div>
+  <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
   <button class="btn icon ghost" data-act="shift" title="Day plates or night plates">${ICONS.shift}</button>
   <button class="btn icon ghost" data-act="home" title="See the whole studio (0)">${ICONS.home}</button>
   <button class="btn icon ghost" data-act="look" title="Map settings">${ICONS.look}</button>
   <button class="btn icon ghost" data-act="help" title="Keys and help (?)">${ICONS.help}</button>
 </header>
+<div class="usage-pop panel" id="usage-pop" role="dialog" aria-label="Usage of each AI" hidden></div>
 <nav class="studio-dock panel" aria-label="Studio"></nav>
 <div class="studio-deck">${COL('a')}${COL('b')}</div>
 <footer class="studio-crew panel" aria-label="The crew"></footer>
@@ -328,8 +330,13 @@ export class Studio {
       const act = e.target.closest('[data-act]')?.dataset.act
       if (act === 'new-job') return this._beside(() => this.openNewJob())
       if (act === 'shift') return this._shift()
+      if (act === 'usage') return this.usageOpen ? this.closeUsage() : this.openUsage()
       if (act) this.actions[act]?.()
     })
+    // A click anywhere else closes the usage list.
+    document.addEventListener('pointerdown', (e) => { if (this.usageOpen && !e.target.closest('.usage-pop, .usage-btn')) this.closeUsage() })
+    this.root.querySelector('.usage-pop').addEventListener('click', (e) => { if (e.target.closest('[data-act="usage-more"]')) { this.closeUsage(); this._enter('a', () => this.openMoney()) } })
+    window.addEventListener('resize', () => this.usageOpen && this._placeUsage())
     this.dock.addEventListener('click', (e) => this._dockOpen(this._dockItems().find((d) => d.id === e.target.closest('[data-tab]')?.dataset.tab)))
     this.crewBar.addEventListener('click', (e) => {
       const bot = e.target.closest('[data-bot]')?.dataset.bot
@@ -861,6 +868,40 @@ setView(view) {
       return `<span class="meter ${level}" title="${name}: ${Math.round(share * 100)}% of this week's limit is used"><b>${name}</b><i class="cells">${cells}</i><em>${Math.round(share * 100)}% used</em></span>`
     }
     this._put('meters', this.top.querySelector('[data-part="meters"]'), plans ? meter('Claude', plans.claude) + meter('Codex', plans.codex) : '')
+  }
+
+  get usageOpen() { return Boolean(this._usagePop && !this._usagePop.hidden) }
+
+  /** The list under the meters: every AI the crew runs on, what is used and what is left. Read on each open. */
+  async openUsage() {
+    const pop = (this._usagePop = this.root.querySelector('.usage-pop'))
+    const button = this.top.querySelector('.usage-btn')
+    pop.hidden = false
+    this._placeUsage()
+    button.setAttribute('aria-expanded', 'true')
+    if (!pop.innerHTML) pop.innerHTML = '<p class="u-empty">Reading what each AI has used…</p>'
+    const seq = (this._usageSeq = (this._usageSeq || 0) + 1)
+    try {
+      const data = await call('/api/studio/usage')
+      if (seq === this._usageSeq && this.usageOpen) pop.innerHTML = usageHtml(data)
+    } catch (err) {
+      if (seq === this._usageSeq && this.usageOpen) pop.innerHTML = `<p class="u-empty">${esc(err.message || 'The usage could not be read')}</p>`
+    }
+  }
+
+  /** Under its button, its right edge on the button's, kept inside the window. */
+  _placeUsage() {
+    const b = this.top.querySelector('.usage-btn').getBoundingClientRect()
+    const host = this.root.getBoundingClientRect()
+    this._usagePop.style.top = `${Math.round(b.bottom - host.top + 10)}px`
+    this._usagePop.style.right = `${Math.max(8, Math.round(host.right - b.right))}px`
+  }
+
+  closeUsage() {
+    if (!this.usageOpen) return false
+    this._usagePop.hidden = true
+    this.top.querySelector('.usage-btn').setAttribute('aria-expanded', 'false')
+    return true
   }
 
   _putDock() {

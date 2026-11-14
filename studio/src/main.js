@@ -185,6 +185,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (shell.helpOpen) return void shell.toggleHelp(false)
     if (shell.settingsOpen) return void shell.toggleSettings(false)
+    if (studio.usageOpen) return void studio.closeUsage()
     // The panel the owner is in closes first: a chat when the focus is in it, else the top column, then the chat.
     if (studio.chatBot && studio.chat.contains(document.activeElement)) return void studio.closeChat()
     if (studio.on && (studio.closeSheet() || studio.closePanel())) return
