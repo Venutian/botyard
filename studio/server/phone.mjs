@@ -396,7 +396,7 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       const routineOne = /^\/v1\/routines\/([^/]+)$/.exec(pathname)
       const docPart = /^\/v1\/jobs\/([^/]+)\/documents\/([^/]+)\/(revisions|restore)$/.exec(pathname)
       const shaping = { ...options, ...shape }
-      const first = { file: firstRunFile, ...shaping }
+      const first = { file: firstRunFile, devices, ...shaping }
       if (pathname === '/v1/bots/new' && get) return send(res, 200, await newBotChoices(shaping))
       if (pathname === '/v1/bots' && post) return send(res, 201, await addBot(await readBody(req, MAX_LONG_BODY), shaping))
       if (pathname === '/v1/bots/starter' && post) return send(res, 201, await addStarterCrew(shaping))

@@ -1,7 +1,7 @@
 /**
- * The first run of an empty studio, as a punched job card of five steps: name it, sign in an AI,
- * pick a crew, add a project, give a first job. Each step can be skipped and is found again in
- * Setup. Says the same as the PC's first run.
+ * The first run of an empty studio, as a punched job card of steps: name it, sign in an AI, pick a
+ * crew, say hello to a bot, add a project, give a first job, pair a phone. Each step can be skipped
+ * and is found again in Setup. Says the same as the PC's first run.
  */
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -22,7 +22,7 @@ const YELLOW = '#ffc61a';
 const INK = '#15181d';
 const NONE = '';
 
-/** The five steps as a job card: a punched hole for each one done, the open one painted yellow. */
+/** The steps as a job card: a punched hole for each one done, the open one painted yellow. */
 function StepCard({ first, at, onOpen }: { first: FirstRun; at: string; onOpen: (step: FirstStep) => void }) {
   const { t } = useLook();
   const tap = useTap();
@@ -156,6 +156,30 @@ export function FirstRunScreen({ step, connection, nav }: { step?: string; conne
         {done ? nextButton : skip('crew')}
       </>
     );
+  } else if (first && shown === 'chat') {
+    const chat = first.chat;
+    const greet = first.greet;
+    const talkTo = chat?.botId || greet?.id || '';
+    body = (
+      <>
+        <Sign size={26}>{chat?.answered ? 'A bot answered you' : 'Say hello to a bot'}</Sign>
+        <Txt color={t.ink2}>The quickest proof that everything works: the bot's AI starts on the PC, reads what you wrote and answers in the chat. Ask it what it can do.</Txt>
+        {chat?.answered ? <Note tone="good">{`${chat.bot} answered: “${chat.text.length > 200 ? `${chat.text.slice(0, 200)}…` : chat.text}”`}</Note>
+          : chat ? <Note tone="warn">{`${chat.bot} has your message. A first answer can take a minute or two while its AI starts.`}</Note> : null}
+        {talkTo ? <Button label={chat ? `Open the chat with ${chat.bot}` : `Say hello to ${greet?.name ?? 'the lead'}`} kind={chat?.answered ? 'quiet' : undefined} disabled={Boolean(busy)} onPress={() => nav.push({ name: 'chat', botId: talkTo })} />
+          : <Note tone="warn">There is no bot switched on to talk to yet. Go back a step and pick a crew first.</Note>}
+        <Txt size={13} color={t.ink2}>No answer after five minutes? Check in Setup that the bot's AI is ready, and in Bots that the bot is switched on; its last run says what went wrong.</Txt>
+        {done ? nextButton : skip('chat')}
+      </>
+    );
+  } else if (first && shown === 'phone') {
+    body = (
+      <>
+        <Sign size={26}>This phone is paired</Sign>
+        <Txt color={t.ink2}>{`You are reading this on a phone with its own key${first.phones && first.phones > 1 ? `, one of ${first.phones}` : ''}. To pair another, use Pair a phone on the PC's map. Keys can be taken back on the map, under Phones.`}</Txt>
+        {nextButton}
+      </>
+    );
   } else if (first && shown === 'project') {
     body = (
       <>
@@ -208,7 +232,7 @@ export function FirstRunScreen({ step, connection, nav }: { step?: string; conne
   }
 
   return (
-    <Page title="First run" note="Five steps to a studio that works. Skip any of them; each is found again in Setup." onBack={nav.back} onRefresh={load} error={error} loading={!first}
+    <Page title="First run" note="A few steps to a studio that works. Skip any of them; each is found again in Setup." onBack={nav.back} onRefresh={load} error={error} loading={!first}
       right={first ? <Small label="Close the first run" disabled={Boolean(busy)} onPress={close} /> : undefined}>
       {first ? (
         <>

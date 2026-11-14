@@ -297,7 +297,14 @@ export function setupRows(d, { open = '' } = {}) {
   }).join('')
 }
 
-const STEP_NAMES = { name: 'Name your yard', setup: 'Connect an AI', crew: 'Pick a crew', project: 'Add a project', job: 'Give a first job' }
+const STEP_NAMES = { name: 'Name your yard', setup: 'Connect an AI', crew: 'Pick a crew', chat: 'Say hello to a bot', project: 'Add a project', job: 'Give a first job', phone: 'Pair a phone' }
+/** Where the phone app is to be had: the release page of the repository this copy came from. */
+const APP_PAGE = 'https://github.com/Venutian/botyard/releases/latest'
+
+/** What to try when a step does not go as it says, in a fold of its own under the step. */
+const stuck = (title, tips) => `<details class="first-stuck"><summary>${esc(title)}</summary><ul>${tips.map((tip) => `<li>${tip}</li>`).join('')}</ul></details>`
+/** A warning when no AI tool is ready: no bot can run until one is. */
+const noAi = (setup) => (setup?.available && !setup.ready ? `<p class="flag warn"><i></i><span>${esc(setup.summary)} Until one is ready, no bot can run. <button class="link" type="button" data-act="first-open" data-step="setup">Go to Connect an AI</button></span></p>` : '')
 
 /** The Setup page: how the studio stands in a sentence, its rows, then the rest of setting up. */
 export function setupScreen(d, first, opts) {
@@ -347,7 +354,14 @@ export function firstScreen(first, at, x = {}) {
       <p class="lead">Bots need an AI to run on. Free models need no account, so a crew can start today; sign in your own subscriptions when you want stronger ones.</p>
       ${x.setup?.available ? `<p class="flag ${x.setup.ready ? 'good' : 'warn'}"><i></i><span>${esc(x.setup.summary)}</span></p>` : ''}
       <div class="acts"><button class="btn primary" data-act="first-seen" data-step="setup">${x.setup?.ready ? 'Next step' : 'Carry on anyway'}</button>${x.setup?.available ? '<button class="btn ghost" data-act="setup-check">Check again</button>' : ''}</div>
-      ${setupRows(x.setup, { open: x.open })}</section>`
+      ${setupRows(x.setup, { open: x.open })}
+      ${stuck('If a sign-in does not work', [
+        'A sign-in opens in a terminal window. Finish it there, close it, then press <b>Check again</b>.',
+        'No terminal opened? Run the command shown in the row yourself, in any terminal on this computer, then check again.',
+        '<b>Install</b> commands use npm, which comes with Node.js. If <code>npm</code> is not found, install Node.js 22.13 or newer from nodejs.org first.',
+        'A tool you just installed is not found? Close and open Botyard again, so it reads the new PATH.',
+        'Git missing: every job ends in a commit, so Botyard needs it. Get it from git-scm.com, then check again.',
+      ])}</section>`
   } else if (at === 'crew') {
     const starter = (x.templates || []).filter((t) => t.default)
     const have = first.crew.length ? `<p class="flag good"><i></i><span>The crew so far: ${esc(first.crew.map((b) => `${b.name}${b.paused ? ' (off)' : ''}`).join(', '))}.</span></p>` : ''
@@ -365,12 +379,65 @@ export function firstScreen(first, at, x = {}) {
         </div>
       </div>
       <div class="acts">${done ? '<button class="btn primary" data-act="first-next">Next step</button>' : skip('crew')}</div></section>`
+  } else if (at === 'chat') {
+    const greet = first.greet
+    const chat = first.chat
+    const said = chat?.answered
+      ? `<p class="flag good"><i></i><span>${esc(chat.bot)} answered: “${esc(chat.text.length > 240 ? `${chat.text.slice(0, 240)}…` : chat.text)}”</span></p>`
+      : chat ? `<p class="flag"><i></i><span>${esc(chat.bot)} has your message. A first answer can take a minute or two while its AI starts up. This page checks by itself.</span></p>` : ''
+    body = `<section class="first-step"><h2>${chat?.answered ? 'A bot answered you' : 'Say hello to a bot'}</h2>
+      <p class="lead">This is the quickest proof that everything works: the bot's AI starts on this computer, reads what you wrote and answers in the chat. Ask it what it can do, or who is in the crew.</p>
+      ${greet ? '' : '<p class="flag warn"><i></i><span>There is no bot switched on to talk to yet. Go back a step and pick a crew first.</span></p>'}
+      ${noAi(x.setup)}${said}
+      <div class="acts">${greet ? `<button class="btn ${chat?.answered ? '' : 'primary'}" data-act="first-chat" data-id="${esc(chat?.botId || greet.id)}">${chat ? `Open the chat with ${esc(chat.bot)}` : `Say hello to ${esc(greet.name)}`}</button>` : '<button class="btn" data-act="first-open" data-step="crew">Pick a crew</button>'}
+        ${done ? '<button class="btn primary" data-act="first-next">Next step</button>' : skip('chat')}</div>
+      ${stuck('If no answer comes', [
+        'Give it five minutes: a free model may have to wait its turn, and the first start of an AI tool is slow.',
+        'Open <b>Setup</b> and check that the AI this bot runs on says <b>Ready</b>. A bot on Claude, Codex or Gemini needs that tool installed and signed in.',
+        'A bot marked <b>Off</b> does not answer. Switch it on in <b>Crew</b>, or say hello to another one.',
+        'In <b>Crew</b>, open the bot and its last run: the log shows what its AI said, and a sign-in or limit error shows there first.',
+      ])}</section>`
+  } else if (at === 'phone') {
+    const p = x.pair
+    const qr = x.pairQr
+    const addresses = p?.addresses || []
+    body = `<section class="first-step"><h2>${first.phones && !qr ? 'A phone is paired' : 'Pair a phone'}</h2>
+      <p class="lead">Follow the crew, answer its questions and give it jobs from your phone. The phone talks to this computer through a locked door of its own, with a key for each phone. This step is optional.</p>
+      ${first.phones && !qr ? `<p class="flag good"><i></i><span>${first.phones === 1 ? 'One phone has' : `${first.phones} phones have`} a key${p?.open === false && p?.why ? `, but the door is closed: ${esc(p.why)}` : ''}. Keys can be taken back in Settings, under Phones.</span></p>` : ''}
+      ${qr ? `<div class="pair-code">
+          <div class="qr" role="img" aria-label="Pairing code for the phone">${qr}</div>
+          <ol class="pair-how">
+            <li>Install the Botyard app on the phone (Android): the APK is on the <a href="${APP_PAGE}" target="_blank" rel="noopener">release page</a>.</li>
+            <li>Point the phone's camera at this code and open the link it finds. The app opens and connects.</li>
+            <li>The phone has to be on the same Wi-Fi as this computer, which it finds at <code>${esc(x.pairAt || '')}</code>.</li>
+          </ol>
+          <p class="flag warn"><i></i><span>This code is a key to your yard. Close it once the phone is connected, and do not share a picture of it.</span></p>
+        </div>
+        <div class="acts"><button class="btn primary" data-act="first-pair-done">The phone is connected</button><button class="btn ghost" data-act="first-pair-hide">Hide the code</button></div>`
+      : `<form class="fields" data-part="first-pair">
+          <div class="two"><label class="stack">Name of the phone<input name="name" maxlength="40" placeholder="Like “My Pixel”" autocomplete="off"></label>
+          ${addresses.length > 1 ? `<label class="stack">This computer's address<select name="host">${addresses.map((a, n) => opt(a, a, n === 0 ? a : '')).join('')}</select></label>` : ''}</div>
+          ${p && !addresses.length ? '<p class="flag warn"><i></i><span>This computer is on no network a phone could reach. Connect it to your Wi-Fi, then come back.</span></p>' : ''}
+          <div class="acts"><button class="btn ${first.phones ? '' : 'primary'}" type="submit" ${p && !addresses.length ? 'disabled' : ''}>${first.phones ? 'Pair another phone' : 'Make a pairing code'}</button>
+          ${done ? '<button class="btn primary" type="button" data-act="first-next">Finish</button>' : skip('phone', 'No phone for now')}</div></form>`}
+      ${stuck('If the phone cannot connect', [
+        'Check that the phone is on the same Wi-Fi as this computer, not on mobile data.',
+        `The computer's firewall may block the door. Allow incoming connections on port <code>${esc(String(p?.port || 5288))}</code> for your home network (on Windows, say yes when it asks about Botyard).`,
+        'The address can change when the computer joins another network. Make a new code; the old phone key can be taken back in Settings, under Phones.',
+        'Away from home, the phone needs WireGuard or a Cloudflare link: see <b>Away from home</b> in the README.',
+      ])}</section>`
   } else if (at === 'project') {
     const have = first.projects.length ? `<p class="flag good"><i></i><span>Projects so far: ${esc(first.projects.map((p) => p.name).join(', '))}.</span></p>` : ''
     body = `<section class="first-step"><h2>Add a project</h2>
       <p class="lead">A project is a folder of code the crew works in. Each job gets its own branch there, so nothing touches your work until you take it.</p>
       ${have}${projectAddForm()}
-      <div class="acts">${done ? '<button class="btn primary" data-act="first-next">Next step</button>' : skip('project')}</div></section>`
+      <div class="acts">${done ? '<button class="btn primary" data-act="first-next">Next step</button>' : skip('project')}</div>
+      ${stuck('If the project is not added', [
+        'A folder has to be a git repository. If it is not yet, Botyard offers to start git in it.',
+        'Have no project at hand? Make an empty folder, add it here, and let the first job be \u201cWrite a README for this project\u201d.',
+        'A private GitHub address needs GitHub signed in first, in <b>Setup</b>.',
+        'On Windows, write the folder in full, like <code>C:\\Users\\you\\projects\\tea-shop</code>.',
+      ])}</section>`
   } else if (at === 'job') {
     const line = x.line
     const watch = first.firstJob ? `<div class="watch"><h3>Your first job</h3>
@@ -379,15 +446,22 @@ export function firstScreen(first, at, x = {}) {
         <p class="hint">${line?.bot ? `${esc(line.bot)} has it. Open it to read what the bot says and see its changes; this line follows it as it moves.` : first.crew.some((b) => !b.paused) ? 'A bot takes it within a minute. This line follows it as it moves.' : 'No bot is switched on to take it. Add one, or switch one on, from Crew.'}</p>
         <div class="acts"><button class="btn primary" data-act="first-close">Go to the map</button><button class="btn" data-act="open-job" data-id="${esc(first.firstJob.id)}">Open the job</button></div></div>` : ''
     body = `<section class="first-step"><h2>${first.firstJob ? 'The crew has your first job' : 'Give a first job'}</h2>
-      <p class="lead">${first.firstJob ? 'That is all five steps. On the map, the sign over the project\u2019s bay counts the job as it is built and checked, and the bot that has it stands in the bay.' : 'Say what you want done, as you would to a person. The bot that leads the crew takes it and hands it on, unless you pick who does it.'}</p>
-      ${watch || `<form class="fields" data-part="first-job">
+      <p class="lead">${first.firstJob ? 'On the map, the sign over the project\u2019s bay counts the job as it is built and checked, and the bot that has it stands in the bay. When it is done, its commits wait for you on a branch of their own: nothing is merged without your yes.' : 'Say what you want done, as you would to a person. The bot that leads the crew takes it and hands it on, unless you pick who does it. Start with something small, so you can see the whole way from job to commit.'}</p>
+      ${noAi(x.setup)}
+      ${watch ? `${watch}${first.steps.some((s) => s.id === 'phone' && s.state !== 'done') ? '<div class="acts"><button class="btn" data-act="first-open" data-step="phone">Pair a phone next</button></div>' : ''}` : `<form class="fields" data-part="first-job">
         <label class="stack">What should be done<input name="title" maxlength="180" required placeholder="Like “Add a README that says what this project is”" autocomplete="off"></label>
         <label class="stack">Details<textarea name="description" rows="4" placeholder="What done looks like, where to look, what not to touch"></textarea></label>
         <div class="two"><label class="stack">Project<select name="projectId">${opt('', 'None', '')}${first.projects.map((p, n) => opt(p.id, p.name, n === 0 ? p.id : '')).join('')}</select></label>
         <label class="stack">Who<select name="botId">${opt('', first.crew.length ? 'The lead decides' : 'Nobody yet', '')}${first.crew.map((b) => opt(b.id, `${b.name}${b.paused ? ' (off)' : ''}`, '')).join('')}</select></label></div>
         ${first.crew.length ? '' : '<p class="flag warn"><i></i><span>There is no bot to take a job yet. Go back a step and pick a crew first.</span></p>'}
         <div class="acts"><button class="btn primary" type="submit" ${first.crew.length ? '' : 'disabled'}>Give the job</button>${skip('job')}</div>
-      </form>`}</section>`
+      </form>`}
+      ${stuck('If the job does not move', [
+        'Nobody takes it after a few minutes: check in <b>Setup</b> that the AI the lead runs on is ready, and in <b>Crew</b> that the lead is switched on.',
+        'A job waits in <b>Needs you</b> when a bot asks you something: answer the card with stripes and it carries on.',
+        'Open the job and its runs to read what the bot did and said. A run that ended badly says why.',
+        'The work is on a branch of its own in your project, under <code>.botyard/worktrees/</code>; your own checkout is never touched.',
+      ])}</section>`
   }
   return `<div class="first-run">${stepCard(first, at)}${body}</div>`
 }

@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { EngineError as Refusal, call, companyId, crewOf, engineBase, orElse } from './engine.mjs'
 import { forgetReads } from './crew.mjs'
 import * as homes from './home.mjs'
+import { devicesFile, readDevices } from './devices.mjs'
 import { modelLabel } from './models.mjs'
 import { pcSkills } from './pc-skills.mjs'
 
@@ -670,7 +671,9 @@ export async function archiveProject(projectId, archived = true, options = {}) {
 
 // ── first run ───────────────────────────────────────────────────────────────────────
 
-export const FIRST_STEPS = ['name', 'setup', 'crew', 'project', 'job']
+export const FIRST_STEPS = ['name', 'setup', 'crew', 'chat', 'project', 'job', 'phone']
+/** Steps that never hold the guide open on their own: a yard can do without a phone. */
+const OPTIONAL_STEPS = new Set(['phone'])
 const DEFAULT_NAME = 'My studio'
 
 function readNotes(file) {
@@ -692,7 +695,32 @@ function writeNotes(file, notes) {
  * notes say. `file` keeps what only the owner can say: that they named it, looked at setup, skipped
  * a step or closed the guide.
  */
-export async function firstRun({ file = '', ...options } = {}) {
+/**
+ * The first conversation a bot answered, or the one still waiting for an answer: the proof that a
+ * bot's AI runs on this computer. Read from the newest chats; a yard with many is long past it.
+ */
+async function firstAnswer(id, crew, options) {
+  const chats = (await orElse(call(`/companies/${id}/chats`, options), [])).slice(0, 6)
+  const names = new Map(crew.map((a) => [a.id, a.name]))
+  let waiting = null
+  for (const chat of chats) {
+    const comments = await orElse(call(`/issues/${chat.id}/comments?limit=20`, options), [])
+    const answer = comments.find((c) => c.authorType === 'agent')
+    const bot = { botId: chat.conversationAgentId || '', bot: names.get(chat.conversationAgentId) || 'A bot' }
+    if (answer) return { ...bot, answered: true, text: String(answer.body || '').slice(0, 280) }
+    if (!waiting && comments.some((c) => c.authorType === 'user')) waiting = { ...bot, answered: false, text: '' }
+  }
+  return waiting
+}
+
+/** The bot to say hello to first: the lead, else the first one switched on. */
+const greeter = (crew) => {
+  const on = crew.filter((a) => a.status !== 'paused')
+  const lead = on.find((a) => a.role === 'ceo') || on.find((a) => !a.reportsTo) || on[0]
+  return lead ? { id: lead.id, name: lead.name } : null
+}
+
+export async function firstRun({ file = '', devices = devicesFile(), ...options } = {}) {
   const id = await companyId(options)
   const [company, crew, projects, jobs] = await Promise.all([
     orElse(call(`/companies/${id}`, options), {}),
@@ -700,21 +728,31 @@ export async function firstRun({ file = '', ...options } = {}) {
     orElse(call(`/companies/${id}/projects`, options), []),
     orElse(call(`/companies/${id}/issues?view=compact&limit=20`, options), []),
   ])
+  const chat = crew.length ? await firstAnswer(id, crew, options).catch(() => null) : null
   const notes = readNotes(file)
   const live = projects.filter((p) => !p.archivedAt)
   const work = jobs.filter((j) => !j.conversationAgentId)
-  const has = { name: notes.named || (Boolean(company?.name) && company.name !== DEFAULT_NAME), setup: notes.seen.includes('setup'), crew: crew.length > 0, project: live.length > 0, job: work.length > 0 }
-  const settled = has.crew && has.project && has.job
+  const phones = readDevices(devices).devices.length
+  const has = {
+    name: notes.named || (Boolean(company?.name) && company.name !== DEFAULT_NAME), setup: notes.seen.includes('setup'), crew: crew.length > 0,
+    chat: Boolean(chat?.answered), project: live.length > 0, job: work.length > 0, phone: phones > 0,
+  }
+  // A yard whose bots already work (a crew that answered, on a job) is past it, whatever the notes say.
+  const settled = has.crew && has.project && has.job && (has.chat || work.length > 1)
   const steps = FIRST_STEPS.map((step) => ({ id: step, state: has[step] || settled ? 'done' : notes.skipped.includes(step) ? 'skipped' : 'todo' }))
   const next = steps.find((s) => s.state === 'todo')?.id || ''
+  const needed = steps.filter((s) => s.state === 'todo' && !OPTIONAL_STEPS.has(s.id))
   return {
     studio: { id, name: company?.name || DEFAULT_NAME },
     steps,
     step: next,
     // Shown by itself when the studio is empty; afterwards it waits in Setup until every step is done or skipped.
-    show: !settled && !notes.closed && Boolean(next),
+    show: !settled && !notes.closed && needed.length > 0,
     empty: !has.crew && !has.project,
     left: steps.filter((s) => s.state !== 'done').map((s) => s.id),
+    chat: chat ? { ...chat } : null,
+    greet: greeter(crew),
+    phones,
     crew: crew.map((a) => ({ id: a.id, name: a.name, paused: a.status === 'paused' })),
     projects: live.map((p) => ({ id: p.id, name: p.name })),
     archived: projects.filter((p) => p.archivedAt).map((p) => ({ id: p.id, name: p.name })),

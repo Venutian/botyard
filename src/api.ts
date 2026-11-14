@@ -511,14 +511,18 @@ export type Helpers = { available: boolean; state: 'on' | 'off'; why: string; jo
 export const getHelpers = (c: Connection) => call<Helpers>(c, '/helpers');
 export const helperAction = (c: Connection, action: 'on' | 'off' | 'run', name?: string) => call<Helpers>(c, '/helpers', 'POST', name ? { action, name } : { action });
 
-export type FirstStep = 'name' | 'setup' | 'crew' | 'project' | 'job';
+export type FirstStep = 'name' | 'setup' | 'crew' | 'chat' | 'project' | 'job' | 'phone';
 export type FirstRun = {
   studio: Named; steps: { id: FirstStep; state: 'done' | 'skipped' | 'todo' }[];
   /** The step to show now; empty when none is left. */ step: FirstStep | '';
   /** Whether the app should open the first run by itself. */ show: boolean;
   empty: boolean; left: FirstStep[]; crew: (Named & { paused: boolean })[]; projects: Named[]; archived: Named[]; firstJob: JobLink | null;
+  /** The first conversation a bot answered, or the one still waiting on its first answer. */
+  chat?: { botId: string; bot: string; answered: boolean; text: string } | null;
+  /** The bot to say hello to first. */ greet?: Named | null;
+  phones?: number;
 };
-export const FIRST_STEP_NAMES: Record<FirstStep, string> = { name: 'Name the studio', setup: 'Sign in an AI', crew: 'Pick a crew', project: 'Add a project', job: 'Give a first job' };
+export const FIRST_STEP_NAMES: Record<FirstStep, string> = { name: 'Name the studio', setup: 'Sign in an AI', crew: 'Pick a crew', chat: 'Say hello to a bot', project: 'Add a project', job: 'Give a first job', phone: 'Pair a phone' };
 export const getFirstRun = (c: Connection) => call<FirstRun>(c, '/first-run');
 export const nameStudio = (c: Connection, name: string) => call<FirstRun>(c, '/first-run', 'POST', { action: 'name', name });
 export const markFirstRun = (c: Connection, mark: { step: FirstStep; mark: 'skip' | 'seen' | 'again' } | { mark: 'close' }) => call<FirstRun>(c, '/first-run', 'POST', mark);

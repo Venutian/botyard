@@ -846,8 +846,9 @@ setView(view) {
     // What waits for the owner is counted once: the top bar says the same number as the bell and the bays.
     const waiting = (this._cards || this._needs || []).filter((a) => !a.read && !a.archived).length
     const said = m.state.replace(/ \d+ things? needs? a look\./, '') + (waiting ? ` ${waiting} ${waiting === 1 ? 'thing waits' : 'things wait'} for you.` : '')
-    const left = this._first?.left || []
-    const stepNames = { name: 'name your yard', setup: 'connect an AI', crew: 'pick a crew', project: 'add a project', job: 'give a first job' }
+    // Pairing a phone is optional: it never keeps the top bar asking on its own.
+    const left = (this._first?.left || []).filter((s) => s !== 'phone')
+    const stepNames = { name: 'name your yard', setup: 'connect an AI', crew: 'pick a crew', chat: 'say hello to a bot', project: 'add a project', job: 'give a first job' }
     const next = left.length && !busy ? `<button type="button" class="next-step" data-first-step="${esc(left[0])}">Next: ${esc(stepNames[left[0]] || 'finish setting up')}</button>` : ''
     this._put('state', this.top.querySelector('.studio-state'), `<span class="long">${next || esc(said)}</span><span class="short">${next || `${busy ? `${busy} working` : 'All free'}${waiting ? `, ${waiting} for you` : ''}`}</span>`)
     const meter = (name, plan) => {
@@ -1715,6 +1716,7 @@ setView(view) {
     <h3>Phones and computers</h3>
     <p class="hint">Each one has its own key to the studio. Removing one locks it out at once.</p>
     <div data-part="settings-devices"><p class="none">Reading…</p></div>
+    <div class="acts"><button class="btn" type="button" data-act="first-open" data-step="phone">Pair a phone</button></div>
     <h3>Company</h3>
     <div data-part="settings-company"><p class="none">Reading…</p></div>`
     this._shelved = new Set(g.shelved || [])
@@ -1822,7 +1824,7 @@ setView(view) {
         <span class="name">${esc(d.name)}</span>
         <span class="said">${d.lastSeen ? `Last seen ${esc(since(Date.parse(d.lastSeen)))} ago` : 'Not seen yet'}</span>
         <button class="btn ghost" type="button" data-act="device" data-id="${esc(d.id)}" data-name="${esc(d.name)}">Remove</button>
-      </div>`).join('') || '<p class="none">No phone has a key yet. Pair one from the phone app.</p>'
+      </div>`).join('') || '<p class="none">No phone has a key yet.</p>'
     } catch (err) {
       if (el()) el().innerHTML = `<p class="none">${esc(err.message)}</p>`
     }

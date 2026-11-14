@@ -30,9 +30,11 @@ import { spawnSync } from 'node:child_process'
 import { Console } from 'node:console'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { builtPage } from './lib/built-page.mjs'
+import { devicesFile, readDevices } from './lib/devices.mjs'
 import { configDir, dataDir, studioRoot } from './lib/home.mjs'
+import { DOOR_PORT, doorFile, localAddresses, pairPhone, readDoor } from './lib/pairing.mjs'
 import { setupAct, setupState } from './lib/setup.mjs'
-import { readEnvFile, startTimetable, stopTimetable, timetableAct, timetableState } from './lib/timetable.mjs'
+import { startTimetable, stopTimetable, timetableAct, timetableState } from './lib/timetable.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 /** Where `npm run build` leaves the page, and the answerer that hands it out. */
@@ -43,7 +45,7 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const PASSED_ON = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip', 'cf-ray', 'x-real-ip', 'x-botyard-edge']
 /** The map's own paths outside /api/studio. A new one goes under /api/studio, which is always the map's. */
 const MAP_PATHS = new Set(['health', 'state'])
-const MINE = new Set(['/api/studio/setup', '/api/studio/timetable'])
+const MINE = new Set(['/api/studio/setup', '/api/studio/timetable', '/api/studio/pair'])
 const MAX_BODY = 64 * 1024
 
 
@@ -85,9 +87,35 @@ function readBody(req) {
   })
 }
 
+/**
+ * Pairing a phone, for the person at this computer: GET says whether the door is open and where,
+ * POST `{ name }` makes a key for one more phone, opens the door if it was closed, and gives back the
+ * link for the phone's camera. The link holds the key, so it is only ever sent to this computer.
+ */
+async function pairing(req, res, door) {
+  if (req.method === 'GET') {
+    const settings = readDoor(doorFile())
+    return send(res, 200, {
+      open: Boolean(door?.isOpen()), port: Number(process.env.BOTYARD_PHONE_PORT) || Number(settings.BOTYARD_PHONE_PORT) || DOOR_PORT,
+      addresses: localAddresses(), phones: readDevices(devicesFile()).devices.length, why: door?.why() || '',
+    })
+  }
+  if (req.method !== 'POST') return send(res, 405, { error: 'Use GET or POST' })
+  if (!door) return send(res, 409, { error: 'This Botyard has no phone door: it was started without one' })
+  const body = await readBody(req)
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 40) : ''
+  const host = typeof body.host === 'string' && /^[\w.:-]{1,100}$/.test(body.host) ? body.host : ''
+  const paired = pairPhone({ name: name || 'My phone', host, port: Number(process.env.BOTYARD_PHONE_PORT) || 0 })
+  const opened = await door.open()
+  return send(res, 200, { ...paired, open: opened.open, why: opened.why })
+}
+
 /** Setup and the timetable, for the person at this computer. */
-async function mine(req, res, url) {
+async function mine(req, res, url, door) {
   if (!fromThisComputer(req)) return send(res, 403, { error: 'Setup and the timetable are for the person at this computer' })
+  if (url.pathname === '/api/studio/pair') {
+    try { return await pairing(req, res, door) } catch (err) { return send(res, 400, { error: String(err?.message || err).slice(0, 200) }) }
+  }
   const setup = url.pathname === '/api/studio/setup'
   try {
     if (req.method === 'GET') {
@@ -217,21 +245,37 @@ export async function createStudio({ env = process.env, demo = false, engine = t
   const { apiMiddleware } = await import('./api.mjs')
 
   let door = null
+  let doorServer = null
+  let doorWhy = ''
+  /** Open the phone's door, once its settings exist: at the start, and again after a first pairing from the map. */
+  const openDoor = async () => {
+    if (doorServer) return { open: true, why: '' }
+    const file = path.join(config, 'phone.env')
+    const own = { ...readDoor(file), ...env }
+    if (!own.BOTYARD_PHONE_TOKEN) {
+      doorWhy = 'No phone has been paired with this yard yet.'
+      return { open: false, why: doorWhy }
+    }
+    const phonePort = Number(own.BOTYARD_PHONE_PORT) || DOOR_PORT
+    if (!(await portFree(phonePort, own.BOTYARD_PHONE_HOST || '127.0.0.1'))) {
+      doorWhy = inUse('the phone\'s door', phonePort, 'BOTYARD_PHONE_PORT').message
+      return { open: false, why: doorWhy }
+    }
+    const { startPhoneDoor } = await import('./phone.mjs')
+    doorServer = startPhoneDoor(own)
+    doorServer.on('error', (err) => { log(`[botyard] the phone's door stopped: ${err.message}`); doorWhy = err.message; doorServer = null })
+    doorWhy = ''
+    return { open: true, why: '' }
+  }
   if (phone) {
-    door = await part('The phone\'s door', async () => {
-      const file = path.join(config, 'phone.env')
-      const own = { ...(fs.existsSync(file) ? readEnvFile(file) : {}), ...env }
-      if (!own.BOTYARD_PHONE_TOKEN) {
-        log('[botyard] The phone\'s door is closed: no phone has been paired with this yard yet.')
-        return null
+    door = { open: openDoor, isOpen: () => Boolean(doorServer), why: () => doorWhy }
+    closers.push(() => new Promise((resolve) => { if (!doorServer) return resolve(); doorServer.close(resolve); doorServer.closeAllConnections?.() }))
+    await part('The phone\'s door', async () => {
+      const opened = await openDoor()
+      if (!opened.open) {
+        if (!lenient && doorWhy.startsWith('Port ')) throw new Error(doorWhy)
+        log(`[botyard] The phone's door is closed: ${opened.why}`)
       }
-      const phonePort = Number(own.BOTYARD_PHONE_PORT) || 5288
-      if (!(await portFree(phonePort, own.BOTYARD_PHONE_HOST || '127.0.0.1'))) throw inUse('the phone\'s door', phonePort, 'BOTYARD_PHONE_PORT')
-      const { startPhoneDoor } = await import('./phone.mjs')
-      const server = startPhoneDoor(own)
-      server.on('error', (err) => log(`[botyard] the phone's door stopped: ${err.message}`))
-      closers.push(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections?.() }))
-      return server
     })
   }
 
@@ -247,14 +291,14 @@ export async function createStudio({ env = process.env, demo = false, engine = t
     const url = new URL(req.url, 'http://x')
     if (url.pathname.slice(0, 5) !== '/api/') return next ? next() : send(res, 404, { error: 'Nothing is here' })
     const owner = whose(url.pathname)
-    if (owner === 'mine') return mine(req, res, url)
+    if (owner === 'mine') return mine(req, res, url, door)
     if (owner === 'map') return apiMiddleware(req, res, next)
     // The engine speaks to this computer only. Anyone else is told nothing is here.
     if (!engineUrl || !fromThisComputer(req)) return send(res, 404, { error: 'Not found' })
     return toEngine(req, res, engineUrl)
   }
 
-  return { middleware, engine: running, engineUrl, phone: door, close }
+  return { middleware, engine: running, engineUrl, get phone() { return doorServer }, door, close }
 }
 
 /** The whole service on its ports. Resolves once the page answers. */
@@ -298,6 +342,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process
       })
       process.on('warning', (warning) => console.warn(warning.message))
     }
+    const [major, minor] = process.versions.node.split('.').map(Number)
+    if (major < 22 || (major === 22 && minor < 13)) throw new Error(`Botyard needs Node.js 22.13 or newer, and this is ${process.versions.node}. Get a newer one from https://nodejs.org (24 is recommended), then start again.`)
     buildIfMissing(console.log)
     const studio = await startStudio({ demo: has('--demo') })
     let stopping = false

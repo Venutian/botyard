@@ -4,11 +4,20 @@
  * guards an edit that is not saved yet. Given to the class as methods, so they read `this` like
  * every other screen's.
  */
+import qrcode from 'qrcode-generator'
 import { diffHtml, editSummary, esc } from './studio-crew.js'
 import {
   aiDetail, botEditScreen, botForm, botNewScreen, changedFields, firstScreen, helpersTable, newBotFields, projectAddForm,
   projectEditScreen, readBotForm, readWhen, rulesScreen, setupScreen,
 } from './studio-shape.js'
+
+/** The pairing link as a code for the phone's camera, drawn here: the link holds a key and never leaves this page. */
+const qrSvg = (text) => {
+  const qr = qrcode(0, 'M')
+  qr.addData(text)
+  qr.make()
+  return qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true })
+}
 
 const zone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' } }
 
@@ -418,7 +427,7 @@ export function shapeMethods({ call, STAGE }) {
 
     async openFirst(step = null) {
       this._enter('a', () => {
-        this._openSheet('first', 'Welcome to Botyard', 'Five steps to a first job. Skip any of them: they wait for you in Setup', { wide: true })
+        this._openSheet('first', 'Welcome to Botyard', 'A few steps to a crew at work. Skip any of them: they wait for you in Setup', { wide: true })
         this._reopen = () => this.openFirst()
       })
       const col = this.cols.a
@@ -440,8 +449,37 @@ export function shapeMethods({ call, STAGE }) {
     /** What the open step needs from the server besides the steps themselves. */
     async _firstNeeds() {
       const at = this._firstAt
-      if (at === 'setup' && !this._setup) { this._setup = await call('/api/studio/setup-rows').catch(() => null); this._putFirst() }
+      if (at !== 'phone' && this._pairQr) { this._pairQr = ''; this._pairAt = '' }
+      if (['setup', 'chat', 'job'].includes(at) && !this._setup) { this._setup = await call('/api/studio/setup-rows').catch(() => null); this._putFirst() }
       if (at === 'crew' && !this._botNew) { this._botNew = await call('/api/studio/bot/new').catch(() => null); this._putFirst() }
+      if (at === 'phone') { this._pair = await call('/api/studio/pair').catch(() => null); this._putFirst() }
+      // Waiting on a bot's first answer: look again every few seconds while the step is open.
+      clearTimeout(this._firstWatch)
+      const waiting = at === 'chat' && !this._first?.chat?.answered && this._first?.chat
+      if (waiting) this._firstWatch = setTimeout(() => { if (this._colOf('first') && this._firstAt === 'chat') this._firstRefresh() }, 6000)
+    },
+
+    /** Make a pairing code for one more phone: the door opens with it, if it was closed. */
+    async _firstPair(form) {
+      if (this._adding) return
+      this._adding = true
+      const button = form.querySelector('button[type="submit"]')
+      button.disabled = true
+      try {
+        const host = form.elements.host?.value || ''
+        const paired = await post('/api/studio/pair', { name: form.elements.name.value.trim(), ...(host ? { host } : {}) })
+        this._pairQr = qrSvg(paired.link)
+        this._pairAt = `${paired.host}:${paired.port}`
+        if (!paired.open) this.actions.toast(`The code is made, but the door did not open: ${paired.why || 'see the log'}`, 'err')
+        this._pair = await call('/api/studio/pair').catch(() => this._pair)
+        this._first = await call('/api/studio/first-run').catch(() => this._first)
+        this._last.first = null
+        this._putFirst()
+      } catch (err) {
+        this.actions.toast(err.message || 'No pairing code was made', 'err')
+        if (button.isConnected) button.disabled = false
+      }
+      this._adding = false
     },
 
     _putFirst({ error = null } = {}) {
@@ -452,7 +490,7 @@ export function shapeMethods({ call, STAGE }) {
       const body = col.el.querySelector('.sheet-body')
       // A form being filled in is not drawn over by the map's own poll.
       const typing = body.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')
-      const html = firstScreen(first, this._firstAt, { setup: this._setup, open: this._setupOpen, templates: this._botNew?.templates, line, stage: line ? STAGE[line.stage] : null })
+      const html = firstScreen(first, this._firstAt, { setup: this._setup, open: this._setupOpen, templates: this._botNew?.templates, line, stage: line ? STAGE[line.stage] : null, pair: this._pair, pairQr: this._pairQr, pairAt: this._pairAt })
       if (this._last.first === html || (typing && !error && this._last.firstAt === this._firstAt)) return
       this._last.first = html
       this._last.firstAt = this._firstAt
@@ -680,8 +718,11 @@ export function shapeMethods({ call, STAGE }) {
       if (act === 'first-skip') { this._firstMark({ step: el.dataset.step, mark: 'skip' }); return true }
       if (act === 'first-seen') { this._firstMark({ step: el.dataset.step, mark: 'seen' }); return true }
       if (act === 'first-next') { const ids = this._first.steps.map((s) => s.id); this._firstAt = this._first.step || ids[ids.indexOf(this._firstAt) + 1] || ''; this._last.first = null; this._putFirst(); this._firstNeeds(); return true }
-      if (act === 'first-close') { call('/api/studio/first-run', { mark: 'close' }).catch(() => {}); this._closeCol(this.cols.a); return true }
+      if (act === 'first-close') { this._pairQr = ''; call('/api/studio/first-run', { mark: 'close' }).catch(() => {}); this._closeCol(this.cols.a); return true }
       if (act === 'first-starter') { this._firstStarter(el); return true }
+      if (act === 'first-chat') { this.openChat(id); setTimeout(() => this._firstRefresh(), 8000); return true }
+      if (act === 'first-pair-hide') { this._pairQr = ''; this._last.first = null; this._putFirst(); return true }
+      if (act === 'first-pair-done') { this._pairQr = ''; this._firstRefresh({ advance: true }); return true }
       if (act === 'project-new') { this._beside(() => this.openProjectNew()); return true }
       if (act === 'project-init') { this._addProject(el.closest('form'), { init: true }); return true }
       if (act === 'project-edit') return go(() => this.openProjectEdit(el.dataset.project))
@@ -701,6 +742,7 @@ export function shapeMethods({ call, STAGE }) {
       if (part === 'setup-key') { this._saveKey(form); return true }
       if (part === 'first-name') { if (form.reportValidity()) this._firstMark({ action: 'name', name: form.elements.name.value.trim() }).then(() => this._refreshSoon()); return true }
       if (part === 'first-job') { this._firstJob(form); return true }
+      if (part === 'first-pair') { this._firstPair(form); return true }
       if (part === 'project-add') { this._addProject(form); return true }
       if (part === 'project-rename') { this._renameProject(form); return true }
       if (part === 'project-move') { this._moveProject(form); return true }

@@ -28,7 +28,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`))
 
 /** An engine that holds bots, projects and jobs in memory and answers the paths the shaping code calls. */
-function engine({ bots, projects, jobs = [], name = 'My studio' } = {}) {
+function engine({ bots, projects, jobs = [], chats = [], comments = {}, name = 'My studio' } = {}) {
   const state = {
     calls: [],
     company: { id: 'co', name, status: 'active' },
@@ -70,6 +70,8 @@ function engine({ bots, projects, jobs = [], name = 'My studio' } = {}) {
     if (bot) { const agent = state.bots.find((b) => b.id === bot[1]); return agent ? json(agent) : json({ error: 'Agent not found' }, 404) }
     if (/^\/agents\/[^/]+\/pause$/.test(p)) { state.bots.find((b) => p.includes(b.id)).status = 'paused'; return json({}) }
     if (p === '/companies/co/issues') return json(state.jobs.filter((j) => !u.searchParams.get('assigneeAgentId') || j.assigneeAgentId === u.searchParams.get('assigneeAgentId')))
+    if (p === '/companies/co/chats') return json(chats)
+    if (/^\/issues\/[^/]+\/comments$/.test(p) && init.method !== 'POST') return json(comments[p.split('/')[2]] || [])
     if (p === '/companies/co/projects' && init.method === 'POST') { const project = { id: newId(), archivedAt: null, ...body }; state.projects.push(project); return json(project, 201) }
     if (p === '/companies/co/projects') return json(state.projects)
     if (p === `/projects/${PROJECT}` && init.method === 'PATCH') { const project = state.projects[0]; if (body.name) project.name = body.name; if ('archived' in body) project.archivedAt = body.archived ? 'now' : null; return json(project) }
@@ -365,7 +367,7 @@ test('a routine is added on a plain choice of when, and changed without touching
 
 test('an empty studio is led step by step; each step can be skipped, and what exists counts as done', async () => {
   const file = path.join(tmp('first'), 'first-run.json')
-  const e = engine({ bots: [], projects: [] })
+  const e = { ...engine({ bots: [], projects: [] }), devices: path.join(tmp('first'), 'devices.json') }
   let at = await firstRun({ file, ...e })
   assert.deepEqual([at.show, at.empty, at.step], [true, true, 'name'])
   await nameStudio('Tea Studio', { file, ...e })
@@ -373,8 +375,8 @@ test('an empty studio is led step by step; each step can be skipped, and what ex
   at = await firstRunMark({ step: 'setup', mark: 'seen' }, { file, ...e })
   assert.equal(at.step, 'crew')
   at = await firstRunMark({ step: 'crew', mark: 'skip' }, { file, ...e })
-  assert.deepEqual([at.step, at.steps.find((s) => s.id === 'crew').state], ['project', 'skipped'])
-  assert.deepEqual(at.left, ['crew', 'project', 'job'], 'a skipped step is still to be found in Setup')
+  assert.deepEqual([at.step, at.steps.find((s) => s.id === 'crew').state], ['chat', 'skipped'])
+  assert.deepEqual(at.left, ['crew', 'chat', 'project', 'job', 'phone'], 'a skipped step is still to be found in Setup')
   at = await firstRunMark({ step: 'crew', mark: 'again' }, { file, ...e })
   assert.equal(at.step, 'crew')
   // Closing the guide hides it; it is not lost.
@@ -385,9 +387,35 @@ test('an empty studio is led step by step; each step can be skipped, and what ex
 })
 
 test('a studio that already has a crew, a project and a job is past the first run, whatever was noted', async () => {
-  const at = await firstRun({ file: path.join(tmp('first'), 'none.json'), ...engine({ jobs: [{ id: 'j1', identifier: 'LH-1', title: 'First', assigneeAgentId: LEAD }] }) })
+  const devices = path.join(tmp('first'), 'devices.json')
+  const at = await firstRun({ file: path.join(tmp('first'), 'none.json'), devices, ...engine({ jobs: [{ id: 'j1', identifier: 'LH-1', title: 'First', assigneeAgentId: LEAD }, { id: 'j2', identifier: 'LH-2', title: 'Second', assigneeAgentId: LEAD }] }) })
   assert.deepEqual([at.show, at.step, at.left], [false, '', []])
   assert.deepEqual(at.firstJob, { id: 'j1', ref: 'LH-1', title: 'First' })
+})
+
+test('the chat step is done when a bot has answered, and the phone step when a phone is paired; a yard waits on neither for good', async () => {
+  const folder = tmp('first')
+  const file = path.join(folder, 'first-run.json')
+  const devices = path.join(folder, 'devices.json')
+  const said = { id: 'c1', authorType: 'user', body: 'Hello' }
+  // A hello with no answer yet: the step is still to do, and says who was asked.
+  let e = engine({ chats: [{ id: 'chat1', conversationAgentId: LEAD }], comments: { chat1: [said] } })
+  let at = await firstRun({ file, devices, ...e })
+  assert.deepEqual(at.greet, { id: LEAD, name: 'Lead' }, 'the lead is the one to greet')
+  assert.deepEqual([at.steps.find((s) => s.id === 'chat').state, at.chat.answered, at.chat.bot], ['todo', false, 'Lead'])
+  e = engine({ chats: [{ id: 'chat1', conversationAgentId: LEAD }], comments: { chat1: [{ id: 'c2', authorType: 'agent', body: 'Hello, I am the lead.' }, said] } })
+  at = await firstRun({ file, devices, ...e })
+  assert.deepEqual([at.steps.find((s) => s.id === 'chat').state, at.chat.text], ['done', 'Hello, I am the lead.'])
+  assert.equal(at.steps.find((s) => s.id === 'phone').state, 'todo')
+  fs.writeFileSync(devices, JSON.stringify({ sharedRetired: true, devices: [{ id: 'd1', name: 'Phone', hash: 'ab' }] }))
+  at = await firstRun({ file, devices, ...e })
+  assert.deepEqual([at.steps.find((s) => s.id === 'phone').state, at.phones], ['done', 1])
+  // With every needed step done, a phone not paired does not keep the guide open by itself.
+  const done = engine({ jobs: [{ id: 'j1', identifier: 'LH-1', title: 'First', assigneeAgentId: LEAD }], chats: [{ id: 'chat1', conversationAgentId: LEAD }], comments: { chat1: [{ id: 'c2', authorType: 'agent', body: 'Hi' }] } })
+  await nameStudio('Tea Studio', { file, ...done })
+  await firstRunMark({ step: 'setup', mark: 'seen' }, { file, ...done })
+  at = await firstRun({ file, devices: path.join(folder, 'none.json'), ...done })
+  assert.equal(at.show, false)
 })
 
 // ── the phone's door ────────────────────────────────────────────────────────────────

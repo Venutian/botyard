@@ -386,8 +386,8 @@ const helpers = { available: true, state: 'on', why: '', jobs: helperJobs };
 const firstNotes = { name: 'Lighthouse Labs', skipped: [] as string[], seen: ['setup'], closed: false, projects: [] as { id: string; name: string }[], job: null as null | { id: string; ref: string; title: string } };
 const archived = [{ id: 'old-site', name: 'Old tea site' }];
 const firstRun = () => {
-  const done: Record<string, boolean> = { name: firstNotes.name !== 'My studio', setup: firstNotes.seen.includes('setup'), crew: teaBots.length > 0, project: firstNotes.projects.length > 0, job: Boolean(firstNotes.job) };
-  const steps = ['name', 'setup', 'crew', 'project', 'job'].map((id) => ({ id, state: done[id] ? 'done' : firstNotes.skipped.includes(id) ? 'skipped' : 'todo' }));
+  const done: Record<string, boolean> = { name: firstNotes.name !== 'My studio', setup: firstNotes.seen.includes('setup'), crew: teaBots.length > 0, chat: teaBots.length > 0, phone: true, project: firstNotes.projects.length > 0, job: Boolean(firstNotes.job) };
+  const steps = ['name', 'setup', 'crew', 'chat', 'project', 'job', 'phone'].map((id) => ({ id, state: done[id] ? 'done' : firstNotes.skipped.includes(id) ? 'skipped' : 'todo' }));
   const left = steps.filter((x) => x.state !== 'done').map((x) => x.id);
   return {
     studio: { id: 'tea', name: firstNotes.name }, steps, step: steps.find((x) => x.state === 'todo')?.id ?? '', left,
