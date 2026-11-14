@@ -1,7 +1,7 @@
 {
   "name": "botyard-desktop",
   "productName": "Botyard",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Botyard's map and Botyard itself, in one window",
   "author": "Botyard contributors",
   "private": true,
