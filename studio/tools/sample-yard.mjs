@@ -427,14 +427,22 @@ export async function fillSampleYard({ store }, { dataDir, now = Date.now(), cre
   } }, path.join(dataDir, 'keys'))
 
   // ── what the timetable remembers: when each helper last ran, and how it went ─────────
-  const { readTimetable } = await import('../server/lib/timetable.mjs')
+  const { nextAt, readTimetable } = await import('../server/lib/timetable.mjs')
   let helpers = []
   try { helpers = readTimetable(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'crew', 'timetable.json')).filter((job) => job.kind === 'timer') } catch { /* a tree without helpers has none to show */ }
   const last = Object.fromEntries(helpers.map((job, n) => {
     // Each ran when it last should have: within its own interval, or at its time of day.
-    const minsAgo = job.everyMs ? Math.max(1, Math.round((job.everyMs / MIN) * (0.25 + (n % 3) * 0.2))) : 5 * 60 + n * 37
     const took = 2 + (n * 7) % 40
-    return [job.name, { lastStart: at(minsAgo), lastEnd: at(minsAgo) + took * 1000, lastOk: true, lastError: '' }]
+    if (job.everyMs) {
+      const minsAgo = Math.max(1, Math.round((job.everyMs / MIN) * (0.25 + (n % 3) * 0.2)))
+      return [job.name, { lastStart: at(minsAgo), lastEnd: at(minsAgo) + took * 1000, lastOk: true, lastError: '' }]
+    }
+    // A helper with a time of day ran at its last time before now, in this computer's own time zone,
+    // so it is never shown as missed whatever the zone.
+    let last = nextAt(job.at, now - 8 * 24 * 60 * MIN)
+    for (let next = nextAt(job.at, last); next <= now; next = nextAt(job.at, last)) last = next
+    const start = Math.min(last + (n % 3) * 1000, now - MIN)
+    return [job.name, { lastStart: start, lastEnd: start + took * 1000, lastOk: true, lastError: '' }]
   }))
   fs.writeFileSync(path.join(dataDir, 'timetable-state.json'), JSON.stringify({ jobs: {}, last }, null, 1))
 
