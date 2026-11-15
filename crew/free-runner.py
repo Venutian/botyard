@@ -50,6 +50,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import botyard_home  # noqa: E402
+import guards  # noqa: E402
 import waits  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -61,6 +62,10 @@ REPEATS = 5
 # How old the kept listing of the tool's models may be before a run asks the tool again.
 LIST_AGAIN = 6 * 3600
 WAITED = ('You were waiting inside your run ({call}): {why}')
+PAYLOAD = ('You put something into your session that must not be there ({call}): {why} Carry on without it: check it '
+           'by name and size, or run a script that prints only what you need.')
+# How often the run looks for a foreground command that has gone past guards.FOREGROUND_MAX.
+LOOK_EVERY = 15
 SAME_FAMILY = 'SAME-FAMILY CHECK:'
 LOOPED = ('You were going round in circles: you ran {call} {times} times with nothing in the worktree changing '
           'between. Stop repeating it. Read what it returned, decide what that means, and take a different next '
@@ -78,6 +83,8 @@ class Loops:
         self.snapshot = ''
         self.seen = collections.Counter()
         self.waited = 0
+        # What the model is told when feed() stops the run for something that is not a circle.
+        self.prompt = None
 
     def feed(self, event):
         part = event.get('part') or {}
@@ -94,15 +101,28 @@ class Loops:
         self.seen[key] += 1
         command = str(given.get('command') or '')
         shown = command or json.dumps(given)[:120]
+        # STANDARDS.md rule 14: a binary or a huge file read whole, or an output past the cap. It has already
+        # run (OpenCode reports a call when it ends), so the run stops here, in the same session, told why.
+        big = guards.unreadable(tool, given, os.getcwd())
+        if not big and len(str(state.get('output') or '')) > guards.OUTPUT_MAX:
+            big = f'its output was {len(str(state["output"])):,} characters, over the {guards.OUTPUT_MAX:,} a tool result may have.'
+        if big:
+            self.prompt = PAYLOAD.format(call=f'{tool} `{shown[:120]}`', why=big)
+            return f'{tool} `{shown[:160]}`', big
         # A wait is judged by what it says, so a poll with a new number each time is seen too. It has
         # already run by now: what it waited is counted, and the one past the rule stops the run.
         why, added = waits.judge(command, self.waited)
         if why:
+            self.prompt = WAITED.format(call=f'{tool} `{shown[:160]}`', why=why)
             return f'{tool} `{shown[:160]}`', why
         self.waited += added
         if self.seen[key] < REPEATS:
             return None
         return f'{tool} `{shown[:160]}`', self.seen[key]
+
+
+def pause(seconds):
+    time.sleep(seconds)
 
 
 def load(name, file):
@@ -413,7 +433,9 @@ def main():
 
     loops = Loops()
     looped = 0
-    for switch in range(MOST_SWITCHES + 1):
+    retried = 0
+    looked = time.time()
+    for switch in range(MOST_SWITCHES + 1 + len(guards.RETRY_WAITS)):
         child = subprocess.Popen([bots.OPENCODE, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                  start_new_session=True)
         child.stdin.write(prompt)
@@ -429,6 +451,24 @@ def main():
             if line is None:
                 ended = True
                 break
+            # STANDARDS.md rule 16: a foreground command past 5 minutes is killed, and the model is told how to
+            # run it. Looking costs one pass over /proc every LOOK_EVERY seconds.
+            if time.time() - looked >= LOOK_EVERY:
+                looked = time.time()
+                rows = guards.processes()
+                long = guards.overlong(rows, child.pid)
+                if long:
+                    for pid in guards.tree(rows, long[0]):
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                    shown = long[2][:160]
+                    loops.prompt = guards.killed(shown, int(long[1]))
+                    circling = (f'bash `{shown}`', f'ran {int(long[1])} seconds in the foreground')
+                    os.killpg(child.pid, signal.SIGTERM)
+                    child.wait(timeout=30)
+                    break
             if line:
                 heard = time.time()
                 sys.stdout.write(line)
@@ -436,7 +476,7 @@ def main():
                 try:
                     event = json.loads(line)
                     session = event.get('sessionID') or session
-                    circling = loops.feed(event)
+                    circling = loops.feed(event) or circling
                     failed = error_of(event) or failed
                 except ValueError:
                     pass
@@ -470,7 +510,7 @@ def main():
                     return 1
                 note(f'The free builder was waiting inside its run on {task} ({what}); told how to wait, same session')
                 args = with_model(args, model, session)
-                prompt = WAITED.format(call=what, why=times)
+                prompt = loops.prompt or WAITED.format(call=what, why=times)
                 loops = Loops()
                 continue
             if looped > 1 or not session:
@@ -485,6 +525,21 @@ def main():
             prompt = LOOPED.format(call=what, times=times)
             loops = Loops()
             continue
+        # STANDARDS.md rule 15: a burst limit or a network error is waited out and the same call tried again, on
+        # this model in this session, 20, 60 and 180 seconds later. Only a fourth failure in a row counts.
+        if code and failed and guards.transient(failed) and retried < len(guards.RETRY_WAITS):
+            wait = guards.retry_wait(retried)
+            retried += 1
+            note(f'The free builder met a temporary error on {model} ({failed[:80]}); trying again in {wait}s, same session ({retried} of {len(guards.RETRY_WAITS)})')
+            sys.stderr.write(f'Temporary error ({failed[:80]}); trying the same call again in {wait} seconds.\n')
+            pause(wait)
+            args = with_model(args, model, session)
+            if session:
+                prompt = guards.RETRY.format(why=failed[:80])
+            loops = Loops()
+            continue
+        if not code:
+            retried = 0
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         if code and failed and any(w in failed.lower() for w in GONE + PER_DAY + BUSY_WORDS):

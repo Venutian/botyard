@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""The send-and-publish commands, for the bots that run outside Claude Code (OpenCode, Gemini): each name
+"""The send-and-publish commands, and the commands that read a whole file, for the bots that run outside Claude Code (OpenCode, Gemini): each name
 in agy-bin that links here refuses what owner-guard.py refuses for the Claude bots, and passes the rest
 to the real command. The rule: no mail and no publishing without their card;
 pushing to GitHub and updating the website are fine.
@@ -10,6 +10,19 @@ import sys
 
 name = os.path.basename(sys.argv[0])
 args = sys.argv[1:]
+# Rule 14 (STANDARDS.md): cat and the like never read a binary or a file over 1 MB into a session; the real
+# command runs for everything else, and for anything this cannot judge.
+if name in ('cat', 'less', 'more', 'base64', 'xxd', 'od', 'hexdump', 'strings'):
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('guards', os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'guards.py'))
+        guards = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guards)
+        told = guards.unreadable_command(__import__('shlex').join([name] + args), os.getcwd())
+    except Exception:
+        told = None
+    if told:
+        sys.exit(told)
 # Each command, and the subcommands of it that only the owner may approve (empty: all of it).
 OWNER_ONLY = {'sendmail': set(), 'mail': set(), 'mailx': set(), 'msmtp': set(), 'mutt': set(), 'swaks': set(),
               'eas': {'submit', 'update'}, 'npm': {'publish'}, 'pnpm': {'publish'}, 'twine': {'upload'},
