@@ -164,7 +164,9 @@
     },
     "extraArgs": [
      "--disallowedTools",
-     "Bash(git push:*),Bash(git merge:*),Bash(git rebase:*),Bash(git reset --hard:*),Bash(git clean:*),Bash(git worktree remove:*),Bash(rm -rf:*),Bash(sudo:*),Bash(npm publish:*),Bash(eas submit:*),Bash(gh:*)"
+     "Bash(git push:*),Bash(git rebase:*),Bash(git reset --hard:*),Bash(git clean:*),Bash(git worktree remove:*),Bash(rm -rf:*),Bash(sudo:*),Bash(npm publish:*),Bash(eas submit:*),Bash(gh:*)",
+     "--allowedTools",
+     "Bash(git merge:*),Bash(git fetch:*),Bash(git merge --abort)"
     ],
     "graceSec": 15,
     "instructionsFilePath": "{{home}}/.botyard/crew/claude-builder.md",
@@ -504,7 +506,9 @@
     },
     "extraArgs": [
      "--disallowedTools",
-     "Bash(git push:*),Bash(git merge:*),Bash(git rebase:*),Bash(git reset --hard:*),Bash(git clean:*),Bash(git worktree remove:*),Bash(rm -rf:*),Bash(sudo:*),Bash(npm publish:*),Bash(eas submit:*),Bash(gh:*)"
+     "Bash(git push:*),Bash(git rebase:*),Bash(git reset --hard:*),Bash(git clean:*),Bash(git worktree remove:*),Bash(rm -rf:*),Bash(sudo:*),Bash(npm publish:*),Bash(eas submit:*),Bash(gh:*)",
+     "--allowedTools",
+     "Bash(git merge:*),Bash(git fetch:*),Bash(git merge --abort)"
     ],
     "graceSec": 15,
     "instructionsFilePath": "{{home}}/.botyard/crew/senior-builder.md",
