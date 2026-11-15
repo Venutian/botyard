@@ -7,6 +7,9 @@ or a write counts as a change and starts the count again, so re-running a test a
 loop. At REPEATS identical calls the call is refused, and the bot is told why, so it changes its
 approach or ends the step and reports.
 
+Payload and long commands (guards.py): a read of a binary or of a file over 1 MB is refused, and so is a
+foreground command that asks for more than 5 minutes or runs the heavy-job launcher in the foreground.
+
 Waits: a wait is judged by what the command says (waits.py), not by its text repeating, so a poll whose
 number changes each time is seen like any other. A loop with no end, one long wait, or more waiting than
 a run's budget is refused, and the bot is told how to wait without spending its run: start the job
@@ -22,6 +25,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import botyard_home  # noqa: E402
+import guards  # noqa: E402
 import waits  # noqa: E402
 
 REPEATS = 5
@@ -45,6 +49,12 @@ def check(event, state):
         calls.clear()
         return None
     given = event.get('tool_input') or {}
+    # STANDARDS.md rules 14 and 16: nothing binary or huge is read whole, and nothing long runs in the foreground.
+    told = guards.unreadable(tool, given, event.get('cwd'))
+    if not told and tool == 'Bash':
+        told = guards.too_slow(given)
+    if told:
+        return told
     if tool == 'Bash' and isinstance(given, dict):
         why, added = waits.judge(given.get('command'), state.get('waited', 0), given.get('run_in_background'))
         if why:
