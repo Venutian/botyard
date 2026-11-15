@@ -38,6 +38,11 @@ DENY_ALWAYS = ','.join([
     'Bash(git clean:*)', 'Bash(git worktree remove:*)', 'Bash(rm -rf:*)', 'Bash(sudo:*)',
     'Bash(npm publish:*)', 'Bash(eas submit:*)', 'Bash(gh:*)',
 ])
+# A Claude bot that builds (role builder, free to edit) works in its job's own worktree and branch, and
+# must be able to bring another branch into it (a merge job, or catching up with main). It may merge,
+# fetch and abort a merge there; every other deny stays, and push is still blocked for good by no_push().
+MERGE = 'Bash(git merge:*)'
+ALLOW_MERGE = ','.join([MERGE, 'Bash(git fetch:*)', 'Bash(git merge --abort)'])
 DENY_REVIEW = DENY_ALWAYS + ',Edit,Write,NotebookEdit,Bash(git commit:*)'
 
 # Every Antigravity model the plan offers, in the order a bot falls back on them after its own: all
@@ -286,6 +291,15 @@ class CrewSet:
         return {'GIT_CONFIG_GLOBAL': plain(f'{safe}/gitconfig'), 'GH_CONFIG_DIR': plain(f'{safe}/gh-empty'),
                 'GIT_TERMINAL_PROMPT': plain('0')}
 
+    def claude_tools(self, spec, may_not):
+        """The tool rules of a Claude bot: --disallowedTools, and for a builder that may edit, the merge allow too."""
+        if 'edit' in may_not:
+            return ['--disallowedTools', DENY_REVIEW]
+        if spec.get('role') == 'builder':
+            deny = ','.join(d for d in DENY_ALWAYS.split(',') if d != MERGE)
+            return ['--disallowedTools', deny, '--allowedTools', ALLOW_MERGE]
+        return ['--disallowedTools', DENY_ALWAYS]
+
     def config(self, spec, free_model=None):
         """The engine's settings for a bot on its AI."""
         p = self.places
@@ -301,7 +315,7 @@ class CrewSet:
             config = {'engine': 'cli', 'command': f'{p.crew}/claude-bot.sh', 'cwd': cwd, 'model': spec['model'], 'effort': spec['effort'],
                       'maxTurnsPerRun': spec['turns'] or 150, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslySkipPermissions': True,
-                      'extraArgs': ['--disallowedTools', DENY_REVIEW if 'edit' in may_not else DENY_ALWAYS],
+                      'extraArgs': self.claude_tools(spec, may_not),
                       'env': {**self.no_push(), **path_env}}
         elif ai == 'codex':
             # CODEX_HOME is the bots' own: connected apps (mail, GitHub, calendar) are off in its config.toml.
