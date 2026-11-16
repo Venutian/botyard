@@ -218,7 +218,7 @@ class CrewSet:
 
     # ── a bot on an AI ───────────────────────────────────────────────────────────────
     # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
-    # Codex, Claude) for its work: its "fallbacks" are for a person to ask for on purpose, never for a script.
+    # Codex, Claude) for its work: build() refuses, and its "fallbacks" are for a person to ask for on purpose.
     paid_by_hand = False
 
     def on(self, slug, ai=None):
@@ -227,8 +227,6 @@ class CrewSet:
         ai = ai or spec['ai']
         if ai == spec['ai']:
             return spec
-        if spec['ai'] == 'free' and not self.paid_by_hand:
-            raise PaidEngine(f"{spec['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         over = {**FALLBACK.get(ai, {}), **spec['fallbacks'].get(ai, {})}
         if ai == 'gemini' and 'model' not in over:
             over['model'] = GEMINI_MODELS.get(spec['model'], ANTIGRAVITY[0])
@@ -374,6 +372,9 @@ class CrewSet:
 
     def build(self, slug, ai=None, free_model=None):
         """Everything the seeder needs for one bot on an AI."""
+        own = self.spec(slug)
+        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand:
+            raise PaidEngine(f"{own['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         spec = self.on(slug, ai)
         return {'slug': slug, 'name': spec['name'], 'role': ROLES[spec['role']], 'title': spec['title'], 'caps': spec['does'],
                 'ai': spec['ai'], 'adapter': AIS[spec['ai']], 'config': self.config(spec, free_model),
