@@ -28,3 +28,19 @@ test('projects come in the ranked order, unranked ones after in their own order'
   // A ranked name with no project is simply skipped.
   assert.deepEqual(rankProjects(projects, ['Gone', 'D']).map((p) => p.name), ['D', 'A', 'B', 'C'])
 })
+
+test('a save keeps the keys it does not own, such as capFloor, in their place', () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'floor-'))
+  fs.writeFileSync(path.join(folder, 'guard.json'), JSON.stringify({ enabled: false, capFloor: 4, limit: 9, extra: { a: 1 } }))
+  writeGuard(folder, { ranked: ['A'] })
+  let file = JSON.parse(fs.readFileSync(path.join(folder, 'guard.json'), 'utf8'))
+  assert.equal(file.capFloor, 4)
+  assert.deepEqual(file.extra, { a: 1 })
+  assert.deepEqual(file.ranked, ['A'])
+  writeGuard(folder, { enabled: true, limit: 5, weekCeiling: 0.8, leadCeiling: 0.9, shelved: ['S'], ranked: ['B'], retired: ['R'] })
+  file = JSON.parse(fs.readFileSync(path.join(folder, 'guard.json'), 'utf8'))
+  assert.equal(file.capFloor, 4)
+  assert.deepEqual(file.extra, { a: 1 })
+  assert.deepEqual(Object.keys(file).slice(0, 4), ['enabled', 'capFloor', 'limit', 'extra'])
+  assert.equal(file.limit, 5)
+})
