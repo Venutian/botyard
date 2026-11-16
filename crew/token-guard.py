@@ -55,7 +55,15 @@ def claude_week():
     return claude_reading().get('week', 0.0)
 
 
-def pace(reading, now=None, ceiling=WEEK_CEILING):
+def cap_floor(settings):
+    """The fewest sessions the owner lets the pace allow (capFloor in guard.json). Default 1, never above the maximum."""
+    value = (settings or {}).get('capFloor')
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 1
+    return min(MOST_SESSIONS, max(1, int(value)))
+
+
+def pace(reading, now=None, ceiling=WEEK_CEILING, floor=1):
     """Moves the session cap one step an hour: down while the week is spent faster than the share per hour
     that lasts to the reset, up while it is spent much slower. The rate includes the owner's own Claude."""
     now = now or time.time()
@@ -68,13 +76,14 @@ def pace(reading, now=None, ceiling=WEEK_CEILING):
     target = max(0.0, ceiling - week) / max(1.0, (resets - now) / 3600)
     early = [x for x in samples if now - x[0] >= RATE_WINDOW * 0.66]
     rate = (week - early[-1][1]) / ((now - early[-1][0]) / 3600) if early else None
-    cap, moved = old.get('cap', 2), old.get('moved', 0)
+    floor = cap_floor({'capFloor': floor})
+    cap, moved = max(floor, old.get('cap', 2)), old.get('moved', 0)
     if rate is not None and now - moved >= STEP_EVERY:
-        if rate > target * 1.15 and cap > 1:
+        if rate > target * 1.15 and cap > floor:
             cap, moved = cap - 1, now
         elif rate < target * 0.75 and cap < MOST_SESSIONS:
             cap, moved = cap + 1, now
-    state = {'cap': cap, 'moved': moved, 'week': week, 'perHourAllowed': target, 'perHourNow': rate,
+    state = {'cap': cap, 'floor': floor, 'moved': moved, 'week': week, 'perHourAllowed': target, 'perHourNow': rate,
              'resets': resets, 'at': now, 'samples': samples}
     with open(PACE, 'w') as f:
         json.dump(state, f)
@@ -166,7 +175,7 @@ def main():
     over_tokens = bool(settings.get('enabled')) and settings.get('limit', 0) > 0 and used >= settings['limit']
     reading = claude_reading()
     week = reading.get('week', 0.0)
-    pace(reading, ceiling=week_ceiling)
+    pace(reading, ceiling=week_ceiling, floor=cap_floor(settings))
     fable = fable_week()
     # While the crew runs on the owner's Fable allowance, Claude's week is not what limits it.
     over = over_tokens or (week >= week_ceiling and not fable)
