@@ -17,7 +17,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { EngineError as Refusal, call, companyId, crewOf, engineBase, orElse } from './engine.mjs'
+import { EngineError as Refusal, call, companyId, crewOf, engineBase, orElse, refOf } from './engine.mjs'
 import { forgetReads } from './crew.mjs'
 import * as homes from './home.mjs'
 import { devicesFile, readDevices } from './devices.mjs'
@@ -756,7 +756,7 @@ export async function firstRun({ file = '', devices = devicesFile(), ...options 
     crew: crew.map((a) => ({ id: a.id, name: a.name, paused: a.status === 'paused' })),
     projects: live.map((p) => ({ id: p.id, name: p.name })),
     archived: projects.filter((p) => p.archivedAt).map((p) => ({ id: p.id, name: p.name })),
-    firstJob: work[0] ? { id: work[0].id, ref: work[0].identifier || '', title: work[0].title || '' } : null,
+    firstJob: work[0] ? { id: work[0].id, ref: refOf(work[0]), title: work[0].title || '' } : null,
   }
 }
 

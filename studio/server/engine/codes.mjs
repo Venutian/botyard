@@ -34,7 +34,8 @@ export function engineCode(store, ref) {
   if (!found) return ref
   const letters = found[1].toUpperCase()
   const prefix = companyPrefix(store)
-  if (!prefix || letters === prefix.toUpperCase()) return ref
+  if (!prefix) return ref
+  if (letters === prefix.toUpperCase()) return `${prefix}-${found[2]}`
   const known = letters === NO_PROJECT_CODE || store.objects('SELECT raw FROM projects').some((p) => p.code === letters)
   return known ? `${prefix}-${found[2]}` : ref
 }

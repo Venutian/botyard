@@ -119,6 +119,11 @@ export function answer(store, request = {}, options = {}) {
   // A job named by its project's letters (BAL-326) is the job the engine knows as NGE-326.
   const asked = { ...request }
   if (typeof asked.url === 'string') asked.url = asked.url.replace(/^([^?#]*)/, (path) => path.split('/').map((part) => { try { return /^[A-Za-z][A-Za-z0-9]*-\d+$/.test(part) ? engineCode(store, part) : part } catch { return part } }).join('/'))
+  if (typeof asked.url === 'string' && asked.url.includes('?')) {
+    const at = new URL(asked.url, 'http://engine.local')
+    for (const key of ['parentId', 'parentIssueId']) if (at.searchParams.has(key)) { const code = engineCode(store, at.searchParams.get(key)); const job = store.row('SELECT id FROM jobs WHERE identifier = ?', String(code).toUpperCase()); at.searchParams.set(key, job ? job.id : code) }
+    asked.url = at.pathname + at.search
+  }
   if (asked.body && typeof asked.body === 'object') asked.body = engineBody(store, asked.body)
   const out = answerOne(store, asked, options)
   if (out.body && typeof out.body === 'object') out.body = withDisplay(store, out.body)

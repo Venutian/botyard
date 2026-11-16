@@ -144,3 +144,13 @@ test('a new project that is given no code gets letters from its name, and no two
   assert.equal(new Set(codes).size, codes.length)
   await s.engine.stop()
 })
+
+test('a job named by its code in a query or in lower-case engine letters is found', async () => {
+  const s = await yard()
+  const n = s.mine.identifier.split('-')[1]
+  const child = (await s.call('POST', `/api/companies/${s.company.id}/issues`, { title: 'Child', parentId: s.mine.id })).body
+  const kids = (await s.call('GET', `/api/companies/${s.company.id}/issues?parentId=BAL-${n}`)).body
+  assert.deepEqual(kids.map((k) => k.id), [child.id])
+  assert.equal((await s.call('GET', `/api/issues/${s.mine.identifier.toLowerCase()}`)).body.id, s.mine.id)
+  await s.engine.stop()
+})

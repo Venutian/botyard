@@ -589,7 +589,7 @@ export async function addJob({ title, description = '', projectId, botId, priori
     method: 'POST',
     body: { title: name, description: description.trim(), status: 'todo', priority, assigneeAgentId: owner.id, ...(projectId ? { projectId } : {}) },
   })
-  return { id: issue.id, ref: issue.identifier || '' }
+  return { id: issue.id, ref: refOf(issue) }
 }
 
 export async function addComment(jobId, text, options) {
