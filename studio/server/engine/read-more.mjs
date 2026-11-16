@@ -6,6 +6,7 @@
  *
  * Each answer has the shape the map reads, and no more than the map reads.
  */
+import { displayOf } from './codes.mjs'
 import { instructionsBundle, instructionsDiff, instructionsFile, instructionsHistory, instructionsPage } from './bots.mjs'
 import { blockers, inbox, jobContext, products, settings } from './extras.mjs'
 import { Refused } from './write.mjs'
@@ -27,7 +28,7 @@ export function attention(store, companyId, { now = Date.now() } = {}) {
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', card.issueId)
     // A card in a conversation is shown in that conversation, not in this feed.
     if (!job || job.conversationAgentId || ['done', 'cancelled'].includes(job.status)) continue
-    items.push({ companyId, sourceKind: 'issue_thread_interaction', subject: { kind: 'interaction', id: card.id, companyId, title: card.title || 'A bot asks you', identifier: job.identifier, status: 'pending', metadata: { issueId: job.id, kind: card.kind } }, whyNow: `${job.identifier} is waiting for your answer.`, inlineResolvable: true })
+    items.push({ companyId, sourceKind: 'issue_thread_interaction', subject: { kind: 'interaction', id: card.id, companyId, title: card.title || 'A bot asks you', identifier: job.identifier, status: 'pending', metadata: { issueId: job.id, kind: card.kind } }, whyNow: `${displayOf(store, job.identifier)} is waiting for your answer.`, inlineResolvable: true })
   }
   const seen = new Set()
   const names = new Map(store.rows('SELECT id, name FROM agents').map((a) => [a.id, a.name]))
@@ -153,7 +154,8 @@ export function search(store, companyId, query = {}) {
     if (statuses.length && !statuses.includes(row.status)) continue
     if (query.projectId && row.project_id !== query.projectId) continue
     if (query.assigneeAgentId && row.assignee_agent_id !== query.assigneeAgentId) continue
-    const head = `${row.identifier} ${row.title}`.toLowerCase()
+    const shown = displayOf(store, row.identifier)
+    const head = `${row.identifier} ${shown} ${row.title}`.toLowerCase()
     const body = String(row.description || '').toLowerCase()
     let said = null
     const inSaid = () => (said ??= store.rows('SELECT body FROM comments WHERE job_id = ? AND deleted_at IS NULL', row.id).map((c) => String(c.body || '')).join('\n').toLowerCase())
@@ -161,7 +163,7 @@ export function search(store, companyId, query = {}) {
     const inTitle = words.every((w) => head.includes(w))
     const where = inTitle ? row.title : body.includes(words[0]) ? String(row.description) : said ? store.rows('SELECT body FROM comments WHERE job_id = ? AND deleted_at IS NULL', row.id).map((c) => String(c.body || '')).find((b) => b.toLowerCase().includes(words[0])) || row.title : row.title
     const at = Math.max(0, where.toLowerCase().indexOf(words[0]) - 60)
-    results.push({ id: row.id, type: 'issue', score: inTitle ? 2 : 1, title: `${row.identifier} ${row.title}`, snippet: inTitle ? row.title : `${at ? '...' : ''}${where.slice(at, at + 200).replace(/\s+/g, ' ')}`, issue: JSON.parse(row.raw) })
+    results.push({ id: row.id, type: 'issue', score: inTitle ? 2 : 1, title: `${shown} ${row.title}`, snippet: inTitle ? row.title : `${at ? '...' : ''}${where.slice(at, at + 200).replace(/\s+/g, ' ')}`, issue: JSON.parse(row.raw) })
   }
   results.sort((a, b) => b.score - a.score)
   return { query: String(query.q), scope: 'issues', limit, offset, results: results.slice(offset, offset + limit), zeroResults: !results.length, hasMore: offset + limit < results.length }

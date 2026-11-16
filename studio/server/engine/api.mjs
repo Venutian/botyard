@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { addProduct, checkout, declineCard, noInvites, noSuch, patchSettings, release } from './extras.mjs'
+import { engineBody, engineCode, withDisplay } from './codes.mjs'
 import { attach, fileOf, fileOfForm } from './files.mjs'
 import { handle } from './http.mjs'
 import { more } from './read-more.mjs'
@@ -114,7 +115,17 @@ function runLog(store, runId, query, { dataDir }) {
  * `raw` is the body's own bytes, for an upload. A file is answered as `{ status, file }`.
  * @returns {{ status: number, body?: unknown, file?: { path: string, type: string, name: string } }}
  */
-export function answer(store, { method = 'GET', url = '/', headers = {}, body = {}, raw = null } = {}, { dataDir, now = Date.now(), actor: known = null } = {}) {
+export function answer(store, request = {}, options = {}) {
+  // A job named by its project's letters (BAL-326) is the job the engine knows as NGE-326.
+  const asked = { ...request }
+  if (typeof asked.url === 'string') asked.url = asked.url.replace(/^([^?#]*)/, (path) => path.split('/').map((part) => { try { return /^[A-Za-z][A-Za-z0-9]*-\d+$/.test(part) ? engineCode(store, part) : part } catch { return part } }).join('/'))
+  if (asked.body && typeof asked.body === 'object') asked.body = engineBody(store, asked.body)
+  const out = answerOne(store, asked, options)
+  if (out.body && typeof out.body === 'object') out.body = withDisplay(store, out.body)
+  return out
+}
+
+function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, raw = null } = {}, { dataDir, now = Date.now(), actor: known = null } = {}) {
   const verb = String(method).toUpperCase()
   let at
   try { at = new URL(url, 'http://engine.local') } catch { return { status: 400, body: { error: 'Not a path' } } }

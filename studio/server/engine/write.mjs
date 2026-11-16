@@ -132,7 +132,7 @@ export function createJob(store, companyId, body = {}, { now = Date.now(), actor
   const job = store.tx(() => {
     const code = nextCode(store, company)
     const made = {
-      id: randomUUID(), companyId, projectId: body.projectId || null, parentId: body.parentId || null,
+      id: randomUUID(), companyId, projectId: body.projectId || null, parentId: body.parentId ? jobOf(store, body.parentId).id : null,
       title, description: text(body.description), status, priority: PRIORITIES.has(body.priority) ? body.priority : 'medium',
       assigneeAgentId: body.assigneeAgentId || null, assigneeUserId: null,
       createdByAgentId: actor?.agent || null, createdByUserId: actor?.agent ? null : actor?.user || 'local-board',
