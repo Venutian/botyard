@@ -52,7 +52,11 @@ export function readGuard(folder) {
 /** Only what is sent changes: the phone sets the token limit, the map the ceilings too. */
 export function writeGuard(folder, { enabled, limit, weekCeiling, leadCeiling, shelved, ranked, retired } = {}) {
   const now = readGuard(folder)
+  // Keys this function does not own (capFloor and any later ones) stay exactly as they were, in order.
+  const existing = readJson(path.join(folder, 'guard.json'))
+  const kept = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}
   const clean = {
+    ...kept,
     enabled: enabled === undefined ? now.enabled : Boolean(enabled),
     limit: limit === undefined ? now.limit : Math.min(MAX_LIMIT, Math.max(0, Math.round(Number(limit) || 0))),
     weekCeiling: share(weekCeiling, now.weekCeiling),
