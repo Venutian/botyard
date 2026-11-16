@@ -172,6 +172,31 @@ test('a changed server file is the one that answers next', async () => {
   } finally { y.done() }
 })
 
+test('a changed helper module is loaded fresh with its page, without a restart', async () => {
+  const y = yard()
+  try {
+    const dir = y.page('notes', { title: 'Notes', script: 'page.js', server: 'server.mjs' }, {
+      'page.js': '',
+      'server.mjs': "import { one } from './lib/helper.mjs'\nexport default () => ({ body: { v: one() } })",
+      'lib/helper.mjs': 'export const one = () => 1',
+    })
+    await served(y.env, async (get) => {
+      assert.deepEqual(await (await get('/api/studio/own/notes/api/')).json(), { v: 1 })
+      assert.deepEqual(await (await get('/api/studio/own/notes/api/')).json(), { v: 1 }, 'unchanged stays as it was')
+      fs.writeFileSync(path.join(dir, 'server.mjs'), "import { two } from './lib/helper.mjs'\nexport default () => ({ body: { v: two() } })")
+      fs.writeFileSync(path.join(dir, 'lib/helper.mjs'), 'export const two = () => 2')
+      const later = new Date(Date.now() + 5000)
+      fs.utimesSync(path.join(dir, 'lib/helper.mjs'), later, later)
+      assert.deepEqual(await (await get('/api/studio/own/notes/api/')).json(), { v: 2 })
+      // Only the helper changes: the page's own file is untouched.
+      fs.writeFileSync(path.join(dir, 'lib/helper.mjs'), 'export const two = () => 3')
+      const later2 = new Date(Date.now() + 10000)
+      fs.utimesSync(path.join(dir, 'lib/helper.mjs'), later2, later2)
+      assert.deepEqual(await (await get('/api/studio/own/notes/api/')).json(), { v: 3 })
+    })
+  } finally { y.done() }
+})
+
 test('the sample yard shows none of this computer\'s own pages', async () => {
   const y = yard()
   try {
