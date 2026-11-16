@@ -4,7 +4,7 @@ import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
 import { rankProjects } from './rank.js'
-import { botScreen, botsScreen, editSummary, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
+import { botScreen, botsScreen, editSummary, improvementsScreen, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
 import { FeedView, feedFrameHtml } from './run-feed.js'
 import { usageHtml } from './usage.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
@@ -78,6 +78,7 @@ const DOCK = [
   { id: 'bots', name: 'Crew', icon: 'bots', screen: true, group: 'crew', title: 'The crew: who runs on what, and how their runs go', key: '4' },
   { id: 'chats', name: 'Chats', icon: 'chat', screen: true, group: 'crew', key: '5' },
   { id: 'runs', name: 'Runs', icon: 'runs', screen: true, group: 'crew', key: '6' },
+  { id: 'improvements', name: 'Improvements', icon: 'wrench', screen: true, group: 'crew', title: 'What the audits found worth improving, and who is on it' },
   { id: 'library', name: 'Library', icon: 'book', screen: true, group: 'make', title: 'What the crew made, and its skills', key: '7' },
   { id: 'routines', name: 'Routines', icon: 'clock', screen: true, group: 'make', title: 'Routines and helpers', key: '8' },
   { id: 'setup', name: 'Setup', icon: 'wrench', screen: true, group: 'setup', title: 'What this studio needs: AI sign-ins, keys, git' },
@@ -1703,6 +1704,7 @@ setView(view) {
     if (id === 'bots') return void this.openBots()
     if (id === 'runs') return void this.openRuns()
     if (id === 'models') return void this.openMoney()
+    if (id === 'improvements') return void this.openImprovements()
     if (id === 'library') return void this.openLibrary('made')
     const screen = this.view?.screens?.find((s) => s.id === id)
     if (!screen) return
@@ -2364,6 +2366,7 @@ setView(view) {
     if (act === 'open-run') { this._go(() => this.openRun(id)); return true }
     if (act === 'open-job') { this._go(() => this.openJob(id)); return true }
     if (act === 'models') { this._go(() => this.openMoney()); return true }
+    if (act === 'improve-filter') { this._improve = el.dataset.status || ''; this.openImprovements(); return true }
     if (act === 'bot-runs') { this._runs = { view: 'runs', filter: { bot: id, status: '' }, page: 0 }; this._go(() => this.openRuns()); return true }
     if (act === 'talk') { this.actions.pickBot(id); return true }
     if (act === 'runs-view') { this._runs.view = el.dataset.view; this._runs.page = 0; this._loadRuns(); return true }
@@ -2541,6 +2544,13 @@ setView(view) {
       data = null
       await new Promise((go) => setTimeout(go, document.hidden ? 8000 : 2500))
     }
+
+  async openImprovements() {
+    this._improve = this._improve || ''
+    this._openSheet('improvements', 'Improvements', 'What the audits found worth improving, and who is on it', { wide: true })
+    this._reopen = () => this.openImprovements()
+    const seq = ++this._sheetSeq
+    await this._fill('improvements', seq, () => call('/api/studio/improvements'), (d) => improvementsScreen(d, this._improve))
   }
 
   async openMoney() {

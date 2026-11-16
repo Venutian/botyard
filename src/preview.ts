@@ -276,6 +276,14 @@ const projectPage = (id: string) => {
     lines: manager.lines.filter((l) => l.projectId === id),
   };
 };
+const improvements = {
+  items: [
+    { id: 'IMP-3', title: 'Check reports name no commit', path: 'own/review-guard.py', evidence: 'NGE-931 and NGE-944 reports had no COMMIT line, so the merge card named none.', fix: 'Refuse a report whose last three lines are missing.', who: 'Freya The Checker', status: 'new', job: '', added: 1_795_000_000 },
+    { id: 'IMP-2', title: 'Run logs are read whole', path: 'crew/claude-bot.sh', evidence: 'A 4 MB log was read in one call.', fix: 'Pipe it through ngen-digest.', who: 'Tony Yayo', status: 'accepted', job: 'NGE-961', added: 1_794_000_000 },
+    { id: 'IMP-1', title: 'Old briefs stay in the folder', path: 'briefs/tony', evidence: '212 files, 190 older than a month.', fix: 'Move them to old-YYYY-MM.', who: 'Freya The Checker', status: 'done', job: 'NGE-955', added: 1_793_000_000 },
+  ],
+  counts: { new: 1, accepted: 1, done: 1, rejected: 0 },
+};
 const spend = {
   bots: crewBots.bots.filter((b) => b.tokensWeek).map((b) => ({ id: b.id, name: b.name, engine: b.engine, model: b.model, today: b.tokensToday, tokens: b.tokensWeek, cached: 0, cents: 0, runs: 20, waste: b.waste ? 360_000 : 0 })),
   models: [{ name: 'DeepSeek V4.1 Flash, free', tokens: 6_400_000 }, { name: 'Nemotron 3.5 Super VL, free', tokens: 2_100_000 }, { name: 'Sonnet 5.5', tokens: 1_900_000 }].map((m) => ({ ...m, cached: 0, cents: 0, runs: 10 })),
@@ -509,6 +517,7 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (route.startsWith('/runs/')) return { ...runs[1], model: 'DeepSeek V4.1 Flash, free', started: 'Given a job', trimmed: true, log: [{ kind: 'said', text: 'Reading the save loader first.' }, { kind: 'tool', text: 'bash: npm test -- saves' }, { kind: 'error', text: 'Rate limit exceeded: free-models-per-day' }] };
   if (route === '/activity') return { items: [{ at: ago(4), who: 'Reviewer', what: 'commented on', to: '', job: map, kind: 'commented', times: 3 }, { at: ago(18), who: 'Builder', what: 'had a run fail on', to: '', job: saves, kind: 'failed', run: 'u2', times: 1 }, { at: ago(40), who: 'Lead', what: 'handed on', to: 'Builder', job: map, kind: 'delegated', times: 1 }], total: 3, page: 0, pages: 1, since: null };
   if (route === '/spend') return spend;
+  if (route === '/improvements') return improvements;
   if (route === '/jobs' && method === 'GET') {
     const pile = /pile=(\w+)/.exec(path)?.[1] ?? 'active';
     const rows = pile === 'done' ? [jobRow('j5', 'LH-29', 'Write the Harbour store text', 'done', 'Done', 'Builder', 'Harbour', 300)] : pile === 'backlog' ? [] : jobRows;

@@ -613,6 +613,32 @@ export async function moneyView({ folder = crewFolder(), now = Date.now(), ...op
   }
 }
 
+// ── improvements ───────────────────────────────────────────────────────────────────
+
+export const IMPROVEMENT_STATES = ['new', 'accepted', 'done', 'rejected']
+
+/**
+ * What Freya's audits and Tony found worth improving: a plain file, improvements.json in the crew folder,
+ * written by own/improvements.py. This only reads it, and answers the same list to the PC and the phone.
+ */
+export function improvementsView({ folder = crewFolder() } = {}) {
+  const raw = readJson(path.join(folder, 'improvements.json'), [])
+  const order = new Map(IMPROVEMENT_STATES.map((name, i) => [name, i]))
+  const items = raw.filter((r) => r && typeof r === 'object' && r.title).map((r, i) => ({
+    id: String(r.id || `IMP-${i + 1}`),
+    title: cut(r.title, 200),
+    path: cut(r.path, 200),
+    evidence: cut(r.evidence, 600),
+    fix: cut(r.fix, 400),
+    who: cut(r.who, 60),
+    status: order.has(r.status) ? r.status : 'new',
+    job: cut(r.job, 40),
+    added: Number(r.added) || 0,
+  })).sort((a, b) => order.get(a.status) - order.get(b.status) || b.added - a.added)
+  const counts = Object.fromEntries(IMPROVEMENT_STATES.map((name) => [name, items.filter((i) => i.status === name).length]))
+  return { items, counts }
+}
+
 // ── what the owner can change ──────────────────────────────────────────────────────
 
 const botPath = (botId) => {

@@ -37,6 +37,7 @@ export type Route =
   | { name: 'changes'; id: string }
   | { name: 'routines' }
   | { name: 'models' }
+  | { name: 'improvements' }
   | { name: 'devices' }
   | { name: 'new' }
   | { name: 'bot'; botId: string }
