@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { Ground, LIGHTS } from './ground.js'
 import { BAY_PAINTS, DEPOT_PAINT, DECK_TOP, buildBay, buildGate } from './bays.js'
-import { BAY_RADIUS, BAY_STEP, assign, centreOf, cornersOf, gateAt, places, ringsUsed, standAt } from './layout.js'
+import { BAY_RADIUS, BAY_STEP, assign, centreOf, cornersOf, gateAt, places, remember, ringsUsed, standAt } from './layout.js'
 import { buildRobot } from '../robots/robot.js'
 import { specOf, stateOf } from '../robots/look.js'
 
@@ -59,8 +59,9 @@ export class Yard {
     this._last = view
     this.depot = view.depot || 'Depot'
     const names = view.projects.filter((n) => n !== this.depot)
-    const placed = assign(names, read())
-    keep(placed)
+    const before = read()
+    const placed = assign(names, before)
+    keep(remember(names, placed, before))
     const concrete = LIGHTS[this.hour].concrete
     const wanted = new Map([[this.depot, 0], ...Object.entries(placed)])
     let moved = false

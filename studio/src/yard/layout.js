@@ -79,6 +79,14 @@ export function assign(names, kept = {}) {
   return out
 }
 
+/**
+ * What to remember after a placing. An empty project list is a failed read, not a yard with
+ * nothing in it, so it must not wipe the places: every project would be re-placed by order.
+ */
+export function remember(names, placed, kept = {}) {
+  return names.length ? placed : kept
+}
+
 /** The outermost ring in use, for where the gate stands and how far the ground is dressed. */
 export function ringsUsed(placed) {
   return Math.max(1, ...Object.values(placed).map((at) => ALL[at].ring))
