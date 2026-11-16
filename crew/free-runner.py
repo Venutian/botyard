@@ -141,13 +141,36 @@ GONE = ('not available in your region', 'model is unavailable', 'model not found
         'no endpoints found', 'not a valid model', 'model does not exist')
 GONE_FOR = 30 * 86400
 # A provider's own daily cap on free use: every model of that provider is out until its day resets.
-PER_DAY = ('free-models-per-day', 'per day', 'daily limit')
+PER_DAY = ('free-models-per-day', 'per day', 'daily limit', 'daily')
+# STANDARDS.md rule 22: "quota" alone may be one model's; with one of these it speaks for the whole provider.
+WIDE = ('every model', 'all models', 'all free models', 'provider', 'account', 'free tier', 'free-tier')
 BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
+
+
+def provider_wide(text):
+    """True when an error names a cap on the whole provider (a day's count, a quota for every model), not one
+    model: STANDARDS.md rule 22. Such a cap sets every model of that provider aside."""
+    text = (text or '').lower()
+    return any(w in text for w in PER_DAY) or ('quota' in text and any(w in text for w in WIDE))
+
+
+# What each asked model last said, so a one-word ask refused for a provider's daily cap is understood as
+# one and sets the whole provider aside, instead of every model of it being asked in turn.
+SAID = {}
+
+
+def said(model, got):
+    """Why a model that was asked and did not answer is out: its words when they name a provider-wide cap."""
+    if got == 'gone':
+        return 'model is unavailable (asked before the switch)'
+    text = SAID.get(model) or ''
+    return text if provider_wide(text) else None
 
 
 def probe(opencode, model):
     """One word from the model, never from a cache: 'ok' when it answers, 'gone' when the provider says it
     can never serve us, else 'out' (its limit, or busy)."""
+    SAID.pop(model, None)
     try:
         out = subprocess.run([opencode, 'run', '-m', model, 'Reply with exactly: pong'], capture_output=True, text=True,
                              timeout=30, stdin=subprocess.DEVNULL, cwd='/tmp', env={**os.environ, 'PWD': '/tmp'})
@@ -155,6 +178,7 @@ def probe(opencode, model):
         return 'out'
     if 'pong' in out.stdout.lower():
         return 'ok'
+    SAID[model] = (out.stdout + ' ' + out.stderr)[-300:]
     return 'gone' if any(w in (out.stdout + out.stderr).lower() for w in GONE) else 'out'
 
 
@@ -167,17 +191,28 @@ def next_utc_day(now=None):
     return int(now // 86400 + 1) * 86400 + 300
 
 
+def provider_reset(fallback, model, now=None):
+    """When the model's provider turns its day over: free-limits knows it for the providers that publish it,
+    else the start of the next UTC day."""
+    try:
+        got = fallback.limits().reset_at(model, now)
+    except (AttributeError, TypeError):
+        got = None
+    return got or next_utc_day(now)
+
+
 def set_aside(fallback, bots, model, why):
     """Sets a model aside for as long as the reason lasts: a month when it can never serve us, the rest of
     the provider's day for its daily cap (every model of that provider), else what its history says."""
     text = (why or '').lower()
     if any(w in text for w in GONE):
         fallback.set_free_aside(bots, model, f'never serves this PC: {why}'[:200], until=int(time.time() + GONE_FOR))
-    elif any(w in text for w in PER_DAY):
+    elif provider_wide(text):
         provider = model.split('/')[0] + '/'
+        until = provider_reset(fallback, model)
         for m, _, _ in bots.free_list():
             if m.startswith(provider):
-                fallback.set_free_aside(bots, m, f'its provider\'s daily free cap: {why}'[:200], until=next_utc_day())
+                fallback.set_free_aside(bots, m, f'its provider\'s daily free cap: {why}'[:200], until=until)
     else:
         fallback.set_free_aside(bots, model, (why or 'did not answer: its free limit, or the offer ended')[:200])
     return fallback.setup()
@@ -195,7 +230,7 @@ def next_working(fallback, bots, avoid_family=None, tries=4):
         if got == 'ok':
             fallback.limits().answered(nxt)
             return nxt, bots
-        bots = set_aside(fallback, bots, nxt, 'model is unavailable (asked before the switch)' if got == 'gone' else None)
+        bots = set_aside(fallback, bots, nxt, said(nxt, got))
     return None, bots
 
 
@@ -419,7 +454,7 @@ def main():
             break
         if got == 'out' and fallback.outage(bots, chosen):
             break
-        bots = set_aside(fallback, bots, chosen, 'model is unavailable' if got == 'gone' else None)
+        bots = set_aside(fallback, bots, chosen, said(chosen, got))
     if chosen and chosen != model:
         args, model = with_model(args, chosen, None), chosen
     claim(model)
@@ -545,7 +580,8 @@ def main():
             retried = 0
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
-        if code and failed and any(w in failed.lower() for w in GONE + PER_DAY + BUSY_WORDS):
+        wide = bool(code and failed and provider_wide(failed))
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS)):
             ran_out = True
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
             return code
@@ -553,6 +589,11 @@ def main():
         nxt, bots = next_working(fallback, bots, avoid_family=bots.free_family(model))
         if not nxt:
             note(f'The free builder ran out of free models mid-run on {botyard_home.run_var('JOB_ID', "?")[:8]}')
+            if wide:
+                # STANDARDS.md rule 22 (like rule 3): a provider's day is used up and no other provider answers. The
+                # run rests, it does not fail; fallback.py wakes the job again once a model answers.
+                sys.stderr.write(f'{model.split("/")[0]} has used up its free day and no other provider answers: resting, not failing.\n')
+                return 0
             sys.stderr.write('Every free model is out now; this run stops and is woken again when one answers.\n')
             return 1
         note(f'The free builder switched mid-run from {model} to {nxt}, same session')

@@ -45,6 +45,20 @@ PUBLISHED = (('opencode/longcat', '100 requests a day, which one long build can 
              ('openrouter/', '20 requests a minute and 1,000 a day shared by all its free models, new day at 01:00'))
 
 
+# Providers whose free allowance is one count for the whole key, and which turns over at 00:00 UTC (01:00 in
+# Sweden, the "new day at 01:00" above). STANDARDS.md rule 22: a daily cap names the provider, not the model.
+DAILY = ('openrouter/', 'cloudflare-workers-ai/')
+
+
+def reset_at(model, now=None):
+    """When the model's provider turns its free day over (epoch seconds, a few minutes past), or None when it
+    publishes no daily reset: the caller then uses the next day's start."""
+    now = time.time() if now is None else now
+    if not any(model.startswith(p) for p in DAILY):
+        return None
+    return int(now // 86400 + 1) * 86400 + 300
+
+
 def published(model):
     return next((text for start, text in PUBLISHED if model.startswith(start)), '')
 
