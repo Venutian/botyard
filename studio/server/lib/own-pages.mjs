@@ -19,6 +19,7 @@
  */
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { places } from './home.mjs'
@@ -116,10 +117,47 @@ function readBody(req) {
   })
 }
 
-/** The page's server file, loaded again when it has changed on the disk. */
+/** Newest change in a folder (its files, however deep) with the number of files, so a deleted file counts too. */
+function folderStamp(dir, depth = 0) {
+  let newest = 0, count = 0
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.isSymbolicLink()) continue
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) {
+      if (depth >= 6) continue
+      const sub = folderStamp(full, depth + 1)
+      newest = Math.max(newest, sub.newest); count += sub.count
+    } else if (e.isFile()) {
+      newest = Math.max(newest, Math.round(fs.statSync(full).mtimeMs)); count += 1
+    }
+  }
+  return { newest, count }
+}
+
+const COPIES = path.join(os.tmpdir(), `botyard-own-pages-${process.pid}`)
+
+/**
+ * The page's server file, loaded again, with every file it imports, when anything in the folder changed.
+ * Node keeps each imported file for good, so the folder is copied under a name that holds its newest
+ * change and loaded from there; older copies are deleted.
+ */
 async function handlerOf(page) {
-  const { mtimeMs } = await fsp.stat(page.server)
-  const mod = await import(`${pathToFileURL(page.server).href}?v=${Math.round(mtimeMs)}`)
+  const { newest, count } = folderStamp(page.folder)
+  const key = `${page.name}-${newest}-${count}`
+  const copy = path.join(COPIES, key)
+  if (!fs.existsSync(copy)) {
+    fs.mkdirSync(COPIES, { recursive: true })
+    const part = `${copy}.part-${process.hrtime.bigint()}`
+    await fsp.cp(page.folder, part, { recursive: true, filter: (f) => path.basename(f) !== 'node_modules' })
+    try { await fsp.rename(part, copy) } catch { await fsp.rm(part, { recursive: true, force: true }) }
+    for (const old of fs.readdirSync(COPIES)) {
+      if (old.startsWith(`${page.name}-`) && /^\d+-\d+$/.test(old.slice(page.name.length + 1)) && old !== key) {
+        await fsp.rm(path.join(COPIES, old), { recursive: true, force: true })
+      }
+    }
+  }
+  const file = path.join(copy, path.relative(page.folder, page.server))
+  const mod = await import(pathToFileURL(file).href)
   const handle = mod.default || mod.handle
   if (typeof handle !== 'function') throw new Error(`${page.name}'s server file exports no function`)
   return handle

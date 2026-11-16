@@ -50,6 +50,9 @@ with one of those is welcome, as long as it argues with the reason.
 - **No new dependency without a strong reason.** The service runs on Node's own modules and three.js.
 - **Tests come with the change**, and `npm test` passes. A fix is tested by the thing that was
   broken, not by a stand-in that could not have failed.
+- **Own pages reload fully.** A page in `$BOTYARD_HOME/pages/` is loaded from a copy of its folder
+  keyed by the newest change in it, so a change to any file (not only `server.mjs`) is live on the
+  next request with no restart. Keep it that way: never import a page's files straight from its folder.
 
 Before a pull request: `npm test` in `studio/`, the crew's tests if you touched `crew/`, and
 `node tools/release-check.mjs` from the top folder, which fails on anything personal, anything that
