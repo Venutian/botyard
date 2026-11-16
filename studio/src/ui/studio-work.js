@@ -64,6 +64,7 @@ export function jobScreen(job, { line, steps, cards = '', bot, editing = false, 
   const facts = [
     ['State', `<span class="state ${STATE_CLASS[job.status] || ''}">${esc({ in_progress: 'Working', in_review: 'To review', blocked: 'Blocked', todo: 'Waiting', backlog: 'Backlog', done: 'Done', cancelled: 'Cancelled' }[job.status] || job.status)}</span>${job.run?.live ? `<small>Running now${job.run.bot ? `, ${esc(job.run.bot)}` : ''}</small>` : job.run?.why ? `<small class="bad">${esc(job.run.why)}</small>` : ''}`],
     ['Who', esc(job.bot || 'Nobody yet') + `<small>${esc(PRIORITY[job.priority] || job.priority)} priority${job.project ? `, ${esc(job.project)}` : ''}</small>`],
+    ...(job.engineRef && job.engineRef !== job.ref ? [['Engine code', `<small>${esc(job.engineRef)}</small>`]] : []),
     ...(job.parent ? [['Part of', link(job.parent)]] : []),
     ...(job.blockedBy?.length ? [['Waits on', job.blockedBy.map((b) => `${link(b)} <span class="dim">${esc(b.state)}</span>`).join('<br>')]] : []),
     ...(job.blocks?.length ? [['Holds up', job.blocks.map(link).join('<br>')]] : []),

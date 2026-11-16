@@ -505,7 +505,7 @@ export async function activityPage({ page = 0, bot = '', ...options } = {}) {
   for (const span of timeline?.spans || []) {
     if (!FAILED.has(span.status) || (bot && span.actorId !== `agent:${bot}`)) continue
     const job = names.jobs.get(span.issueId)
-    items.push({ at: stamp(span.end || span.start), who: actors.get(span.actorId) || 'A bot', what: span.status === 'cancelled' ? 'had a run stopped on' : 'had a run fail on', to: '', job: job ? { id: job.id, ref: job.ref, title: job.title } : { id: span.issueId, ref: span.issueIdentifier || '', title: cut(plainTitle(withRefs(span.issueTitle || '')), 90) }, actor: span.actorId, issue: span.issueId, kind: 'failed', run: span.runId, times: 1 })
+    items.push({ at: stamp(span.end || span.start), who: actors.get(span.actorId) || 'A bot', what: span.status === 'cancelled' ? 'had a run stopped on' : 'had a run fail on', to: '', job: job ? { id: job.id, ref: job.ref, title: job.title } : { id: span.issueId, ref: withRefs(span.issueIdentifier || ''), title: cut(plainTitle(withRefs(span.issueTitle || '')), 90) }, actor: span.actorId, issue: span.issueId, kind: 'failed', run: span.runId, times: 1 })
   }
   items.sort((a, b) => b.at - a.at)
   const merged = []

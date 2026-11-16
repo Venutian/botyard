@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { NO_PROJECT_CODE, PROJECT_CODE } from './codes.mjs'
 import { Refused, note } from './write.mjs'
 
 const iso = (now) => new Date(now).toISOString()
@@ -26,6 +27,29 @@ function urlKeyFor(store, name, exceptId) {
     const taken = store.row('SELECT id FROM projects WHERE url_key = ?', key)
     if (!taken || taken.id === exceptId) return key
   }
+}
+
+/** A project's job letters from a request, checked: 2 to 6 capital letters, not taken, not the studio's own. null clears them. */
+function codeFrom(store, value, exceptId) {
+  if (value === null || value === '') return null
+  const code = typeof value === 'string' ? value.trim().toUpperCase() : ''
+  if (!PROJECT_CODE.test(code)) throw new Refused(400, 'A project code is 2 to 6 capital letters, like BAL')
+  const prefix = store.object('SELECT raw FROM company LIMIT 1')?.issuePrefix
+  if (code === NO_PROJECT_CODE || code === String(prefix || '').toUpperCase()) throw new Refused(400, 'That code is kept: it is the studio\'s own or the one for jobs with no project')
+  if (store.objects('SELECT raw FROM projects').some((p) => p.id !== exceptId && p.code === code)) throw new Refused(409, 'Another project already has that code')
+  return code
+}
+
+/** Letters for a new project that was not given any: its name's first three, then longer, then the last one stepped. */
+function codeFor(store, name) {
+  const letters = name.toUpperCase().replace(/[^A-Z]/g, '')
+  const prefix = String(store.object('SELECT raw FROM company LIMIT 1')?.issuePrefix || '').toUpperCase()
+  const taken = new Set(store.objects('SELECT raw FROM projects').map((p) => p.code).filter(Boolean))
+  const free = (c) => PROJECT_CODE.test(c) && !taken.has(c) && c !== prefix && c !== NO_PROJECT_CODE
+  const base = letters.padEnd(3, 'X')
+  for (let n = 3; n <= Math.min(6, base.length); n++) if (free(base.slice(0, n))) return base.slice(0, n)
+  for (const l of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (free(base.slice(0, 2) + l)) return base.slice(0, 2) + l
+  return null
 }
 
 /** Write the project with its folders as they are now, so its own page and every list agree. */
@@ -91,7 +115,7 @@ export function createProject(store, companyId, body = {}, { now = Date.now(), a
   return store.tx(() => {
     const project = {
       id: randomUUID(), companyId, goalId: null, name, description: text(body.description, 200_000) || null, status: body.status || 'in_progress', leadAgentId: null,
-      targetDate: null, color: body.color || null, icon: null, archivedAt: null, urlKey: urlKeyFor(store, name), goalIds: [], goals: [],
+      targetDate: null, color: body.color || null, icon: null, archivedAt: null, urlKey: urlKeyFor(store, name), code: body.code === undefined ? codeFor(store, name) : codeFrom(store, body.code, null), goalIds: [], goals: [],
       workspaces: [], primaryWorkspace: null, codebase: null, createdAt: iso(now), updatedAt: iso(now),
     }
     store.put('projects', project, { position: store.row('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM projects').n })
@@ -115,6 +139,7 @@ export function patchProject(store, id, body = {}, { now = Date.now(), actor } =
       next.urlKey = urlKeyFor(store, name, id)
     }
   }
+  if (body.code !== undefined) next.code = codeFrom(store, body.code, id)
   if (body.description !== undefined) next.description = text(body.description, 200_000)
   if (body.status !== undefined) next.status = text(body.status, 40)
   if (body.color !== undefined) { if (body.color !== null && !COLOR.test(body.color)) throw new Refused(400, 'A colour is written like #3366ff'); next.color = body.color }

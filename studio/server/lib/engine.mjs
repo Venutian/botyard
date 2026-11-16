@@ -113,13 +113,19 @@ const botView = (agent, liveAgents, looks) => ({
   ...(looks?.get(agent.id) ? { look: looks.get(agent.id).look } : {}),
 })
 
-/** A job's code as people read it: the engine's own, the studio's letters and the job's number (`LH-12`). */
+// The code each job is shown with, by its engine code, from every job this process has read.
+const SHOWN = new Map()
+
+/** A job's code as people read it: its project's letters and its number (`BAL-12`; `CREW-12` with no project). */
 export function refOf(issue) {
-  return issue?.identifier || ''
+  const own = issue?.identifier || ''
+  const shown = issue?.displayIdentifier || own
+  if (own) SHOWN.set(own, shown)
+  return shown
 }
 
-/** A message as it was written: the codes in it are already the ones people read. */
-export const withRefs = (text) => String(text ?? '')
+/** A message with the engine's job codes in it turned into the codes people read. */
+export const withRefs = (text) => String(text ?? '').replace(/\b[A-Z]{2,6}-\d+\b/g, (code) => SHOWN.get(code) || code)
 
 /**
  * A job's title as the owner reads it. The crew titles jobs for each other ("Check LH-468: Signal box art:
@@ -146,6 +152,7 @@ const isCheck = (issue) => /^Check [A-Z]+-\d+/.test(issue.title || '')
 const jobView = (issue, names, projects = new Map()) => ({
   id: issue.id,
   ref: refOf(issue, projects),
+  engineRef: issue.identifier || '',
   title: plainTitle(withRefs(issue.title)),
   status: issue.status,
   bot: names.get(issue.assigneeAgentId) || '',
@@ -582,7 +589,7 @@ export async function addJob({ title, description = '', projectId, botId, priori
     method: 'POST',
     body: { title: name, description: description.trim(), status: 'todo', priority, assigneeAgentId: owner.id, ...(projectId ? { projectId } : {}) },
   })
-  return { id: issue.id, ref: issue.identifier || '' }
+  return { id: issue.id, ref: refOf(issue) }
 }
 
 export async function addComment(jobId, text, options) {
