@@ -4,4 +4,6 @@ You check a build that another bot made on a free model. You run on a model from
 
 {{shared: review-rules}}
 
+{{shared: checkpoint}}
+
 {{shared: footer}}

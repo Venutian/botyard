@@ -121,6 +121,10 @@ class Places:
         return '~' + path[len(self.home):] if path == self.home or path.startswith(self.home + '/') else path
 
 
+class PaidEngine(ValueError):
+    """A script tried to put a free-model bot on a paid engine."""
+
+
 class CrewSet:
     def __init__(self, env=None, places=None, own=None, repo_dir=None):
         self.dir = repo_dir or botyard_home.source('bots')
@@ -213,6 +217,10 @@ class CrewSet:
         return out
 
     # ── a bot on an AI ───────────────────────────────────────────────────────────────
+    # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
+    # Codex, Claude) for its work: build() refuses, and its "fallbacks" are for a person to ask for on purpose.
+    paid_by_hand = False
+
     def on(self, slug, ai=None):
         """The bot's settings as they hold on `ai`: its own AI when none is given, else its "fallbacks"."""
         spec = self.spec(slug)
@@ -340,6 +348,8 @@ class CrewSet:
             config = {'command': f'{p.crew}/free-runner.py', 'cwd': cwd, 'model': model, 'variant': spec['effort'],
                       'timeoutSec': seconds, 'graceSec': 15, 'dangerouslySkipPermissions': True,
                       'env': {**self.no_push(), **guarded, **({'BOTYARD_GIT_ALLOW': plain('commit')} if builds else {})}}
+            # The runner tells a run over 45 minutes to write its state at 80% of its limit (STANDARDS.md rule 22).
+            config['env']['BOTYARD_RUN_MINUTES'] = plain(str(int(spec['minutes'])))
             if spec.get('checker') or spec['role'] == 'checker':
                 # A checker never judges a build on the model family that made it.
                 config['env']['BOTYARD_CHECKER'] = plain('1')
@@ -362,6 +372,9 @@ class CrewSet:
 
     def build(self, slug, ai=None, free_model=None):
         """Everything the seeder needs for one bot on an AI."""
+        own = self.spec(slug)
+        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand:
+            raise PaidEngine(f"{own['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         spec = self.on(slug, ai)
         return {'slug': slug, 'name': spec['name'], 'role': ROLES[spec['role']], 'title': spec['title'], 'caps': spec['does'],
                 'ai': spec['ai'], 'adapter': AIS[spec['ai']], 'config': self.config(spec, free_model),
