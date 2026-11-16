@@ -3,7 +3,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BAY_RADIUS, BAY_STEP, MAX_RING, assign, centreOf, cornersOf, gateAt, places, ringsUsed, standAt } from '../src/yard/layout.js'
+import { BAY_RADIUS, BAY_STEP, MAX_RING, assign, centreOf, cornersOf, gateAt, places, remember, ringsUsed, standAt } from '../src/yard/layout.js'
 
 const far = (a, b) => Math.hypot(a.x - b.x, a.z - b.z)
 
@@ -114,4 +114,33 @@ test('the gate lies beyond every bay of its ring, to the north', () => {
       assert.ok(gate.z < c.z - BAY_RADIUS, `ring ${r}: the gate (${gate.z}) is not beyond a bay at ${c.z}`)
     }
   }
+})
+
+test('a project that left (archived) frees its place, and a new one takes the first free place', () => {
+  const kept = assign(['Old', 'Income', 'Sandbox', 'Aldis'])
+  assert.deepEqual(kept, { Old: 1, Income: 2, Sandbox: 3, Aldis: 4 })
+  // Old and Income are archived; Baltis and Ballotta are new.
+  const now = assign(['Aldis', 'Sandbox', 'Baltis', 'Ballotta'], kept)
+  assert.equal(now.Aldis, 4, 'a project that stayed keeps its place')
+  assert.equal(now.Sandbox, 3)
+  assert.equal(now.Baltis, 1, 'the first freed place')
+  assert.equal(now.Ballotta, 2)
+  assert.equal(new Set(Object.values(now)).size, 4)
+})
+
+test('a yard of 14 projects puts each on its own place inside the rings', () => {
+  const names = Array.from({ length: 14 }, (_, i) => `P${i}`)
+  const placed = assign(names)
+  const at = Object.values(placed)
+  assert.equal(new Set(at).size, 14)
+  assert.ok(at.every((n) => n > 0 && n < places(MAX_RING).length))
+  // Existing places survive a new arrival.
+  const more = assign([...names, 'New'], placed)
+  for (const n of names) assert.equal(more[n], placed[n])
+})
+
+test('a failed read (no projects) does not wipe the remembered places', () => {
+  const kept = { A: 3, B: 5 }
+  assert.deepEqual(remember([], assign([], kept), kept), kept)
+  assert.deepEqual(remember(['A'], assign(['A'], kept), kept), { A: 3 })
 })
