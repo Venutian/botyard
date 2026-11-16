@@ -1,6 +1,6 @@
 """Who a bot's commits are signed as. Every bot, Claude or free, commits under its own first name
-(Fred, Freya, Bob, Chip, Gideon, Tony, Dana) with the studio's GitHub no-reply address as both author and
-committer, and no other address: the push check refuses anything else, and the owner's own address stays
+(Fred, Bob, Chip and the rest) with a GitHub no-reply address (BOTYARD_GIT_NOREPLY, else the global git user.email when it is one; with neither, nothing is set) as both author and
+committer, and no other address: the push check refuses anything else, and a personal address stays
 off GitHub. Git reads these four variables before any config, a `-c user.email=` or a `git config` the
 bot ran itself, so setting them once in the launcher decides it.
 
@@ -9,16 +9,30 @@ bot ran itself, so setting them once in the launcher decides it.
 import os
 import re
 import shlex
+import subprocess
 import sys
 
-NO_REPLY = os.environ.get('BOTYARD_GIT_NOREPLY') or '25855689+Venutian@users.noreply.github.com'
 SAFE = re.compile(r'@users\.noreply\.github\.com$')
 
 
+def no_reply(env=None):
+    """The one address commits may carry: BOTYARD_GIT_NOREPLY, else the global git user.email when it is a
+    GitHub no-reply address, else '' (nothing is set and git keeps whatever it has)."""
+    env = os.environ if env is None else env
+    given = (env.get('BOTYARD_GIT_NOREPLY') or '').strip()
+    if given:
+        return given if SAFE.search(given) else ''
+    try:
+        out = subprocess.run(['git', 'config', '--global', 'user.email'], capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    return out if SAFE.search(out) else ''
+
+
 def first_name(slug):
-    """'bob-the-builder' or 'Bob The Builder' becomes 'Bob'; nothing usable becomes 'nGen bot'."""
+    """'ada-the-builder' or 'Ada The Builder' becomes 'Ada'; nothing usable becomes 'bot'."""
     word = re.split(r'[^A-Za-z0-9]+', (slug or '').strip())[0]
-    return word.capitalize() if word else 'nGen bot'
+    return word.capitalize() if word else 'bot'
 
 
 def bot_slug(env=None):
@@ -30,14 +44,17 @@ def bot_slug(env=None):
     if settings:
         return os.path.basename(settings).split('.')[0]
     if env.get('BOTYARD_CHECKER'):
-        return 'freya'
+        return 'checker'
     return ''
 
 
 def identity_env(slug=None, env=None):
+    mail = no_reply(env)
+    if not mail:
+        return {}
     name = first_name(slug if slug is not None else bot_slug(env))
-    return {'GIT_AUTHOR_NAME': name, 'GIT_AUTHOR_EMAIL': NO_REPLY,
-            'GIT_COMMITTER_NAME': name, 'GIT_COMMITTER_EMAIL': NO_REPLY}
+    return {'GIT_AUTHOR_NAME': name, 'GIT_AUTHOR_EMAIL': mail,
+            'GIT_COMMITTER_NAME': name, 'GIT_COMMITTER_EMAIL': mail}
 
 
 def apply(target=None, default='fred'):

@@ -50,6 +50,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import botyard_home  # noqa: E402
+import git_identity  # noqa: E402  (imported directly: tests stub load())
 import guards  # noqa: E402
 import waits  # noqa: E402
 
@@ -387,8 +388,8 @@ def main():
         os.environ['OPENCODE_CONFIG'] = settings
     # Keys pasted in Botyard reach OpenCode as the variables it reads; with none, its own free models still work.
     os.environ.update(botyard_home.key_env())
-    # Fred and Freya commit as themselves with the no-reply address only (git_identity.py), whatever the model runs in git.
-    load('git_identity', 'git_identity.py').apply()
+    # Free bots commit as themselves with the no-reply address only (git_identity.py), whatever the model runs in git.
+    git_identity.apply()
     fallback = load('fallback', 'fallback.py')
     bots = fallback.setup()
     if not bots.OPENCODE:
