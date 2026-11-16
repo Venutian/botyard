@@ -68,36 +68,43 @@ WORKTREE_TOLD = ('Refused: a worktree goes under its repo, in <repo>/.botyard/wo
                  'Run repo-worktree.py REPO NAME (in the crew folder; it prints the path and makes the worktree there).')
 
 
-def worktree_at_root(command, cwd=None, root=None):
-    """True when a `git worktree add` in this shell command makes its folder directly in the projects folder."""
+def worktree_at_root(command, cwd=None, root=None, depth=0):
+    """True when a `git worktree add` in this shell command makes its folder directly in the projects folder.
+    Follows `cd` between the parts of the command and looks inside `bash -c "..."`."""
     root = os.path.realpath(root or botyard_home.projects())
+    here = cwd or os.getcwd()
     for part in re.split(r'&&|\|\||;|\n|\|', command):
         try:
             words = shlex.split(part)
         except ValueError:
             words = part.split()
+        if words[:1] == ['cd'] and len(words) > 1:
+            here = os.path.join(here, os.path.expanduser(os.path.expandvars(words[1])))
+            continue
+        if depth < 3 and len(words) > 2 and os.path.basename(words[0]) in ('bash', 'sh', 'zsh') and '-c' in words[1:3]:
+            if worktree_at_root(words[words.index('-c') + 1], here, root, depth + 1):
+                return True
         if 'git' not in words or 'worktree' not in words:
             continue
         rest = words[words.index('worktree') + 1:]
         if rest[:1] != ['add']:
             continue
-        where = cwd or os.getcwd()
+        where = here
         before = words[:words.index('worktree')]
         if '-C' in before and before.index('-C') + 1 < len(before):
             where = os.path.join(where, os.path.expanduser(before[before.index('-C') + 1]))
-        rest, paths, skip = rest[1:], [], False
-        for w in rest:
+        paths, skip = [], False
+        for w in rest[1:]:
             if skip:
                 skip = False
             elif w in ('-b', '-B', '--reason'):
                 skip = True
             elif not w.startswith('-'):
                 paths.append(w)
-        if not paths:
-            continue
-        folder = os.path.realpath(os.path.join(where, os.path.expanduser(os.path.expandvars(paths[0]))))
-        if os.path.dirname(folder) == root:
-            return True
+        if paths:
+            folder = os.path.realpath(os.path.join(where, os.path.expanduser(os.path.expandvars(paths[0]))))
+            if os.path.dirname(folder) == root:
+                return True
     return False
 
 

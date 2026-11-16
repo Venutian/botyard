@@ -37,6 +37,8 @@ def make(repo, name, branch=None, base='main', root=None, dry=False):
     if not os.path.isdir(os.path.join(folder, '.git')) and not os.path.isfile(os.path.join(folder, '.git')):
         raise ValueError(f'{folder} is not a git repo')
     branch = branch or name
+    if not SAFE.match(branch):
+        raise ValueError(f'"{branch}" is not a plain branch name')
     exists = subprocess.run(['git', '-C', folder, 'rev-parse', '--verify', '--quiet', f'refs/heads/{branch}'], capture_output=True).returncode == 0
     args = ['worktree', 'add', path, branch] if exists else ['worktree', 'add', '-b', branch, path, base]
     done = subprocess.run(['git', '-C', folder, *args], capture_output=True, text=True)

@@ -39,14 +39,17 @@ class WorktreeHome(unittest.TestCase):
     def test_a_worktree_beside_the_projects_is_refused(self):
         for command in ['git worktree add ../tools-1029 -b NGE-1029 main',
                         f'git -C {self.repo} worktree add {self.root}/wt-fix -b fix main',
-                        'cd x && git worktree add -b b ../wt-NGE-9 main',
-                        'git worktree add "../tools-wt1" main; echo ok']:
+                        'cd .. && git worktree add -b b wt-NGE-9 main',
+                        'git worktree add "../tools-wt1" main; echo ok',
+                        f'cd {self.root} && git worktree add wt-x -b wt-x main',
+                        f'cd {self.root}; git worktree add ./wt-y main',
+                        f'bash -c "git worktree add {self.root}/wt-z main"']:
             self.assertTrue(guard.worktree_at_root(command, cwd=self.repo, root=self.root), command)
 
     def test_a_worktree_under_its_repo_and_other_git_is_fine(self):
         for command in ['git worktree add .botyard/worktrees/NGE-5 -b NGE-5 main', 'git worktree list',
                         f'git -C {self.repo} worktree add {self.repo}/.botyard/worktrees/a -b a main',
-                        'git worktree remove ../x', 'git status', 'git worktree add /tmp/scratch main']:
+                        'git worktree remove ../x', 'git status', f'cd {self.repo} && git worktree add .botyard/worktrees/q -b q main', 'git worktree add /tmp/scratch main']:
             self.assertFalse(guard.worktree_at_root(command, cwd=self.repo, root=self.root), command)
 
     def test_the_guard_tells_the_bot_what_to_run(self):
