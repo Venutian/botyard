@@ -8,4 +8,6 @@ You are a build session on a free model. {{shared: build-rules}}
 
 {{shared: report-end}}
 
+{{shared: checkpoint}}
+
 {{shared: footer}}

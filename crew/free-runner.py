@@ -68,6 +68,17 @@ PAYLOAD = ('You put something into your session that must not be there ({call}):
 # How often the run looks for a foreground command that has gone past guards.FOREGROUND_MAX.
 LOOK_EVERY = 15
 SAME_FAMILY = 'SAME-FAMILY CHECK:'
+# STANDARDS.md rule 22: a run whose limit is over LONG_RUN minutes is told at NOTICE_AT of it to write its state
+# and finish its step, so a stop at the time limit loses nothing. The limit comes from the bot's own file
+# (crew_set.py sets BOTYARD_RUN_MINUTES); the runner cannot see the engine's clock.
+LONG_RUN = 45
+NOTICE_AT = 0.8
+# The notice waits for the end of a step (OpenCode's step_finish) but not longer than this many seconds.
+NOTICE_WAIT = 120
+NOTICE = ('You are at {used} of the {limit} minutes this run is allowed, and it is stopped at the limit. Write your '
+          'state now: add your checkpoint to your ledger as your rules say (what is done, what is next, in one '
+          'line), finish the step you are on, and do not start a new large one. The next run carries on from that '
+          'checkpoint.')
 LOOPED = ('You were going round in circles: you ran {call} {times} times with nothing in the worktree changing '
           'between. Stop repeating it. Read what it returned, decide what that means, and take a different next '
           'step; if you are blocked, say what blocks you and end the task with OUTCOME: NOT MET and why.')
@@ -124,6 +135,27 @@ class Loops:
 
 def pause(seconds):
     time.sleep(seconds)
+
+
+def clock():
+    return time.time()
+
+
+def run_minutes(env=None):
+    """The run's time limit in minutes from the bot's file, or 0 when it is not told."""
+    try:
+        return int((env if env is not None else os.environ).get('BOTYARD_RUN_MINUTES') or 0)
+    except ValueError:
+        return 0
+
+
+def notice_due(started, minutes, now, noticed, step_ended, since=None):
+    """True when a run that may last over LONG_RUN minutes has used NOTICE_AT of its limit and has not yet been
+    told: at a step's end, or NOTICE_WAIT seconds after the point if no step ends by then."""
+    if noticed or minutes <= LONG_RUN:
+        return False
+    point = started + minutes * 60 * NOTICE_AT
+    return now >= point and (step_ended or now >= point + NOTICE_WAIT)
 
 
 def load(name, file):
@@ -481,6 +513,7 @@ def main():
     loops = Loops()
     looped = 0
     retried = 0
+    started, minutes, noticed = clock(), run_minutes(), False
     looked = time.time()
     for switch in range(MOST_SWITCHES + 1 + len(guards.RETRY_WAITS)):
         child = subprocess.Popen([bots.OPENCODE, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
@@ -490,6 +523,7 @@ def main():
         lines = queue.Queue()
         threading.Thread(target=lambda: [lines.put(line) for line in child.stdout] + [lines.put(None)], daemon=True).start()
         heard, ended, ran_out, circling, failed = time.time(), False, False, None, None
+        told = False
         while not ended:
             try:
                 line = lines.get(timeout=10)
@@ -525,8 +559,16 @@ def main():
                     session = event.get('sessionID') or session
                     circling = loops.feed(event) or circling
                     failed = error_of(event) or failed
+                    step_ended = event.get('type') == 'step_finish'
                 except ValueError:
-                    pass
+                    step_ended = False
+                if not circling and session and notice_due(started, minutes, clock(), noticed, step_ended):
+                    # STANDARDS.md rule 22: the model is told once at 80% of the limit. OpenCode takes its prompt
+                    # once per start, so the run is stopped at a step's end and goes on in the same session with the notice.
+                    told = noticed = True
+                    os.killpg(child.pid, signal.SIGTERM)
+                    child.wait(timeout=30)
+                    break
                 if circling:
                     os.killpg(child.pid, signal.SIGTERM)
                     child.wait(timeout=30)
@@ -545,6 +587,14 @@ def main():
             child.wait(timeout=30)
             break
         code = child.wait()
+        if told:
+            used = int((clock() - started) / 60)
+            note(f'The free builder was told at {used} of {minutes} minutes to write its state ({model}, same session)')
+            sys.stderr.write(f'{used} of {minutes} minutes used: the model is told to write its checkpoint.\n')
+            args = with_model(args, model, session)
+            prompt = NOTICE.format(used=f'{used} minutes', limit=minutes)
+            loops = Loops()
+            continue
         if circling:
             looped += 1
             what, times = circling

@@ -13,4 +13,6 @@ HOW TO RESEARCH
 REPORT
 Answer first, in two or three sentences. Then the findings, each with its source link and date and how sure you are. Then what you could not find out and where you looked. Under about 500 words; put anything longer in a file in your job's folder and name it. Decide as an expert where the question leaves room, and say why: nobody can answer you while you run.
 
+{{shared: checkpoint}}
+
 {{shared: footer}}

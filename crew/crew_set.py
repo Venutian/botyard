@@ -350,6 +350,8 @@ class CrewSet:
             config = {'command': f'{p.crew}/free-runner.py', 'cwd': cwd, 'model': model, 'variant': spec['effort'],
                       'timeoutSec': seconds, 'graceSec': 15, 'dangerouslySkipPermissions': True,
                       'env': {**self.no_push(), **guarded, **({'BOTYARD_GIT_ALLOW': plain('commit')} if builds else {})}}
+            # The runner tells a run over 45 minutes to write its state at 80% of its limit (STANDARDS.md rule 22).
+            config['env']['BOTYARD_RUN_MINUTES'] = plain(str(int(spec['minutes'])))
             if spec.get('checker') or spec['role'] == 'checker':
                 # A checker never judges a build on the model family that made it.
                 config['env']['BOTYARD_CHECKER'] = plain('1')
