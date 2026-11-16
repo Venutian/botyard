@@ -14,7 +14,7 @@ const lightOf = (mesh) => {
   const c = mesh.geometry.attributes.color
   const out = new THREE.Color()
   let sum = 0
-  for (let i = 0; i < c.count; i++) { out.setRGB(c.getX(i), c.getY(i), c.getZ(i), THREE.LinearSRGBColorSpace); sum += out.getHSL({}).l }
+  for (let i = 0; i < c.count; i++) { out.setRGB(c.getX(i), c.getY(i), c.getZ(i), THREE.LinearSRGBColorSpace); sum += out.getHSL({}, THREE.SRGBColorSpace).l }
   return sum / c.count
 }
 const args = { name: 'Fasten', paint: '#d9534f', concrete: '#dcd8cc' }

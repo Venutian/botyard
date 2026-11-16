@@ -26,8 +26,8 @@ export function dimColours(geometry) {
   const hsl = {}
   for (let i = 0; i < colours.count; i++) {
     c.setRGB(colours.getX(i), colours.getY(i), colours.getZ(i), THREE.LinearSRGBColorSpace)
-    c.getHSL(hsl, THREE.LinearSRGBColorSpace)
-    c.setHSL(hsl.h, hsl.s * SHELF_COLOUR, hsl.l * SHELF_LIGHT, THREE.LinearSRGBColorSpace)
+    c.getHSL(hsl, THREE.SRGBColorSpace)
+    c.setHSL(hsl.h, hsl.s * SHELF_COLOUR, hsl.l * SHELF_LIGHT, THREE.SRGBColorSpace)
     colours.setXYZ(i, c.r, c.g, c.b)
   }
   colours.needsUpdate = true

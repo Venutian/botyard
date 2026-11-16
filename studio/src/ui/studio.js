@@ -78,7 +78,7 @@ const DOCK = [
   { id: 'bots', name: 'Crew', icon: 'bots', screen: true, group: 'crew', title: 'The crew: who runs on what, and how their runs go', key: '4' },
   { id: 'chats', name: 'Chats', icon: 'chat', screen: true, group: 'crew', key: '5' },
   { id: 'runs', name: 'Runs', icon: 'runs', screen: true, group: 'crew', key: '6' },
-  { id: 'improvements', name: 'Improvements', icon: 'wrench', screen: true, group: 'crew', title: 'What the audits found worth improving, and who is on it' },
+  { id: 'improvements', name: 'Improve', icon: 'rise', screen: true, group: 'crew', title: 'Improvements: what the audits found worth improving, and who is on it' },
   { id: 'library', name: 'Library', icon: 'book', screen: true, group: 'make', title: 'What the crew made, and its skills', key: '7' },
   { id: 'routines', name: 'Routines', icon: 'clock', screen: true, group: 'make', title: 'Routines and helpers', key: '8' },
   { id: 'setup', name: 'Setup', icon: 'wrench', screen: true, group: 'setup', title: 'What this studio needs: AI sign-ins, keys, git' },
@@ -144,6 +144,7 @@ const ICONS = {
   gauge: svg('<path d="M4.5 16a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13" r="1.2"/>'),
   coin: svg('<circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.8-1.5-1.3-2.8-1.3-1.7 0-2.8.9-2.8 2.1 0 2.8 5.8 1.6 5.8 4.3 0 1.2-1.2 2.1-3 2.1-1.4 0-2.5-.6-3-1.5M12 6.5v1.4M12 16.4v1.1"/>'),
   save: svg('<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/>'),
+  rise: svg('<path d="M12 19V6M6.5 11.5 12 6l5.5 5.5M5 4.5h14"/>'),
   wrench: svg('<path d="M14.5 6.5a4 4 0 0 0-5.2 5.2L4 17l3 3 5.3-5.3a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.4-.6-.6-2.4z"/>'),
 }
 
@@ -2548,6 +2549,7 @@ setView(view) {
       data = null
       await new Promise((go) => setTimeout(go, document.hidden ? 8000 : 2500))
     }
+  }
 
   async openImprovements() {
     this._improve = this._improve || ''
