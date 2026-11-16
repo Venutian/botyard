@@ -121,6 +121,10 @@ class Places:
         return '~' + path[len(self.home):] if path == self.home or path.startswith(self.home + '/') else path
 
 
+class PaidEngine(ValueError):
+    """A script tried to put a free-model bot on a paid engine."""
+
+
 class CrewSet:
     def __init__(self, env=None, places=None, own=None, repo_dir=None):
         self.dir = repo_dir or botyard_home.source('bots')
@@ -213,12 +217,18 @@ class CrewSet:
         return out
 
     # ── a bot on an AI ───────────────────────────────────────────────────────────────
+    # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
+    # Codex, Claude) for its work: its "fallbacks" are for a person to ask for on purpose, never for a script.
+    paid_by_hand = False
+
     def on(self, slug, ai=None):
         """The bot's settings as they hold on `ai`: its own AI when none is given, else its "fallbacks"."""
         spec = self.spec(slug)
         ai = ai or spec['ai']
         if ai == spec['ai']:
             return spec
+        if spec['ai'] == 'free' and not self.paid_by_hand:
+            raise PaidEngine(f"{spec['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         over = {**FALLBACK.get(ai, {}), **spec['fallbacks'].get(ai, {})}
         if ai == 'gemini' and 'model' not in over:
             over['model'] = GEMINI_MODELS.get(spec['model'], ANTIGRAVITY[0])

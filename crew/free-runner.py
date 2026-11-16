@@ -147,11 +147,20 @@ WIDE = ('every model', 'all models', 'all free models', 'provider', 'account', '
 BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
 
 
-def provider_wide(text):
+# Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
+# requests a day), so a bare "per day" there sets that model aside and no other.
+PER_MODEL_DAY = ('opencode/',)
+
+
+def provider_wide(text, model=None):
     """True when an error names a cap on the whole provider (a day's count, a quota for every model), not one
     model: STANDARDS.md rule 22. Such a cap sets every model of that provider aside."""
     text = (text or '').lower()
-    return any(w in text for w in PER_DAY) or ('quota' in text and any(w in text for w in WIDE))
+    if 'free-models-per-day' in text or any(w in text for w in WIDE) and any(w in text for w in ('quota',) + PER_DAY):
+        return True
+    if model and model.startswith(PER_MODEL_DAY):
+        return False
+    return any(w in text for w in PER_DAY)
 
 
 # What each asked model last said, so a one-word ask refused for a provider's daily cap is understood as
@@ -164,7 +173,7 @@ def said(model, got):
     if got == 'gone':
         return 'model is unavailable (asked before the switch)'
     text = SAID.get(model) or ''
-    return text if provider_wide(text) else None
+    return text if provider_wide(text, model) else None
 
 
 def probe(opencode, model):
@@ -207,7 +216,7 @@ def set_aside(fallback, bots, model, why):
     text = (why or '').lower()
     if any(w in text for w in GONE):
         fallback.set_free_aside(bots, model, f'never serves this PC: {why}'[:200], until=int(time.time() + GONE_FOR))
-    elif provider_wide(text):
+    elif provider_wide(text, model):
         provider = model.split('/')[0] + '/'
         until = provider_reset(fallback, model)
         for m, _, _ in bots.free_list():
@@ -580,7 +589,7 @@ def main():
             retried = 0
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
-        wide = bool(code and failed and provider_wide(failed))
+        wide = bool(code and failed and provider_wide(failed, model))
         if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS)):
             ran_out = True
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):

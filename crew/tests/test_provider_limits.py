@@ -51,6 +51,14 @@ class Detecting(unittest.TestCase):
         for text in ('quota for this model', 'Too Many Requests: {"status":429}', 'model not found', '', None):
             self.assertFalse(fred.provider_wide(text), text)
 
+    def test_a_models_own_daily_cap_does_not_set_its_provider_aside(self):
+        self.assertFalse(fred.provider_wide('100 requests per day reached', 'opencode/longcat-flash'))
+        self.assertTrue(fred.provider_wide('100 requests per day reached', 'nvidia/n1'))
+        self.assertTrue(fred.provider_wide(CAP, 'opencode/o1-free'))
+        world = World(ROWS)
+        fred.set_aside(world, world, 'opencode/o1-free', 'limit is 100 requests per day')
+        self.assertEqual(set(world.aside), {'opencode/o1-free'})
+
     def test_the_provider_reset_comes_from_free_limits_else_the_next_utc_day(self):
         now = time.mktime(time.strptime('2026-11-16 09:35', '%Y-%m-%d %H:%M')) - time.timezone
         self.assertEqual(limits.reset_at('openrouter/a:free', now), int(now // 86400 + 1) * 86400 + 300)
