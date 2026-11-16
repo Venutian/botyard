@@ -170,6 +170,7 @@ const SECTIONS: { title: string; detail: string; route: Route }[] = [
   { title: 'Bots', detail: 'Who is working, resting or stuck and why; add a bot or change one', route: { name: 'bots' } },
   { title: 'Runs and activity', detail: 'Every run and why one failed; who did what', route: { name: 'runs' } },
   { title: 'Models and spend', detail: 'Who runs on what, free models, and the week by bot', route: { name: 'models' } },
+  { title: 'Improvements', detail: 'What the audits found worth improving, its status, and the job that carries it', route: { name: 'improvements' } },
   { title: 'Routines and helpers', detail: 'Work that starts by itself, and the scripts that keep the crew moving', route: { name: 'routines' } },
   { title: 'Library', detail: 'Pictures, documents and files the crew made', route: { name: 'library' } },
   { title: 'Connectors', detail: 'Services the crew may use, who may use each, and the sign-ins', route: { name: 'connectors' } },

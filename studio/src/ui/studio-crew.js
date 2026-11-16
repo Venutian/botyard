@@ -156,6 +156,37 @@ export function runsScreen({ view, filter, data }) {
     <tbody>${runs.map((r) => runRowHtml(r)).join('')}</tbody></table></div>` : '<p class="none">No runs match.</p>') + pager
 }
 
+// ── Improvements ───────────────────────────────────────────────────────────────
+
+export const IMPROVEMENT_FILTERS = [['', 'All'], ['new', 'New'], ['accepted', 'Accepted'], ['done', 'Done'], ['rejected', 'Rejected']]
+
+/**
+ * "What did the audits find worth improving, and is anyone on it?" Findings Freya's audits and Tony list,
+ * newest first inside each state. `data` is what /api/studio/improvements sent; `filter` is a state or ''.
+ * The phone's Improvements screen shows the same list with the same filters.
+ */
+export function improvementsScreen(data, filter = '') {
+  const items = (data.items || []).filter((i) => !filter || i.status === filter)
+  const head = `<div class="filters"><div class="seg" role="tablist">${IMPROVEMENT_FILTERS.map(([id, name]) => {
+    const n = id ? data.counts?.[id] || 0 : (data.items || []).length
+    return `<button type="button" role="tab" aria-selected="${filter === id}" class="${filter === id ? 'on' : ''}" data-act="improve-filter" data-status="${id}">${name} ${n}</button>`
+  }).join('')}</div></div>`
+  const row = (i) => `<tr>
+      <td><b>${esc(i.title)}</b><br><span class="dim">${esc(i.id)}</span></td>
+      <td><code>${esc(i.path)}</code></td>
+      <td>${esc(i.evidence)}</td>
+      <td>${esc(i.fix)}</td>
+      <td>${esc(i.who)}</td>
+      <td><span class="${i.status === 'rejected' ? 'dim' : i.status === 'done' ? 'good' : i.status === 'accepted' ? 'go' : 'warnish'}">${esc(i.status)}</span></td>
+      <td>${i.job ? `<span class="job-ref">${esc(i.job)}</span>` : '<span class="dim">None yet</span>'}</td>
+    </tr>`
+  return `<p class="hint">Findings from Freya's audits and Tony. Tony and the audits add them with improvements.py; this page only reads them.</p>
+    ${head}
+    ${items.length ? `<div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Finding</th><th>Where</th><th>Evidence</th><th>Smallest fix</th><th>Who</th><th>Status</th><th>Job</th></tr></thead>
+      <tbody>${items.map(row).join('')}</tbody></table></div>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
+}
+
 /** One run: how it ended and why, what it used, its job, and the end of its log. */
 export function runScreen(r) {
   const facts = [

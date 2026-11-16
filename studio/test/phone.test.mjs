@@ -877,6 +877,17 @@ test('projects come in the owner\'s ranking, which the phone saves as the map do
   })
 })
 
+test('the improvements read through the door, the same list the PC page shows, and nothing writes', async () => {
+  const items = [{ id: 'IMP-1', title: 'Old briefs stay', path: 'briefs/tony', evidence: '212 files', fix: 'Move them', who: 'Freya', status: 'accepted', job: 'NGE-961', added: 5 }]
+  await withDoor(async (ask) => {
+    const page = await ask('/v1/improvements')
+    assert.equal(page.status, 200)
+    assert.deepEqual(page.body.items.map((i) => [i.id, i.status, i.job, i.path]), [['IMP-1', 'accepted', 'NGE-961', 'briefs/tony']])
+    assert.equal(page.body.counts.accepted, 1)
+    assert.notEqual((await ask('/v1/improvements', { method: 'POST', body: {} })).status, 200)
+  }, { crew: { 'improvements.json': items } })
+})
+
 test('spend, timers and the library read through the door', async () => {
   await withDoor(async (ask) => {
     const spend = await ask('/v1/spend')
@@ -905,7 +916,7 @@ test('the company reads members and invites, without emails or secrets', async (
 
 test('the new sections need the token', async () => {
   await withDoor(async (ask) => {
-    for (const path of ['/v1/bots', `/v1/bots/${BOT}`, '/v1/runs', '/v1/activity', '/v1/spend', '/v1/jobs', `/v1/jobs/${JOB}/more`, '/v1/projects', `/v1/projects/${PROJECT}`, '/v1/timers', '/v1/library', '/v1/money', '/v1/company']) {
+    for (const path of ['/v1/bots', `/v1/bots/${BOT}`, '/v1/runs', '/v1/activity', '/v1/spend', '/v1/improvements', '/v1/jobs', `/v1/jobs/${JOB}/more`, '/v1/projects', `/v1/projects/${PROJECT}`, '/v1/timers', '/v1/library', '/v1/money', '/v1/company']) {
       // Past ten wrong tries the address is locked out, which refuses as surely.
       assert.ok([401, 429].includes((await ask(path, { token: '' })).status), path)
     }

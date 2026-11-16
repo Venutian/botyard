@@ -1344,3 +1344,4 @@
 .hud .owner-choice input { flex: none; margin: 3px 0 0; }
 .hud .owner-choice label > span { flex: 1; min-width: 0; }
 .owner-choice small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.studio-sheet .job-ref { white-space: nowrap; font-variant-numeric: tabular-nums; }

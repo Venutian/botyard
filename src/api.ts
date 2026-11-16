@@ -427,6 +427,10 @@ export const getRuns = (c: Connection, p: { bot?: string; status?: string; page?
 export const getRun = (c: Connection, id: string) => call<RunDetail>(c, `/runs/${id}`);
 export const getActivity = (c: Connection, p: { bot?: string; page?: number }) => call<ActivityPage>(c, `/activity${query(p)}`);
 export const getSpend = (c: Connection) => call<SpendView>(c, '/spend');
+export type ImprovementState = 'new' | 'accepted' | 'done' | 'rejected';
+export type Improvement = { id: string; title: string; path: string; evidence: string; fix: string; who: string; status: ImprovementState; job: string; added: number };
+export type ImprovementList = { items: Improvement[]; counts: Record<ImprovementState, number> };
+export const getImprovements = (c: Connection) => call<ImprovementList>(c, '/improvements');
 export const getJobs = (c: Connection, p: { pile?: JobPile; project?: string; bot?: string; q?: string; page?: number }) => call<JobListPage>(c, `/jobs${query(p)}`);
 export const getJobMore = (c: Connection, id: string) => call<JobMore>(c, `/jobs/${id}/more`);
 export const getProjects = (c: Connection) => call<ProjectList>(c, '/projects');

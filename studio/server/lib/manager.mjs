@@ -299,6 +299,24 @@ export function inHierarchy(rows, agents = []) {
     .map(({ row, rank }) => ({ ...row, tier: rank.tier }))
 }
 
+/** How far back a bot's jobs count toward the projects it is working in: a mini of it stands in each. */
+export const ALSO_IN_MS = 6 * 60 * 60 * 1000
+
+/**
+ * The other projects a bot is working in: those of its jobs running now or touched in the last six
+ * hours, other than the one its current job puts it in. Names, in the order of their latest touch.
+ */
+export function alsoIn({ issues, botId, projectNames, home, now }) {
+  const latest = new Map()
+  for (const i of issues) {
+    if (i.assigneeAgentId !== botId || !i.projectId || i.projectId === home) continue
+    const at = lastTouched(i)
+    if (i.status !== 'in_progress' && now - at > ALSO_IN_MS) continue
+    latest.set(i.projectId, Math.max(latest.get(i.projectId) || 0, at))
+  }
+  return [...latest].sort((a, b) => b[1] - a[1]).map(([id]) => projectNames.get(id)).filter(Boolean)
+}
+
 function botRows({ agents, issues, projectNames, liveAgents, working, files, now }) {
   const newest = [...issues].sort((a, b) => lastTouched(b) - lastTouched(a))
   const looks = crewLooks(agents)
@@ -319,6 +337,7 @@ function botRows({ agents, issues, projectNames, liveAgents, working, files, now
       job: job && { id: job.id, ref: job.ref, title: job.title, stage: job.stage, minutes: job.minutes },
       last: last ? { id: last.id, ref: refOf(last, projectNames), title: short(withRefs(last.title)), at: lastTouched(last) } : null,
       projectId: job?.projectId || last?.projectId || '',
+      alsoIn: alsoIn({ issues, botId: agent.id, projectNames, home: job?.projectId || '', now }),
       doneToday: today,
     }
   }), agents)

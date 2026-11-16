@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { Ground, LIGHTS } from './ground.js'
 import { BAY_PAINTS, DEPOT_PAINT, DECK_TOP, buildBay, buildGate } from './bays.js'
+import { Kit, lit } from '../robots/kit.js'
+import { MINI_SCALE, miniAt, planMinis } from './minis.js'
 import { BAY_RADIUS, BAY_STEP, assign, centreOf, cornersOf, gateAt, places, remember, ringsUsed, standAt } from './layout.js'
 import { buildRobot } from '../robots/robot.js'
 import { specOf, stateOf } from '../robots/look.js'
@@ -24,6 +26,7 @@ export class Yard {
     this.ground = new Ground(stage.scene)
     this.bays = new Map()
     this.robots = new Map()
+    this.minis = new Map()
     this.gate = null
     this.gateAnchor = null
     this.depot = ''
@@ -63,12 +66,15 @@ export class Yard {
     const placed = assign(names, before)
     keep(remember(names, placed, before))
     const concrete = LIGHTS[this.hour].concrete
+    const shelf = new Set(view.shelved || [])
     const wanted = new Map([[this.depot, 0], ...Object.entries(placed)])
+    // A bay is built again when its place changes or when it is shelved or taken off the shelf.
+    const isShelved = (name) => name !== this.depot && shelf.has(name)
     let moved = false
 
     // Bays: built for what is new or moved, taken down for what left.
     for (const [name, bay] of this.bays) {
-      if (wanted.get(name) === bay.at) continue
+      if (wanted.get(name) === bay.at && bay.shelved === isShelved(name)) continue
       this._drop(bay.group)
       this.bays.delete(name)
       moved = true
@@ -78,11 +84,12 @@ export class Yard {
       const depot = name === this.depot
       const paint = depot ? DEPOT_PAINT : BAY_PAINTS[(at - 1) % BAY_PAINTS.length]
       const centre = centreOf(at)
-      const group = buildBay({ name, paint, concrete, depot })
+      const shelved = isShelved(name)
+      const group = buildBay({ name, paint, concrete, depot, shelved })
       group.position.set(centre.x, 0, centre.z)
       this.stage.scene.add(group)
       this.bays.set(name, {
-        name, at, group, depot,
+        name, at, group, depot, shelved,
         paint,
         accent: parseInt(paint.slice(1), 16),
         middle: new THREE.Vector3(centre.x, 0, centre.z),
@@ -107,7 +114,8 @@ export class Yard {
     const byBay = new Map()
     for (const bot of view.crew) {
       if (!bot.crew) continue
-      const home = this.bays.has(bot.project) ? bot.project : this.depot
+      // Nobody walks in a shelved bay: a bot with a job there waits at the Depot.
+      const home = this.bays.has(bot.project) && !this.bays.get(bot.project).shelved ? bot.project : this.depot
       if (!byBay.has(home)) byBay.set(home, [])
       byBay.get(home).push(bot)
     }
@@ -143,8 +151,51 @@ export class Yard {
       this._drop(robot.group)
       this.robots.delete(id)
     }
+    this._showMinis(view, shelf)
     this.stage.redraw()
     return moved
+  }
+
+  /**
+   * A small copy of each bot that works in two or more projects, in each of its other bays: the
+   * bot's own colour, hat and gear, a thin ring on the ground to show it is a copy. Built again only when the look or state changes.
+   */
+  _showMinis(view, shelf) {
+    const plan = planMinis(view.crew.filter((b) => b.crew), { depot: this.depot, bays: this.bays.keys(), shelved: shelf })
+    const byId = new Map(view.crew.map((b) => [b.id, b]))
+    const seen = new Set()
+    for (const { id, project, n } of plan) {
+      const bot = byId.get(id)
+      const bay = this.bays.get(project)
+      const spec = specOf(bot.crew)
+      const state = stateOf(bot.crew)
+      const key = `${JSON.stringify([spec, state])}@${project}`
+      const name = `${id}@${project}`
+      seen.add(name)
+      let mini = this.minis.get(name)
+      if (mini && mini.key !== key) { this._drop(mini.group); mini = null }
+      if (!mini) {
+        const robot = buildRobot(spec, state)
+        robot.scale.setScalar(ROBOT_SCALE * MINI_SCALE)
+        const ring = new Kit().ring(0.62, 0.035, '#f2f4f6', [0, 0.04, 0])
+        const band = new THREE.Mesh(ring.weld(), lit())
+        const group = new THREE.Group()
+        group.add(robot, band)
+        group.userData.dispose = () => { robot.userData.dispose?.(); band.geometry.dispose() }
+        this.stage.scene.add(group)
+        mini = { id, project, key, group }
+        this.minis.set(name, mini)
+      }
+      const spot = miniAt(n)
+      mini.group.position.set(bay.middle.x + spot.x, DECK_TOP, bay.middle.z + spot.z)
+      // A mini at work faces the bay's middle.
+      mini.group.rotation.y = state === 'building' || state === 'checking' ? Math.atan2(-spot.x, -spot.z) : 0
+    }
+    for (const [name, mini] of this.minis) {
+      if (seen.has(name)) continue
+      this._drop(mini.group)
+      this.minis.delete(name)
+    }
   }
 
   /** Free ground round the bays gets something standing on it; the lane to the gate stays clear. */

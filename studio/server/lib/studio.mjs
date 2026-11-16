@@ -55,7 +55,7 @@ export function studioRoster({ manager, records, now = Date.now() }) {
       lastActivityAt: running ? now : bot.status === 'paused' ? now - ASLEEP_MS : Math.max(bot.last?.at || 0, now - FRESH_MS),
       running, hasError: !running && bot.status !== 'paused' && blocked.has(bot.id), prState: '', unread: false, archived: false,
       size: CREW_SIZE,
-      crew: { id: bot.id, name: bot.name, title: bot.title, role: bot.role, look: bot.look, status: bot.status, resting: bot.resting, model: bot.model, where: bot.where, why: bot.why, job: bot.job, last: bot.last },
+      crew: { id: bot.id, name: bot.name, title: bot.title, role: bot.role, look: bot.look, status: bot.status, resting: bot.resting, model: bot.model, where: bot.where, why: bot.why, job: bot.job, last: bot.last, alsoIn: bot.alsoIn || [] },
     }
   })
 }

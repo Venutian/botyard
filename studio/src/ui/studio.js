@@ -4,7 +4,7 @@ import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
 import { rankProjects } from './rank.js'
-import { botScreen, botsScreen, editSummary, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
+import { botScreen, botsScreen, editSummary, improvementsScreen, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
 import { FeedView, feedFrameHtml } from './run-feed.js'
 import { usageHtml } from './usage.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
@@ -78,6 +78,7 @@ const DOCK = [
   { id: 'bots', name: 'Crew', icon: 'bots', screen: true, group: 'crew', title: 'The crew: who runs on what, and how their runs go', key: '4' },
   { id: 'chats', name: 'Chats', icon: 'chat', screen: true, group: 'crew', key: '5' },
   { id: 'runs', name: 'Runs', icon: 'runs', screen: true, group: 'crew', key: '6' },
+  { id: 'improvements', name: 'Improve', icon: 'rise', screen: true, group: 'crew', title: 'Improvements: what the audits found worth improving, and who is on it' },
   { id: 'library', name: 'Library', icon: 'book', screen: true, group: 'make', title: 'What the crew made, and its skills', key: '7' },
   { id: 'routines', name: 'Routines', icon: 'clock', screen: true, group: 'make', title: 'Routines and helpers', key: '8' },
   { id: 'setup', name: 'Setup', icon: 'wrench', screen: true, group: 'setup', title: 'What this studio needs: AI sign-ins, keys, git' },
@@ -143,6 +144,7 @@ const ICONS = {
   gauge: svg('<path d="M4.5 16a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13" r="1.2"/>'),
   coin: svg('<circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.8-1.5-1.3-2.8-1.3-1.7 0-2.8.9-2.8 2.1 0 2.8 5.8 1.6 5.8 4.3 0 1.2-1.2 2.1-3 2.1-1.4 0-2.5-.6-3-1.5M12 6.5v1.4M12 16.4v1.1"/>'),
   save: svg('<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/>'),
+  rise: svg('<path d="M12 19V6M6.5 11.5 12 6l5.5 5.5M5 4.5h14"/>'),
   wrench: svg('<path d="M14.5 6.5a4 4 0 0 0-5.2 5.2L4 17l3 3 5.3-5.3a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.4-.6-.6-2.4z"/>'),
 }
 
@@ -1703,6 +1705,7 @@ setView(view) {
     if (id === 'bots') return void this.openBots()
     if (id === 'runs') return void this.openRuns()
     if (id === 'models') return void this.openMoney()
+    if (id === 'improvements') return void this.openImprovements()
     if (id === 'library') return void this.openLibrary('made')
     const screen = this.view?.screens?.find((s) => s.id === id)
     if (!screen) return
@@ -2125,6 +2128,10 @@ setView(view) {
         const free = this.view.manager.bots.filter((b) => !b.job && b.status !== 'paused').length
         tags = `<b class="t none">${free ? `${free} free ${free === 1 ? 'bot waits' : 'bots wait'} here` : 'Free bots wait here'}</b>`
           + (c?.you ? `<button type="button" class="t you" data-bay-you="${esc(plot.name)}" title="Open what waits for you">${c.you} ${c.you === 1 ? 'needs' : 'need'} you</button>` : '')
+      } else if (this._shelved?.has(plot.name)) {
+        // A shelved bay says so in small type; the lead gives nobody work there, so no work tags.
+        tags = `<b class="t shelved" title="On the shelf: nothing is given out here until you take it off">\u{1F512} SHELVED</b>`
+          + (c?.you ? `<button type="button" class="t you" data-bay-you="${esc(plot.name)}" title="Open what waits for you in ${esc(plot.name)}">${c.you} ${c.you === 1 ? 'needs' : 'need'} you</button>` : '')
       } else if (!c) tags = ''
       else {
         // What waits for the owner comes first, so it is never the tag that wraps out of sight.
@@ -2134,7 +2141,7 @@ setView(view) {
       }
       const html = `<button type="button" class="name" data-bay="${esc(plot.name)}" title="${isDepot ? 'Open the crew' : `Open ${esc(plot.name)}`}"><i></i>${esc(plot.name)}</button><span class="tags">${tags}</span>`
       const accent = '#' + plot.accent.toString(16).padStart(6, '0')
-      put(plot.name, html, `bay${c?.you ? ' you' : ''}${width < 150 ? ' far' : ''}`, Math.round((left + right) / 2), Math.round(top) - 4, accent, width)
+      put(plot.name, html, `bay${c?.you ? ' you' : ''}${isDepot || !this._shelved?.has(plot.name) ? '' : ' shelved'}${width < 150 ? ' far' : ''}`, Math.round((left + right) / 2), Math.round(top) - 4, accent, width)
     }
     // Two signs never lie across each other: where they would, the one with nothing for the owner
     // keeps its name and drops its tags until there is room again.
@@ -2364,6 +2371,7 @@ setView(view) {
     if (act === 'open-run') { this._go(() => this.openRun(id)); return true }
     if (act === 'open-job') { this._go(() => this.openJob(id)); return true }
     if (act === 'models') { this._go(() => this.openMoney()); return true }
+    if (act === 'improve-filter') { this._improve = el.dataset.status || ''; this.openImprovements(); return true }
     if (act === 'bot-runs') { this._runs = { view: 'runs', filter: { bot: id, status: '' }, page: 0 }; this._go(() => this.openRuns()); return true }
     if (act === 'talk') { this.actions.pickBot(id); return true }
     if (act === 'runs-view') { this._runs.view = el.dataset.view; this._runs.page = 0; this._loadRuns(); return true }
@@ -2541,6 +2549,14 @@ setView(view) {
       data = null
       await new Promise((go) => setTimeout(go, document.hidden ? 8000 : 2500))
     }
+  }
+
+  async openImprovements() {
+    this._improve = this._improve || ''
+    this._openSheet('improvements', 'Improvements', 'What the audits found worth improving, and who is on it', { wide: true })
+    this._reopen = () => this.openImprovements()
+    const seq = ++this._sheetSeq
+    await this._fill('improvements', seq, () => call('/api/studio/improvements'), (d) => improvementsScreen(d, this._improve))
   }
 
   async openMoney() {
