@@ -387,6 +387,8 @@ def main():
         os.environ['OPENCODE_CONFIG'] = settings
     # Keys pasted in Botyard reach OpenCode as the variables it reads; with none, its own free models still work.
     os.environ.update(botyard_home.key_env())
+    # Fred and Freya commit as themselves with the no-reply address only (git_identity.py), whatever the model runs in git.
+    load('git_identity', 'git_identity.py').apply()
     fallback = load('fallback', 'fallback.py')
     bots = fallback.setup()
     if not bots.OPENCODE:

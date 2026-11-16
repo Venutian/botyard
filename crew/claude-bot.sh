@@ -11,6 +11,8 @@ fi
 # A studio's own additions to every Claude bot's start (a browser profile, notes put in the job's folder):
 # its crew/own/claude-bot.sh is read here, in this shell, when there is one.
 [ -r "$BOTYARD_CREW_DIR/own/claude-bot.sh" ] && . "$BOTYARD_CREW_DIR/own/claude-bot.sh"
+# Every bot commits under its own first name and the studio's GitHub no-reply address, nothing else (git_identity.py).
+eval "$(python3 "$here/git_identity.py" --export 2>/dev/null)"
 # Every Claude bot gets the crew's loop guard through these settings. setup-bots.py
 # gives each bot its own copy (BOTYARD_BOT_SETTINGS) that also hides the PC's skills outside its job (skill_sets.py).
 settings="$BOTYARD_SCRIPTS/bot-settings.json"
