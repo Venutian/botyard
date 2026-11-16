@@ -90,10 +90,10 @@ async function ask() {
     }
     studio.setView(answer)
     const projects = answer.manager.projects.map((p) => p.name)
-    const key = JSON.stringify([projects, answer.depot, answer.threads.map((t) => [t.id, t.project, t.crew?.status, t.crew?.job?.stage, t.crew?.look])])
+    const key = JSON.stringify([projects, answer.depot, answer.shelved || [], answer.threads.map((t) => [t.id, t.project, t.crew?.status, t.crew?.job?.stage, t.crew?.look, t.crew?.alsoIn])])
     if (key !== lastKey) {
       lastKey = key
-      const moved = yard.show({ projects, depot: answer.depot, crew: answer.threads })
+      const moved = yard.show({ projects, depot: answer.depot, crew: answer.threads, shelved: answer.shelved })
       if (moved || !framed) {
         view.frame(yard.extent(), { glide: framed })
         framed = true

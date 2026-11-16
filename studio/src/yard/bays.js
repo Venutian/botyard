@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { Kit, painted, lit } from '../robots/kit.js'
 import { BAY_RADIUS, cornersOf } from './layout.js'
+import { dimColours } from './shelf.js'
 
 /**
  * A bay: a six-sided concrete pad with a broad stripe of its project's paint round the edge, a
@@ -22,10 +23,12 @@ const CRATES = ['#2f6fb5', '#b5482f', '#3f8f5f', '#c9a227']
 export const DECK_TOP = DECK
 
 /**
- * @param {{ name: string, paint: string, concrete: string, depot?: boolean }} bay
+ * A shelved project's bay is drawn shut up: its ground and walls dimmed, a tarpaulin with hazard
+ * straps over the post, a shuttered door with a padlock, and no lamp lit.
+ * @param {{ name: string, paint: string, concrete: string, depot?: boolean, shelved?: boolean }} bay
  * @returns {THREE.Group} at the bay's middle, with `userData.dispose`
  */
-export function buildBay({ paint, concrete, depot = false }) {
+export function buildBay({ paint, concrete, depot = false, shelved = false }) {
   const kit = new Kit()
   const glow = new Kit()
   glow.joint = kit.joint
@@ -60,11 +63,40 @@ export function buildBay({ paint, concrete, depot = false }) {
   kit.box(0.6, 0.08, 0.6, paint, [0, DECK + 1.86, 0])
   glow.box(0.38, 0.06, 0.04, depot ? '#f2f4f6' : paint, [0, DECK + 1.68, 0.26])
   const group = new THREE.Group()
-  const mesh = new THREE.Mesh(kit.weld(), painted())
+  const base = kit.weld()
+  const mesh = new THREE.Mesh(shelved ? dimColours(base) : base, painted())
   mesh.receiveShadow = mesh.castShadow = true
-  group.add(mesh, new THREE.Mesh(glow.weld(), lit()))
+  group.add(mesh)
+  if (shelved) {
+    group.add(shelvedCover())
+    glow.weld().dispose()
+  } else group.add(new THREE.Mesh(glow.weld(), lit()))
+  group.userData.shelved = shelved
   group.userData.dispose = () => group.traverse((o) => { if (o.isMesh) o.geometry.dispose() })
   return group
+}
+
+/** What shuts a shelved bay up: a tarpaulin over the post, shutters at the back and a padlock on them. Not dimmed: it is already dull. */
+function shelvedCover() {
+  const kit = new Kit()
+  const TARP = '#56635c', STRAP = '#b8962a', SLAT = '#2c3037'
+  const high = 2.5, foot = 5.5, top = 1.0, run = (foot - top) / 2
+  // The tarpaulin: a low tent over the charging post, hazard straps across it as a hatch.
+  kit.slab(foot, top, high, 5.5, TARP, [0, DECK, 0])
+  const slope = Math.atan2(high, run)
+  const strap = Math.hypot(run, high)
+  for (const z of [-1.8, 0, 1.8]) {
+    for (const s of [-1, 1]) kit.box(strap, 0.07, 0.36, STRAP, [s * ((foot + top) / 4 + 0.03), DECK + high / 2 + 0.04, z], [0, 0, -s * slope])
+  }
+  // The shutter at the back: a steel panel with slats, and a padlock hung on it.
+  const back = -6, mid = DECK + 1.1
+  kit.box(4.4, 2.2, 0.4, '#3b4047', [0, mid, back])
+  for (let k = 0; k < 7; k++) kit.box(4.3, 0.1, 0.5, SLAT, [0, DECK + 0.25 + k * 0.3, back + 0.02])
+  kit.box(0.5, 0.42, 0.22, '#c9a227', [0, mid, back + 0.32])
+  kit.ring(0.17, 0.05, '#c9a227', [0, mid + 0.3, back + 0.32], [Math.PI / 2, 0, 0])
+  const mesh = new THREE.Mesh(kit.weld(), painted())
+  mesh.castShadow = mesh.receiveShadow = true
+  return mesh
 }
 
 /** The gate the crew comes in by: two posts and a beam; the yard's name hangs from the beam (drawn on the page). */

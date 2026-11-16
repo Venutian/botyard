@@ -63,12 +63,15 @@ export class Yard {
     const placed = assign(names, before)
     keep(remember(names, placed, before))
     const concrete = LIGHTS[this.hour].concrete
+    const shelf = new Set(view.shelved || [])
     const wanted = new Map([[this.depot, 0], ...Object.entries(placed)])
+    // A bay is built again when its place changes or when it is shelved or taken off the shelf.
+    const isShelved = (name) => name !== this.depot && shelf.has(name)
     let moved = false
 
     // Bays: built for what is new or moved, taken down for what left.
     for (const [name, bay] of this.bays) {
-      if (wanted.get(name) === bay.at) continue
+      if (wanted.get(name) === bay.at && bay.shelved === isShelved(name)) continue
       this._drop(bay.group)
       this.bays.delete(name)
       moved = true
@@ -78,11 +81,12 @@ export class Yard {
       const depot = name === this.depot
       const paint = depot ? DEPOT_PAINT : BAY_PAINTS[(at - 1) % BAY_PAINTS.length]
       const centre = centreOf(at)
-      const group = buildBay({ name, paint, concrete, depot })
+      const shelved = isShelved(name)
+      const group = buildBay({ name, paint, concrete, depot, shelved })
       group.position.set(centre.x, 0, centre.z)
       this.stage.scene.add(group)
       this.bays.set(name, {
-        name, at, group, depot,
+        name, at, group, depot, shelved,
         paint,
         accent: parseInt(paint.slice(1), 16),
         middle: new THREE.Vector3(centre.x, 0, centre.z),
@@ -107,7 +111,8 @@ export class Yard {
     const byBay = new Map()
     for (const bot of view.crew) {
       if (!bot.crew) continue
-      const home = this.bays.has(bot.project) ? bot.project : this.depot
+      // Nobody walks in a shelved bay: a bot with a job there waits at the Depot.
+      const home = this.bays.has(bot.project) && !this.bays.get(bot.project).shelved ? bot.project : this.depot
       if (!byBay.has(home)) byBay.set(home, [])
       byBay.get(home).push(bot)
     }

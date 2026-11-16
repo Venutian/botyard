@@ -732,7 +732,11 @@
   cursor: pointer;
 }
 /* A bay too small on the page to carry words keeps its sign and only what waits for the owner. */
-.hud.studio .studio-tags .bay.far .t:not(.you) { display: none; }
+.hud.studio .studio-tags .bay.far .t:not(.you):not(.shelved) { display: none; }
+/* A shelved project: its sign is kept legible (light name on the dark plate, 12:1) with a dashed edge and a small SHELVED tag (7:1). */
+.hud.studio .studio-tags .bay.shelved .name { color: #e8ebef; border-style: dashed; border-color: #6b727d; }
+.hud.studio .studio-tags .bay.shelved .name i { background: repeating-linear-gradient(-45deg, #5b616b 0 3px, #2a2e35 3px 6px); }
+.hud.studio .studio-tags .bay .t.shelved { background: #4a505a; color: #ffffff; border-color: #05070a; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; }
 .hud.studio .studio-tags .bay.far .name { font-size: 15px; padding: 3px 8px 4px 4px; }
 .hud.studio .studio-tags .bay.far .name i { width: 11px; height: 14px; }
 

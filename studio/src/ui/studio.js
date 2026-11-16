@@ -2127,6 +2127,10 @@ setView(view) {
         const free = this.view.manager.bots.filter((b) => !b.job && b.status !== 'paused').length
         tags = `<b class="t none">${free ? `${free} free ${free === 1 ? 'bot waits' : 'bots wait'} here` : 'Free bots wait here'}</b>`
           + (c?.you ? `<button type="button" class="t you" data-bay-you="${esc(plot.name)}" title="Open what waits for you">${c.you} ${c.you === 1 ? 'needs' : 'need'} you</button>` : '')
+      } else if (this._shelved?.has(plot.name)) {
+        // A shelved bay says so in small type; the lead gives nobody work there, so no work tags.
+        tags = `<b class="t shelved" title="On the shelf: nothing is given out here until you take it off">\u{1F512} SHELVED</b>`
+          + (c?.you ? `<button type="button" class="t you" data-bay-you="${esc(plot.name)}" title="Open what waits for you in ${esc(plot.name)}">${c.you} ${c.you === 1 ? 'needs' : 'need'} you</button>` : '')
       } else if (!c) tags = ''
       else {
         // What waits for the owner comes first, so it is never the tag that wraps out of sight.
@@ -2136,7 +2140,7 @@ setView(view) {
       }
       const html = `<button type="button" class="name" data-bay="${esc(plot.name)}" title="${isDepot ? 'Open the crew' : `Open ${esc(plot.name)}`}"><i></i>${esc(plot.name)}</button><span class="tags">${tags}</span>`
       const accent = '#' + plot.accent.toString(16).padStart(6, '0')
-      put(plot.name, html, `bay${c?.you ? ' you' : ''}${width < 150 ? ' far' : ''}`, Math.round((left + right) / 2), Math.round(top) - 4, accent, width)
+      put(plot.name, html, `bay${c?.you ? ' you' : ''}${isDepot || !this._shelved?.has(plot.name) ? '' : ' shelved'}${width < 150 ? ' far' : ''}`, Math.round((left + right) / 2), Math.round(top) - 4, accent, width)
     }
     // Two signs never lie across each other: where they would, the one with nothing for the owner
     // keeps its name and drops its tags until there is room again.
