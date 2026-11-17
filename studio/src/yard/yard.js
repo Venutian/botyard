@@ -37,19 +37,25 @@ export class Yard {
     if (this.hour === hour) return
     this.hour = hour
     this.ground.light(hour)
-    this.stage.renderer.toneMappingExposure = LIGHTS[hour].exposure
+    this.stage.grade?.(hour)
     // Concrete is painted per hour, so the bays and the gate are built again in the new light.
     for (const bay of this.bays.values()) this._drop(bay.group)
     this.bays.clear()
     if (this.gate) { this._drop(this.gate); this.gate = null }
     if (this._last) this.show(this._last)
-    this.stage.redraw()
+    this._reshade()
+  }
+
+  /** The yard changed: its kept shadows are drawn again (a stand-in stage in a test only redraws). */
+  _reshade() {
+    if (this.stage.reshade) this.stage.reshade()
+    else this.stage.redraw()
   }
 
   /** How fine the shadows are. */
   shadows(size) {
     this.ground.shadows(size)
-    this.stage.redraw()
+    this._reshade()
   }
 
   /**
@@ -152,7 +158,9 @@ export class Yard {
       this.robots.delete(id)
     }
     this._showMinis(view, shelf)
-    this.stage.redraw()
+    // At night each open bay glows in its paint; the Depot in plain white light; a shelved bay stays dark.
+    if (moved) this.ground.glows([...this.bays.values()].filter((b) => !b.shelved).map((b) => ({ x: b.middle.x, z: b.middle.z, paint: b.depot ? '#c9d2e0' : b.paint })))
+    this._reshade()
     return moved
   }
 

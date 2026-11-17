@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { Kit, painted, lit } from '../robots/kit.js'
+import { Kit, painted, lit, PAINT, wearTexture } from '../robots/kit.js'
 
 /**
  * The yard's ground and light: asphalt laid in slabs, a sky the ground fades into, the sun or the
@@ -8,17 +8,22 @@ import { Kit, painted, lit } from '../robots/kit.js'
  */
 
 export const LIGHTS = {
+  // A clear morning: a warm low sun from one side, the cool sky filling the shade, warm light
+  // thrown back up off the ground. Shade reads blue-grey, sunlit faces cream.
   day: {
-    sky: '#c9d2dc', fog: [150, 420],
-    ground: '#7f848c', groundFar: '#5d626a', joint: '#696e76',
-    hemi: ['#e2e9f2', '#4f545c', 1.55], sun: ['#fff1de', 2.3], sunFrom: [-0.55, 1, 0.42],
-    concrete: '#dcd8cc', lampPool: 0.08, exposure: 1,
+    sky: '#c3cfdc', fog: [170, 430],
+    ground: '#7e8288', groundFar: '#5b6068', joint: '#696e76',
+    hemi: ['#cfdcf0', '#6a5e50', 1.2], sun: ['#ffe4c2', 3.0], sunFrom: [-0.7, 0.8, 0.42],
+    concrete: '#cbc5b6', lampPool: 0.07, bayGlow: 0,
+    rim: ['#bcd2f0', 0.22], wear: 1,
   },
+  // Moonlight from the other side, the floodlights warm on the ground and each bay lit in its own paint.
   night: {
-    sky: '#0d1117', fog: [120, 380],
-    ground: '#3c414a', groundFar: '#191c22', joint: '#30343c',
-    hemi: ['#6f80a0', '#0e1015', 1.0], sun: ['#c7d5ff', 0.85], sunFrom: [0.4, 1, 0.55],
-    concrete: '#8e9197', lampPool: 0.55, exposure: 1.05,
+    sky: '#0b0f17', fog: [120, 380],
+    ground: '#3a404a', groundFar: '#161a21', joint: '#30343c',
+    hemi: ['#6578a3', '#0c0e13', 1.0], sun: ['#b9cbff', 0.95], sunFrom: [0.4, 1, 0.55],
+    concrete: '#8a8e96', lampPool: 0.55, bayGlow: 0.34,
+    rim: ['#7d97d6', 0.42], wear: 0.8,
   },
 }
 
@@ -60,6 +65,26 @@ function asphalt() {
   return texture
 }
 
+/**
+ * The asphalt's material: the slab texture, laid over with soft stains at three sizes that never
+ * repeat, so the ground does not show the slab texture tiling across the whole yard.
+ */
+function asphaltMaterial() {
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, map: typeof document === 'undefined' ? null : asphalt() })
+  const speckle = wearTexture()
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSpeckle = { value: speckle }
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGround;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvGround = position.xz / 97.0;')
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uSpeckle;\nvarying vec2 vGround;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.rgb *= 0.88 + 0.22 * dot(texture2D(uSpeckle, vGround).rgb, vec3(0.55, 0.3, 0.15));`)
+  }
+  return material
+}
+
 let pool = null
 /** A soft round of light on the ground, shared by every floodlight. */
 function poolTexture() {
@@ -87,8 +112,11 @@ export class Ground {
     const plane = new THREE.PlaneGeometry(SIZE, SIZE, 48, 48)
     plane.rotateX(-Math.PI / 2)
     plane.setAttribute('color', new THREE.BufferAttribute(new Float32Array(plane.attributes.position.count * 3), 3))
-    this.floor = new THREE.Mesh(plane, new THREE.MeshLambertMaterial({ vertexColors: true, map: typeof document === 'undefined' ? null : asphalt() }))
+    this.floor = new THREE.Mesh(plane, asphaltMaterial())
     this.floor.receiveShadow = true
+    // The ground is drawn after everything standing on it, so the card never shades asphalt that a
+    // bay or a container then covers.
+    this.floor.renderOrder = 1
     this.group.add(this.floor)
 
     this.hemi = new THREE.HemisphereLight()
@@ -96,6 +124,8 @@ export class Ground {
     this.sun.castShadow = true
     this.sun.shadow.bias = -0.0006
     this.sun.shadow.normalBias = 0.03
+    // A wide soft edge costs nothing more: the same taps, spread further.
+    this.sun.shadow.radius = 2.5
     scene.add(this.hemi, this.sun, this.sun.target)
     this.props = null
     this.spread = 60
@@ -115,6 +145,12 @@ export class Ground {
     this._paintGround(l)
     if (this.poolMaterial) this.poolMaterial.opacity = l.lampPool
     if (this.lensMaterial) this.lensMaterial.color.setScalar(hour === 'night' ? 1.6 : 0.85)
+    if (this.glowMaterial) {
+      this.glowMaterial.opacity = l.bayGlow
+      this.glowMesh.visible = l.bayGlow > 0
+    }
+    PAINT.uRim.value.set(l.rim[0]).multiplyScalar(l.rim[1])
+    PAINT.uWear.value = l.wear
     this._aimSun()
   }
 
@@ -145,6 +181,34 @@ export class Ground {
     cam.near = 1
     cam.far = r * 4.5
     cam.updateProjectionMatrix()
+  }
+
+  /**
+   * A soft pool of each bay's own paint round its charging post, seen at night only. One drawing
+   * for every bay together.
+   * @param {{x:number,z:number,paint:string}[]} bays
+   */
+  glows(bays) {
+    if (typeof document === 'undefined') return
+    if (this.glowMesh) {
+      this.group.remove(this.glowMesh)
+      this.glowMesh.dispose()
+      this.glowMesh = null
+    }
+    if (!bays.length) return
+    this.glowMaterial ||= new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+    this.glowQuad ||= new THREE.PlaneGeometry(12, 12).rotateX(-Math.PI / 2)
+    const mesh = new THREE.InstancedMesh(this.glowQuad, this.glowMaterial, bays.length)
+    const m = new THREE.Matrix4()
+    const c = new THREE.Color()
+    bays.forEach((b, i) => {
+      mesh.setMatrixAt(i, m.makeTranslation(b.x, 0.33, b.z))
+      mesh.setColorAt(i, c.set(b.paint))
+    })
+    mesh.renderOrder = -1
+    this.glowMesh = mesh
+    this.group.add(mesh)
+    if (this.hour) this.light(this.hour)
   }
 
   /** How fine the sun's shadows are; 0 for none. */

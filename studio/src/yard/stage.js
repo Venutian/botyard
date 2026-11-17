@@ -26,6 +26,12 @@ export class Stage {
     this._asked = false
     this._last = 0
     this._make()
+    // A soft shade round the picture's edge, drawn by the page once: it holds the eye on the yard.
+    if (typeof document !== 'undefined') {
+      this.veil = document.createElement('div')
+      this.veil.className = 'yard-veil'
+      this.canvas.after(this.veil)
+    }
     this._watch = new ResizeObserver(() => this._fit())
     this._watch.observe(holder)
     this._fit()
@@ -44,6 +50,10 @@ export class Stage {
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = quality.shadows > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
+    // The sun's shadows fall on things that stand still, so they are drawn once and kept: only a
+    // change in the yard (`reshade`) draws them again, never a turn of the camera.
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
     this.renderer = renderer
     this.canvas = canvas
     this.quality = quality
@@ -76,6 +86,17 @@ export class Stage {
   /** Called with `{ w, h }` after the picture's size changed. */
   onResize(resized) {
     (this.resized ||= []).push(resized)
+  }
+
+  /** The edge shade for the hour: light and warm by day, deeper by night. */
+  grade(hour) {
+    if (this.veil) this.veil.dataset.hour = hour
+  }
+
+  /** Something in the yard was built, moved or relit: its shadows are drawn again with the next picture. */
+  reshade() {
+    this.renderer.shadowMap.needsUpdate = true
+    this.redraw()
   }
 
   /** Ask for one drawing. Any number of asks before the next frame make one drawing. */

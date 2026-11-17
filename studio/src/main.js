@@ -95,6 +95,11 @@ async function ask() {
       lastKey = key
       const moved = yard.show({ projects, depot: answer.depot, crew: answer.threads, shelved: answer.shelved })
       if (moved || !framed) {
+        // The first picture with the yard in it is marked, so how soon the map shows can be measured.
+        if (!framed) {
+          const first = () => { stage.drawn.delete(first); performance.mark('yard-first-picture') }
+          stage.drawn.add(first)
+        }
         view.frame(yard.extent(), { glide: framed })
         framed = true
       }

@@ -29,6 +29,9 @@ body {
 .yard-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; outline: none; touch-action: none; cursor: grab; }
 .yard-canvas:active { cursor: grabbing; }
 .yard-canvas.over-bot { cursor: pointer; }
+/* The picture's edge shade: holds the eye on the yard. Drawn once by the page, never by the map. */
+.yard-veil { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgb(28 34 46 / 0.2) 100%); }
+.yard-veil[data-hour="night"] { background: radial-gradient(ellipse 72% 68% at 50% 48%, transparent 45%, rgb(2 4 10 / 0.5) 100%); }
 
 /* The layer the panels sit in: the window's size, open to the yard below except where a panel is. */
 .hud { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
