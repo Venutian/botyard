@@ -12,6 +12,7 @@ import { artifactList, documentRevisions, editJob, jobIdOf, jobList, jobPage, pr
 import { changeDetail } from './lib/changes.mjs'
 import { readTimers } from './lib/library.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
+import { decideImprovement } from './lib/improvement-actions.mjs'
 import { crewFolder, readModels } from './lib/models.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions, tokenWindows } from './lib/crew.mjs'
 import { openrouterLeft, usageRows } from './lib/usage.mjs'
@@ -148,6 +149,9 @@ async function studioRoute(req, res, url) {
     // Instructions, documents and skill files can run to a few hundred kilobytes; everything else is a line or two.
     const big = ['/api/studio/instructions', '/api/studio/document', '/api/studio/skill', '/api/studio/job', '/api/studio/bot'].includes(url.pathname)
     const body = await readJsonBody(req, big ? 1024 * 1024 : 64 * 1024)
+    // The owner's override of a finding: only the map's own page on this machine gets here (the guards above).
+    const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
+    if (finding && req.method === 'POST') return send(res, 200, await decideImprovement(finding[1], { action: String(body.action || ''), reason: body.reason }))
     if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID()))
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))
     if (url.pathname === '/api/studio/routine' && req.method === 'POST') {

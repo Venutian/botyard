@@ -158,33 +158,63 @@ export function runsScreen({ view, filter, data }) {
 
 // ── Improvements ───────────────────────────────────────────────────────────────
 
-export const IMPROVEMENT_FILTERS = [['', 'All'], ['new', 'New'], ['accepted', 'Accepted'], ['done', 'Done'], ['rejected', 'Rejected']]
+export const IMPROVEMENT_FILTERS = [['open', 'To decide'], ['', 'All'], ['new', 'New'], ['ask', 'Ask me'], ['accepted', 'Accepted'], ['done', 'Done'], ['rejected', 'Rejected'], ['stale', 'Stale']]
+export const IMPROVEMENT_NAMES = { new: 'New', ask: 'Ask me', accepted: 'Accepted', done: 'Done', rejected: 'Rejected', stale: 'Stale' }
+const OPEN_STATES = ['new', 'ask']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "16 Nov" from a time in seconds. */
+export const shortDate = (seconds) => {
+  if (!seconds) return ''
+  const d = new Date(seconds * 1000)
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`
+}
+
+/** "Decided by Tony, 16 Nov" or "Decided by you, 17 Nov"; '' when nobody has decided. */
+export const decidedLine = (i) => (i.decidedBy ? `Decided by ${i.decidedBy === 'owner' ? 'you' : 'Tony'}${i.decidedAt ? `, ${shortDate(i.decidedAt)}` : ''}` : '')
+
+/** The story in one line: "Tony rejected 16 Nov; you accepted 17 Nov". '' when there is only one decision or none. */
+export const historyLine = (i) => {
+  const steps = [...(i.history || [])]
+  if (i.decidedBy && !steps.some((h) => h.at === i.decidedAt && h.by === i.decidedBy)) steps.push({ by: i.decidedBy, status: i.status, at: i.decidedAt })
+  if (steps.length < 2) return ''
+  const verb = { accepted: 'accepted', rejected: 'rejected', ask: 'asked about', new: 'reopened' }
+  return steps.map((h) => `${h.by === 'owner' ? 'you' : 'Tony'} ${verb[h.status] || h.status}${h.at ? ` ${shortDate(h.at)}` : ''}`).join('; ').replace(/^./, (c) => c.toUpperCase())
+}
 
 /**
- * "What did the audits find worth improving, and is anyone on it?" Findings Freya's audits and Tony list,
- * newest first inside each state. `data` is what /api/studio/improvements sent; `filter` is a state or ''.
- * The phone's Improvements screen shows the same list with the same filters.
+ * "What did the audits find worth improving, who decided, why, and is anyone on it?" One card per finding,
+ * with the owner's buttons. `data` is what /api/studio/improvements sent; `filter` is a state, '' for all,
+ * or 'open' for what still waits for a decision (new and Ask me). The phone's screen shows the same fields.
  */
-export function improvementsScreen(data, filter = '') {
-  const items = (data.items || []).filter((i) => !filter || i.status === filter)
-  const head = `<div class="filters"><div class="seg" role="tablist">${IMPROVEMENT_FILTERS.map(([id, name]) => {
-    const n = id ? data.counts?.[id] || 0 : (data.items || []).length
+export function improvementsScreen(data, filter = 'open') {
+  const match = (i) => (filter === 'open' ? OPEN_STATES.includes(i.status) : !filter || i.status === filter)
+  const items = (data.items || []).filter(match)
+  const head = `<div class="filters"><div class="seg" role="tablist" aria-label="Filter findings by status">${IMPROVEMENT_FILTERS.map(([id, name]) => {
+    const n = id === 'open' ? OPEN_STATES.reduce((t, k) => t + (data.counts?.[k] || 0), 0) : id ? data.counts?.[id] || 0 : (data.items || []).length
     return `<button type="button" role="tab" aria-selected="${filter === id}" class="${filter === id ? 'on' : ''}" data-act="improve-filter" data-status="${id}">${name} ${n}</button>`
   }).join('')}</div></div>`
-  const row = (i) => `<tr>
-      <td><b>${esc(i.title)}</b><br><span class="dim">${esc(i.id)}</span></td>
-      <td><code>${esc(i.path)}</code></td>
-      <td>${esc(i.evidence)}</td>
-      <td>${esc(i.fix)}</td>
-      <td>${esc(i.who)}</td>
-      <td><span class="${i.status === 'rejected' ? 'dim' : i.status === 'done' ? 'good' : i.status === 'accepted' ? 'go' : 'warnish'}">${esc(i.status)}</span></td>
-      <td>${i.job ? `<span class="job-ref">${esc(i.job)}</span>` : '<span class="dim">None yet</span>'}</td>
-    </tr>`
-  return `<p class="hint">Findings from Freya's audits and Tony. Tony and the audits add them with improvements.py; this page only reads them.</p>
+  const button = (act, name, i, cls = '') => `<button type="button" class="btn imp-btn ${cls}" data-act="${act}" data-id="${esc(i.id)}" aria-label="${name} finding ${esc(i.id)}: ${esc(i.title)}">${name}</button>`
+  const card = (i) => `<article class="finding" data-finding="${esc(i.id)}" aria-label="${esc(i.id)}: ${esc(i.title)}">
+      <header><span class="chip imp-${esc(i.status)}">${esc(IMPROVEMENT_NAMES[i.status] || i.status)}</span> <b>${esc(i.title)}</b> <span class="dim">${esc(i.id)}</span></header>
+      <p class="dim">${[i.path ? `<code>${esc(i.path)}</code>` : '', i.who ? `found by ${esc(i.who)}` : ''].filter(Boolean).join(' · ')}</p>
+      ${i.evidence ? `<p class="imp-evidence">Evidence: ${esc(i.evidence)}</p>` : ''}
+      ${i.fix ? `<p>Smallest fix: ${esc(i.fix)}</p>` : ''}
+      ${i.decidedBy ? `<p class="imp-why"><b>${esc(decidedLine(i))}.</b> ${i.reason ? `Why: ${esc(i.reason)}` : '<span class="dim">No reason written.</span>'}</p>` : ''}
+      ${historyLine(i) ? `<p class="dim imp-history">${esc(historyLine(i))}</p>` : ''}
+      <p class="imp-job">${i.job ? `Job: <button type="button" class="link" data-act="open-job" data-id="${esc(i.job)}"><b>${esc(i.job)}</b></button>` : '<span class="dim">No job yet</span>'}</p>
+      <div class="acts imp-acts" role="group" aria-label="Your decision on ${esc(i.id)}">
+        ${button('improve-accept', 'Accept', i)}${button('improve-reject-open', 'Reject', i)}${button('improve-ask', 'Ask me', i)}${button('improve-send', 'Send to Tony', i)}
+      </div>
+      <div class="imp-reject" hidden>
+        <label for="why-${esc(i.id)}">Why reject it? One line</label>
+        <input id="why-${esc(i.id)}" type="text" maxlength="400" autocomplete="off">
+        ${button('improve-reject-go', 'Reject it', i, 'danger')}
+      </div>
+    </article>`
+  return `<p class="hint">Findings from Freya's audits and Tony. Your decision always wins over Tony's, and you can change it again.</p>
     ${head}
-    ${items.length ? `<div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Finding</th><th>Where</th><th>Evidence</th><th>Smallest fix</th><th>Who</th><th>Status</th><th>Job</th></tr></thead>
-      <tbody>${items.map(row).join('')}</tbody></table></div>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
+    ${items.length ? `<div class="findings">${items.map(card).join('')}</div>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
 }
 
 /** One run: how it ended and why, what it used, its job, and the end of its log. */
