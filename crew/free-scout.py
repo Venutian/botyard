@@ -41,8 +41,9 @@ TASK = ('Write calc.py in the current folder with evaluate(expr, vars=None) -> f
         'empty input, implicit multiplication like 2(3), and min/max with no arguments. Write your own tests and run '
         'them before you finish.')
 # Which models are free: OpenCode's own free offers, OpenRouter's :free, and the free-tier providers the
-# owner signs in to, where every model is free but only coding-grade families are worth testing.
-FREE_PROVIDERS = ('nvidia/', 'mistral/', 'kilo/')
+# owner signs in to, where every model is free but only coding-grade families are worth testing. Groq's
+# free plan covers every model it lists, within its rate limits.
+FREE_PROVIDERS = ('nvidia/', 'mistral/', 'kilo/', 'groq/')
 WORTH = re.compile(r'kimi|glm-5|deepseek-v4|qwen3[.-]?(coder|8|6)|devstral|codestral|mistral-(large|medium)|'
                    r'nemotron-3-ultra|nemotron-3.5-super|gpt-oss-120b|minimax-m\d|step-5|kat-coder|north-mini-code', re.I)
 SMALL = re.compile(r'(^|[-/:])(0\.\d|1(\.\d)?|2(\.\d)?|3|4|7|8|9)b\b|nano|(^|[-/:])mini([-:]|$)|lite|tiny|guard|safety|whisper|orpheus|embed', re.I)
@@ -89,7 +90,7 @@ def is_free(model):
     if model.startswith('zai/'):
         return bool(re.search(r'glm-4\.[57]-flash$', model))
     if model.startswith('cloudflare-workers-ai/'):
-        return bool(re.search(r'glm-4\.7-flash|gpt-oss-120b|qwen2\.5-coder-32b', model))
+        return bool(re.search(r'glm-4\.7-flash|glm-5\.\d|deepseek-v4|gpt-oss-120b|qwen2\.5-coder-32b|qwen3[.-]?8', model))
     return model.startswith(FREE_PROVIDERS) and bool(WORTH.search(model))
 
 
