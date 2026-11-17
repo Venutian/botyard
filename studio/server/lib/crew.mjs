@@ -615,7 +615,7 @@ export async function moneyView({ folder = crewFolder(), now = Date.now(), ...op
 
 // ── improvements ───────────────────────────────────────────────────────────────────
 
-export const IMPROVEMENT_STATES = ['new', 'accepted', 'done', 'rejected']
+export const IMPROVEMENT_STATES = ['new', 'ask', 'accepted', 'done', 'rejected', 'stale']
 
 /**
  * What Freya's audits and Tony found worth improving: a plain file, improvements.json in the crew folder,
@@ -634,6 +634,11 @@ export function improvementsView({ folder = crewFolder() } = {}) {
     status: order.has(r.status) ? r.status : 'new',
     job: cut(r.job, 40),
     added: Number(r.added) || 0,
+    decidedBy: r.decidedBy === 'tony' || r.decidedBy === 'owner' ? r.decidedBy : '',
+    decidedAt: Number(r.decidedAt) || 0,
+    reason: cut(r.reason, 600),
+    history: (Array.isArray(r.history) ? r.history : []).filter((h) => h && (h.by === 'tony' || h.by === 'owner')).slice(-10)
+      .map((h) => ({ by: h.by, status: cut(h.status, 20), at: Number(h.at) || 0 })),
   })).sort((a, b) => order.get(a.status) - order.get(b.status) || b.added - a.added)
   const counts = Object.fromEntries(IMPROVEMENT_STATES.map((name) => [name, items.filter((i) => i.status === name).length]))
   return { items, counts }

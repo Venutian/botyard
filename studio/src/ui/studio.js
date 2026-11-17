@@ -2372,6 +2372,18 @@ setView(view) {
     if (act === 'open-job') { this._go(() => this.openJob(id)); return true }
     if (act === 'models') { this._go(() => this.openMoney()); return true }
     if (act === 'improve-filter') { this._improve = el.dataset.status || ''; this.openImprovements(); return true }
+    if (act === 'improve-reject-open') {
+      const form = el.closest('.finding')?.querySelector('.imp-reject')
+      if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input')?.focus() }
+      return true
+    }
+    if (['improve-accept', 'improve-ask', 'improve-send', 'improve-reject-go'].includes(act)) {
+      const action = { 'improve-accept': 'accept', 'improve-ask': 'ask', 'improve-send': 'send', 'improve-reject-go': 'reject' }[act]
+      const reason = action === 'reject' ? (el.closest('.finding')?.querySelector('.imp-reject input')?.value || '').trim() : ''
+      if (action === 'reject' && !reason) { this.actions.toast('Say in one line why you reject it', 'err'); return true }
+      this._improveDecide(id, action, reason)
+      return true
+    }
     if (act === 'bot-runs') { this._runs = { view: 'runs', filter: { bot: id, status: '' }, page: 0 }; this._go(() => this.openRuns()); return true }
     if (act === 'talk') { this.actions.pickBot(id); return true }
     if (act === 'runs-view') { this._runs.view = el.dataset.view; this._runs.page = 0; this._loadRuns(); return true }
@@ -2551,8 +2563,20 @@ setView(view) {
     }
   }
 
+  /** The owner's decision on one finding; the page is read again so the change shows at once. */
+  async _improveDecide(id, action, reason) {
+    try {
+      const done = await call(`/api/studio/improvements/${encodeURIComponent(id)}`, { action, reason })
+      const said = { accept: 'Accepted', reject: 'Rejected', ask: 'Marked Ask me', send: 'Sent to Tony' }[action]
+      this.actions.toast(done.jobRef ? `${said}: job ${done.jobRef}` : said)
+    } catch (err) {
+      this.actions.toast(err.message || 'That did not save', 'err')
+    }
+    this.openImprovements()
+  }
+
   async openImprovements() {
-    this._improve = this._improve || ''
+    this._improve = this._improve ?? 'open'
     this._openSheet('improvements', 'Improvements', 'What the audits found worth improving, and who is on it', { wide: true })
     this._reopen = () => this.openImprovements()
     const seq = ++this._sheetSeq

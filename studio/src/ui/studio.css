@@ -1345,3 +1345,20 @@
 .hud .owner-choice label > span { flex: 1; min-width: 0; }
 .owner-choice small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .studio-sheet .job-ref { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Improvements: one card per finding, the owner's buttons at 44 px */
+.studio-sheet .findings { display: grid; gap: 10px; margin: 0 4px 8px; }
+.studio-sheet .finding { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.studio-sheet .finding p { margin: 4px 0; line-height: 1.4; }
+.studio-sheet .finding header { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+.studio-sheet .finding .chip { padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line-strong); font: 700 12px/1.4 var(--body); }
+.studio-sheet .finding .chip.imp-new, .studio-sheet .finding .chip.imp-ask { color: var(--warn, #c80); }
+.studio-sheet .finding .chip.imp-accepted { color: var(--go, #3a7); }
+.studio-sheet .finding .chip.imp-done { color: var(--good, #2a6); }
+.studio-sheet .finding .chip.imp-rejected, .studio-sheet .finding .chip.imp-stale { color: var(--muted); }
+.studio-sheet .imp-why { white-space: normal; }
+.studio-sheet .imp-acts .btn, .studio-sheet .imp-reject .btn, .studio-sheet .imp-reject input { min-height: 44px; min-width: 44px; }
+.studio-sheet .imp-reject { display: grid; gap: 6px; margin-top: 8px; }
+.studio-sheet .imp-reject input { padding: 0 10px; font: inherit; }
+.studio-sheet .finding button.link { min-height: 44px; }
+@media (max-width: 480px) { .studio-sheet .imp-acts .btn { flex: 1 1 45%; } }

@@ -885,6 +885,12 @@ test('the improvements read through the door, the same list the PC page shows, a
     assert.deepEqual(page.body.items.map((i) => [i.id, i.status, i.job, i.path]), [['IMP-1', 'accepted', 'NGE-961', 'briefs/tony']])
     assert.equal(page.body.counts.accepted, 1)
     assert.notEqual((await ask('/v1/improvements', { method: 'POST', body: {} })).status, 200)
+    assert.equal((await ask('/v1/improvements/IMP-1', { method: 'POST', body: { action: 'reject' } })).status, 400)
+    const done = await ask('/v1/improvements/IMP-1', { method: 'POST', body: { action: 'reject', reason: 'No need' } })
+    assert.equal(done.status, 200)
+    const after = (await ask('/v1/improvements')).body.items[0]
+    assert.deepEqual([after.status, after.decidedBy, after.reason], ['rejected', 'owner', 'No need'])
+    assert.equal(after.history.length, 0)
   }, { crew: { 'improvements.json': items } })
 })
 

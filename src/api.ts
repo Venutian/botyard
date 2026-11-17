@@ -427,10 +427,14 @@ export const getRuns = (c: Connection, p: { bot?: string; status?: string; page?
 export const getRun = (c: Connection, id: string) => call<RunDetail>(c, `/runs/${id}`);
 export const getActivity = (c: Connection, p: { bot?: string; page?: number }) => call<ActivityPage>(c, `/activity${query(p)}`);
 export const getSpend = (c: Connection) => call<SpendView>(c, '/spend');
-export type ImprovementState = 'new' | 'accepted' | 'done' | 'rejected';
-export type Improvement = { id: string; title: string; path: string; evidence: string; fix: string; who: string; status: ImprovementState; job: string; added: number };
+export type ImprovementState = 'new' | 'ask' | 'accepted' | 'done' | 'rejected' | 'stale';
+export type Improvement = { id: string; title: string; path: string; evidence: string; fix: string; who: string; status: ImprovementState; job: string; added: number; decidedBy: '' | 'tony' | 'owner'; decidedAt: number; reason: string; history: { by: string; status: string; at: number }[] };
 export type ImprovementList = { items: Improvement[]; counts: Record<ImprovementState, number> };
 export const getImprovements = (c: Connection) => call<ImprovementList>(c, '/improvements');
+export type ImprovementAction = 'accept' | 'reject' | 'ask' | 'send';
+/** Your decision on one finding. It always wins over Tony's, and a second decision changes it again. */
+export const decideImprovement = (c: Connection, id: string, action: ImprovementAction, reason = '') =>
+  call<{ ok: boolean; jobRef: string }>(c, `/improvements/${id}`, 'POST', { action, reason });
 export const getJobs = (c: Connection, p: { pile?: JobPile; project?: string; bot?: string; q?: string; page?: number }) => call<JobListPage>(c, `/jobs${query(p)}`);
 export const getJobMore = (c: Connection, id: string) => call<JobMore>(c, `/jobs/${id}/more`);
 export const getProjects = (c: Connection) => call<ProjectList>(c, '/projects');
