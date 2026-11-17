@@ -26,7 +26,7 @@ test('Claude Code: its words, its thinking, each tool with its input and result,
     { type: 'user', session_id: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'ok 12 tests' }] } },
     { type: 'assistant', session_id: 's1', message: { id: 'm2', content: [{ type: 'tool_use', id: 'tu2', name: 'Read', input: { file_path: '/w/job/a.js' } }] } },
     { type: 'user', session_id: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'tu2', is_error: true, content: [{ type: 'text', text: 'File not found' }] }] } },
-    { type: 'assistant', session_id: 's1', message: { id: 'm3', content: [{ type: 'tool_use', id: 'tu3', name: 'mcp__botyard__close_job', input: { id: 'NGE-1' } }] } },
+    { type: 'assistant', session_id: 's1', message: { id: 'm3', content: [{ type: 'tool_use', id: 'tu3', name: 'mcp__botyard__close_job', input: { id: 'YRD-1' } }] } },
     { type: 'assistant', session_id: 's1', message: { id: 'm4', content: [{ type: 'text', text: 'Done: the tests pass.' }] } },
     { type: 'result', subtype: 'success', session_id: 's1', result: 'Done: the tests pass.', usage: {} },
   ]))

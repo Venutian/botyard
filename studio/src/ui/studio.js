@@ -2567,7 +2567,7 @@ setView(view) {
   async _improveDecide(id, action, reason) {
     try {
       const done = await call(`/api/studio/improvements/${encodeURIComponent(id)}`, { action, reason })
-      const said = { accept: 'Accepted', reject: 'Rejected', ask: 'Marked Ask me', send: 'Sent to Tony' }[action]
+      const said = { accept: 'Accepted', reject: 'Rejected', ask: 'Marked Ask me', send: 'Sent to the lead' }[action]
       this.actions.toast(done.jobRef ? `${said}: job ${done.jobRef}` : said)
     } catch (err) {
       this.actions.toast(err.message || 'That did not save', 'err')

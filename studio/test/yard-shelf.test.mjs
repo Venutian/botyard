@@ -17,7 +17,7 @@ const lightOf = (mesh) => {
   for (let i = 0; i < c.count; i++) { out.setRGB(c.getX(i), c.getY(i), c.getZ(i), THREE.LinearSRGBColorSpace); sum += out.getHSL({}, THREE.SRGBColorSpace).l }
   return sum / c.count
 }
-const args = { name: 'Fasten', paint: '#d9534f', concrete: '#dcd8cc' }
+const args = { name: 'Lantern', paint: '#d9534f', concrete: '#dcd8cc' }
 
 test('a shelved bay is dimmed to about 55 percent, covered and shuttered, with its lamp off', () => {
   const live = buildBay(args)
@@ -39,25 +39,25 @@ const bot = (id, project) => ({ id, project, crew: { id, name: id, status: 'runn
 
 test('the yard redraws a bay when it is shelved or taken off the shelf, and nobody stands in a shelved bay', () => {
   const yard = new Yard(stage())
-  const view = { projects: ['Baltis', 'Fasten'], depot: 'Depot', crew: [bot('a', 'Baltis'), bot('b', 'Fasten')], shelved: [] }
+  const view = { projects: ['Quarry', 'Lantern'], depot: 'Depot', crew: [bot('a', 'Quarry'), bot('b', 'Lantern')], shelved: [] }
   yard.show(view)
-  assert.equal(yard.bays.get('Fasten').shelved, false)
-  const live = yard.bays.get('Fasten').group
+  assert.equal(yard.bays.get('Lantern').shelved, false)
+  const live = yard.bays.get('Lantern').group
   const depot = yard.bays.get('Depot').middle
-  assert.ok(Math.hypot(yard.robots.get('b').pos.x - yard.bays.get('Fasten').middle.x, yard.robots.get('b').pos.z - yard.bays.get('Fasten').middle.z) < 8)
+  assert.ok(Math.hypot(yard.robots.get('b').pos.x - yard.bays.get('Lantern').middle.x, yard.robots.get('b').pos.z - yard.bays.get('Lantern').middle.z) < 8)
 
-  yard.show({ ...view, shelved: ['Fasten'] })
-  const bay = yard.bays.get('Fasten')
+  yard.show({ ...view, shelved: ['Lantern'] })
+  const bay = yard.bays.get('Lantern')
   assert.equal(bay.shelved, true)
   assert.notEqual(bay.group, live, 'the bay was drawn again, shelved')
   assert.equal(bay.group.userData.shelved, true)
-  assert.equal(yard.bays.get('Baltis').shelved, false, 'only the shelved project changes')
+  assert.equal(yard.bays.get('Quarry').shelved, false, 'only the shelved project changes')
   assert.ok(Math.hypot(yard.robots.get('b').pos.x - depot.x, yard.robots.get('b').pos.z - depot.z) < 8, 'a bot with a job in a shelved bay waits at the Depot')
 
   const same = bay.group
-  yard.show({ ...view, shelved: ['Fasten'] })
-  assert.equal(yard.bays.get('Fasten').group, same, 'an unchanged shelf draws nothing again')
+  yard.show({ ...view, shelved: ['Lantern'] })
+  assert.equal(yard.bays.get('Lantern').group, same, 'an unchanged shelf draws nothing again')
   yard.show(view)
-  assert.equal(yard.bays.get('Fasten').shelved, false)
-  assert.equal(yard.bays.get('Fasten').at, bay.at, 'a project keeps its place on and off the shelf')
+  assert.equal(yard.bays.get('Lantern').shelved, false)
+  assert.equal(yard.bays.get('Lantern').at, bay.at, 'a project keeps its place on and off the shelf')
 })

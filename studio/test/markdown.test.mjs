@@ -26,13 +26,13 @@ test('nothing a bot writes becomes a tag or a script', () => {
   assert.equal(markdown('[x](javascript:alert(1))'), '<p>[x](javascript:alert(1))</p>')
   assert.equal(markdown('[site](https://example.com/a?b=1)'), '<p><a href="https://example.com/a?b=1" target="_blank" rel="noopener noreferrer">site</a></p>')
   assert.equal(markdown('`**not bold** <b>`'), '<p><code>**not bold** &lt;b&gt;</code></p>')
-  assert.equal(markdown('[LH-1](/NGE/issues/LH-1)', { base: 'http://127.0.0.1:3100' }), '<p><a href="http://127.0.0.1:3100/NGE/issues/LH-1" target="_blank" rel="noopener noreferrer">LH-1</a></p>')
+  assert.equal(markdown('[LH-1](/YRD/issues/LH-1)', { base: 'http://127.0.0.1:3100' }), '<p><a href="http://127.0.0.1:3100/YRD/issues/LH-1" target="_blank" rel="noopener noreferrer">LH-1</a></p>')
   assert.equal(markdown('[x](//evil.example/a)', { base: 'http://127.0.0.1:3100' }), '<p>[x](//evil.example/a)</p>')
   assert.equal(markdown(null), '')
 })
 
 test("on the map a link to a job's board page opens the job's own page, and other board pages are only words", () => {
-  assert.equal(markdown('See [LH-12](/NGE/issues/LH-12#comment-1).', { jobs: true }), '<p>See <button class="link" data-act="open-job" data-id="LH-12">LH-12</button>.</p>')
-  assert.equal(markdown('[the board](/NGE/dashboard) and [x](//evil.example/a)', { jobs: true }), '<p>the board and [x](//evil.example/a)</p>')
-  assert.equal(markdown('[a](/NGE/issues/LH-1"onclick=x)', { jobs: true }), '<p>a</p>')
+  assert.equal(markdown('See [LH-12](/YRD/issues/LH-12#comment-1).', { jobs: true }), '<p>See <button class="link" data-act="open-job" data-id="LH-12">LH-12</button>.</p>')
+  assert.equal(markdown('[the board](/YRD/dashboard) and [x](//evil.example/a)', { jobs: true }), '<p>the board and [x](//evil.example/a)</p>')
+  assert.equal(markdown('[a](/YRD/issues/LH-1"onclick=x)', { jobs: true }), '<p>a</p>')
 })

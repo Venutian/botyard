@@ -16,7 +16,7 @@ class Ceilings(unittest.TestCase):
     def test_the_owners_ceilings_are_used(self):
         self.assertEqual(guard.ceilings({'weekCeiling': 0.8, 'leadCeiling': 0.95}), (0.8, 0.95))
 
-    def test_tony_never_stops_before_the_crew(self):
+    def test_the_lead_never_stops_before_the_crew(self):
         self.assertEqual(guard.ceilings({'weekCeiling': 0.99, 'leadCeiling': 0.9}), (0.99, 0.99))
 
     def test_nonsense_falls_back(self):

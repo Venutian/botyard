@@ -10,7 +10,7 @@ CREW = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 NO_REPLY = '12345+example@users.noreply.github.com'
 os.environ['BOTYARD_GIT_NOREPLY'] = NO_REPLY
 SAFE_MAIL = re.compile(r'@users\.noreply\.github\.com$')  # the same pattern as own/review-guard.py
-BOTS = {'bob-the-builder': 'Bob', 'chip-the-ripper': 'Chip', 'oscar-the-wise': 'Oscar', 'ada-the-builder': 'Ada',
+BOTS = {'ben-the-mason': 'Ben', 'cleo-the-smith': 'Cleo', 'oscar-the-wise': 'Oscar', 'ada-the-builder': 'Ada',
         'ivy-the-checker': 'Ivy', 'max-the-scout': 'Max'}
 
 
@@ -53,9 +53,9 @@ class GitIdentity(unittest.TestCase):
             os.chmod(fake, 0o755)
             out = subprocess.run(['sh', os.path.join(CREW, 'claude-bot.sh'), '--print', 'hi'], capture_output=True, text=True, cwd=d,
                                  env={'PATH': '/usr/bin:/bin', 'HOME': d, 'BOTYARD_CLAUDE': fake, 'BOTYARD_CONNECTORS': 'off',
-                                      'BOTYARD_BOT_SETTINGS': '/x/bob-the-builder.claude.json', 'BOTYARD_GIT_NOREPLY': NO_REPLY,
+                                      'BOTYARD_BOT_SETTINGS': '/x/ben-the-mason.claude.json', 'BOTYARD_GIT_NOREPLY': NO_REPLY,
                                       'GIT_AUTHOR_EMAIL': 'me@example.local'}).stdout
-            self.assertIn('GIT_AUTHOR_NAME=Bob', out)
+            self.assertIn('GIT_AUTHOR_NAME=Ben', out)
             self.assertIn(f'GIT_COMMITTER_EMAIL={NO_REPLY}', out)
             self.assertNotIn('example.local', out)
 
@@ -86,15 +86,15 @@ class GitIdentity(unittest.TestCase):
             try:
                 open(cfg, 'w').close()
                 self.assertEqual(ident.no_reply(), '')  # no address available: nothing is set
-                self.assertEqual(ident.identity_env('bob'), {})
-                target = {'BOTYARD_BOT_NAME': 'bob'}
+                self.assertEqual(ident.identity_env('ben'), {})
+                target = {'BOTYARD_BOT_NAME': 'ben'}
                 ident.apply(target)
-                self.assertEqual(target, {'BOTYARD_BOT_NAME': 'bob'})
-                subprocess.run(['git', 'config', '--global', 'user.email', 'me@gmail.com'], check=True)
+                self.assertEqual(target, {'BOTYARD_BOT_NAME': 'ben'})
+                subprocess.run(['git', 'config', '--global', 'user.email', 'me@example.com'], check=True)
                 self.assertEqual(ident.no_reply(), '')  # a personal global address is never used
                 subprocess.run(['git', 'config', '--global', 'user.email', NO_REPLY], check=True)
                 self.assertEqual(ident.no_reply(), NO_REPLY)
-                self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': 'me@gmail.com'}), '')  # a setting that is not no-reply is refused
+                self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': 'me@example.com'}), '')  # a setting that is not no-reply is refused
                 self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': '9+z@users.noreply.github.com'}), '9+z@users.noreply.github.com')
             finally:
                 os.environ['BOTYARD_GIT_NOREPLY'] = NO_REPLY

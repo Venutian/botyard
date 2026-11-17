@@ -90,7 +90,7 @@ await G(`/companies/${C}/projects`); await G(`/projects/${proj}`); await call('P
 // routines
 await G(`/companies/${C}/routines`); const r = await P(`/companies/${C}/routines`, { title: 'Sweep routine', description: '', assigneeAgentId: made.id, projectId: proj })
 await G(`/routines/${r.id}`); await call('PATCH', `/routines/${r.id}`, { status: 'paused' }); await call('PATCH', `/routines/${r.id}`, { status: 'active' }); await P(`/routines/${r.id}/run`)
-const t = await P(`/routines/${r.id}/triggers`, { kind: 'schedule', cronExpression: '0 3 * * *', timezone: 'Europe/Stockholm' }); await call('PATCH', `/routine-triggers/${t.id}`, { cronExpression: '0 4 * * *' })
+const t = await P(`/routines/${r.id}/triggers`, { kind: 'schedule', cronExpression: '0 3 * * *', timezone: 'Europe/Berlin' }); await call('PATCH', `/routine-triggers/${t.id}`, { cronExpression: '0 4 * * *' })
 await G(`/routines/${routine || r.id}/runs`); await G(`/routines/${routine || r.id}/revisions`); await call('PATCH', `/routines/${r.id}`, { status: 'archived' })
 // skills
 await G(`/agents/${bot}/skills`); await G(`/companies/${C}/skills`); await G(`/companies/${C}/skills/${C}`); await G(`/companies/${C}/skills/${C}/files?path=SKILL.md`); await call('PATCH', `/companies/${C}/skills/${C}/files`, { path: 'SKILL.md', content: 'x' })

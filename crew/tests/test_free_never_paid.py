@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""STANDARDS.md rule 22, part 2: a bot whose file says "ai": "free" never falls back to Antigravity, Codex or
-Claude for its work. Tony's own chain (Codex, then Antigravity, then Claude) is unchanged."""
+"""A bot whose file says "ai": "free" never falls back to Antigravity, Codex or Claude for its work. The
+lead's own chain (Codex, then Antigravity, then Claude) is unchanged."""
 import json
 import os
 import sys
@@ -36,7 +36,7 @@ class NoPaidEngineForFreeBots(Studio):
         self.files.paid_by_hand = True
         self.assertEqual(self.files.build('hunter', 'gemini')['ai'], 'gemini')
 
-    def test_tonys_own_chain_still_moves_codex_bots_and_leaves_free_bots_alone(self):
+    def test_the_leads_own_chain_still_moves_codex_bots_and_leaves_free_bots_alone(self):
         self.m.main()
         free_before = dict(self.engine.agents['id-hunter'])
         self.m.move_thinkers('gemini', back=1)

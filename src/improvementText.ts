@@ -12,16 +12,19 @@ export const shortDate = (seconds: number): string => {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 };
 
-/** "Decided by Tony, 16 Nov" or "Decided by you, 17 Nov"; '' when nobody has decided. */
-export const decidedLine = (i: Finding): string =>
-  i.decidedBy ? `Decided by ${i.decidedBy === 'owner' ? 'you' : 'Tony'}${i.decidedAt ? `, ${shortDate(i.decidedAt)}` : ''}` : '';
+/** Who a decision was by, in words: 'you' for the owner, else the lead bot by its name. */
+const whoDecided = (by: string, lead: string): string => (by === 'owner' ? 'you' : lead || 'the lead');
 
-/** "Tony rejected 16 Nov; you accepted 17 Nov"; '' when there is at most one decision. */
-export const historyLine = (i: Finding): string => {
+/** "Decided by Lead, 16 Nov" or "Decided by you, 17 Nov"; '' when nobody has decided. */
+export const decidedLine = (i: Finding, lead = ''): string =>
+  i.decidedBy ? `Decided by ${whoDecided(i.decidedBy, lead)}${i.decidedAt ? `, ${shortDate(i.decidedAt)}` : ''}` : '';
+
+/** "Lead rejected 16 Nov; you accepted 17 Nov"; '' when there is at most one decision. */
+export const historyLine = (i: Finding, lead = ''): string => {
   const steps: Step[] = [...(i.history ?? [])];
   if (i.decidedBy && !steps.some((h) => h.at === i.decidedAt && h.by === i.decidedBy)) steps.push({ by: i.decidedBy, status: i.status, at: i.decidedAt ?? 0 });
   if (steps.length < 2) return '';
   const verb: Record<string, string> = { accepted: 'accepted', rejected: 'rejected', ask: 'asked about', new: 'reopened' };
-  const text = steps.map((h) => `${h.by === 'owner' ? 'you' : 'Tony'} ${verb[h.status] ?? h.status}${h.at ? ` ${shortDate(h.at)}` : ''}`).join('; ');
+  const text = steps.map((h) => `${whoDecided(h.by, lead)} ${verb[h.status] ?? h.status}${h.at ? ` ${shortDate(h.at)}` : ''}`).join('; ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 };

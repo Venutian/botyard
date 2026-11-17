@@ -1,7 +1,7 @@
 /**
- * How a job is shown. Its engine code (`NGE-326`, the studio's letters and the job's number) is the
+ * How a job is shown. Its engine code (`YRD-326`, the yard's letters and the job's number) is the
  * stable key and never changes. The code people read is the project's own letters with the same
- * number (`BAL-326`); a job with no project reads `CREW-326`. Both forms name the same job.
+ * number (`QRY-326`); a job with no project reads `CREW-326`. Both forms name the same job.
  */
 export const NO_PROJECT_CODE = 'CREW'
 const SHAPE = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/
@@ -15,7 +15,7 @@ export function codeOfProject(store, projectId) {
   return store.object('SELECT raw FROM projects WHERE id = ?', projectId)?.code || null
 }
 
-/** `BAL-326` for the job whose engine code is `NGE-326`; the engine code itself when its project has no letters. */
+/** `QRY-326` for the job whose engine code is `YRD-326`; the engine code itself when its project has no letters. */
 export function displayOf(store, identifier, cache = new Map()) {
   const found = SHAPE.exec(String(identifier ?? ''))
   if (!found) return null
@@ -27,7 +27,7 @@ export function displayOf(store, identifier, cache = new Map()) {
   return out
 }
 
-/** Any form of a job's code → the engine's own (`bal-326` → `NGE-326`); anything else comes back as it was. */
+/** Any form of a job's code → the engine's own (`qry-326` → `YRD-326`); anything else comes back as it was. */
 export function engineCode(store, ref) {
   if (typeof ref !== 'string') return ref
   const found = SHAPE.exec(ref.trim())

@@ -46,7 +46,7 @@ PUBLISHED = (('opencode/longcat', '100 requests a day, which one long build can 
 
 
 # Providers whose free allowance is one count for the whole key, and which turns over at 00:00 UTC (01:00 in
-# Sweden, the "new day at 01:00" above). STANDARDS.md rule 22: a daily cap names the provider, not the model.
+# Central Europe, the "new day at 01:00" above). STANDARDS.md rule 22: a daily cap names the provider, not the model.
 DAILY = ('openrouter/', 'cloudflare-workers-ai/')
 
 

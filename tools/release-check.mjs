@@ -15,6 +15,11 @@
  *   files    anything over 5 MB, keystores, certificates, key files and credential files, and a
  *            picture or page a Markdown file points to that is not there
  *
+ *   node tools/release-check.mjs --commits A..B  also each commit in the range: its message, and its author
+ *                                                and committer, who must be a GitHub no-reply address
+ *
+ * tools/hooks/pre-push runs both before every push (`git config core.hooksPath tools/hooks` turns it on).
+ *
  * A line that is a known and wanted exception ends with the words `release-check: allow`. Two kinds
  * of line are allowed without it: the repository's own address, and a licence's copyright lines.
  */
@@ -33,7 +38,9 @@ const ALLOW = 'release-check: allow'
  */
 const WORDS = ['muirta tnega', 'gnissorc tob', 'tobsuamnepo', 'tobsuam', 'skcor nerraj', 'ecneics noitats', 'negn', 'sunev', 'naitunev', 'leoy', 'uthcarbem', 'sitlab', 'attollab', 'sidla', 'selur thgin', 'oyay ynot', 'noedig', 'eht nerak', 'eht kcirb', 'redliub eht bob', 'ukawk', 'eht derf', 'ayerf', 'irafat', 'oguh', 'appilf', 'ltsuh', 'ksedsboj', 'eldnik', 'deritnu', 'sbalnegn', 'pilcrepap']
   .map((word) => [...word].reverse().join(''))
-const NAMES = new RegExp(WORDS.map((word) => word.replace(/ /g, '[ _-]?')).join('|'), 'i')
+/** Whole words only: a first studio's lead bot and its job codes, short enough to be inside other words. */
+const WHOLE = ['ynot', 'egn', 'mlohkcots', 'nedews'].map((word) => [...word].reverse().join(''))
+const NAMES = new RegExp([...WORDS.map((word) => word.replace(/ /g, '[ _-]?')), ...WHOLE.map((word) => `\\b${word}\\b`)].join('|'), 'i')
 
 /** What is taken out of a line before the words are looked for: things that only look like one. */
 const HARMLESS = [
@@ -190,9 +197,36 @@ export function check(dir = root, only = []) {
   return { files: files.length, hits, pictures }
 }
 
+const NO_REPLY = /@users\.noreply\.github\.com$/i
+
+/** Each commit in `range` (git's A..B): its message read like a file's lines, and who wrote and committed it. */
+export function checkCommits(dir, range) {
+  const out = execFileSync('git', ['log', '--format=%H%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e', range], { cwd: dir, encoding: 'utf8' })
+  const hits = []
+  for (const record of out.split('\x1e').map((r) => r.trim()).filter(Boolean)) {
+    const [sha, an, ae, cn, ce, body] = record.split('\x1f')
+    const file = `commit ${sha.slice(0, 7)}`
+    for (const [who, mail, role] of [[an, ae, 'author'], [cn, ce, 'committer']]) {
+      if (!NO_REPLY.test(mail)) hits.push({ file, line: 0, kind: 'names', what: `its ${role} is not a GitHub no-reply address (${mail.replace(/^(.).*@/, '$1…@')})` })
+      // The account's own GitHub name, as its no-reply address spells it, is who wrote it: that is the point.
+      const own = (mail.match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i) || [])[1]
+      const word = own && who.toLowerCase() === own.toLowerCase() ? null : NAMES.exec(who)
+      if (word) hits.push({ file, line: 0, kind: 'names', what: `its ${role}'s name "${word[0]}" belongs to one person's set-up` })
+    }
+    String(body || '').split('\n').forEach((text, index) => {
+      for (const hit of checkLine('COMMIT_EDITMSG', text)) hits.push({ file, line: index + 1, ...hit })
+    })
+  }
+  return hits
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const only = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--commits')
+  const range = at >= 0 ? args[at + 1] : ''
+  const only = args.filter((arg, i) => !arg.startsWith('--') && !(at >= 0 && i === at + 1))
   const { files, hits, pictures } = check(root, only)
+  if (range) hits.push(...checkCommits(root, range))
   const titles = { names: 'Personal or belonging to one set-up', secrets: 'Looks like a secret', files: 'Should not be tracked' }
   for (const kind of Object.keys(titles)) {
     const mine = hits.filter((hit) => hit.kind === kind)

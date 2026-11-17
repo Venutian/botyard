@@ -170,16 +170,19 @@ export const shortDate = (seconds) => {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`
 }
 
-/** "Decided by Tony, 16 Nov" or "Decided by you, 17 Nov"; '' when nobody has decided. */
-export const decidedLine = (i) => (i.decidedBy ? `Decided by ${i.decidedBy === 'owner' ? 'you' : 'Tony'}${i.decidedAt ? `, ${shortDate(i.decidedAt)}` : ''}` : '')
+/** Who a decision was by, in words: 'you' for the owner, else the lead bot by its name. */
+const whoDecided = (by, lead) => (by === 'owner' ? 'you' : lead || 'the lead')
 
-/** The story in one line: "Tony rejected 16 Nov; you accepted 17 Nov". '' when there is only one decision or none. */
-export const historyLine = (i) => {
+/** "Decided by Lead, 16 Nov" or "Decided by you, 17 Nov"; '' when nobody has decided. */
+export const decidedLine = (i, lead = '') => (i.decidedBy ? `Decided by ${whoDecided(i.decidedBy, lead)}${i.decidedAt ? `, ${shortDate(i.decidedAt)}` : ''}` : '')
+
+/** The story in one line: "Lead rejected 16 Nov; you accepted 17 Nov". '' when there is only one decision or none. */
+export const historyLine = (i, lead = '') => {
   const steps = [...(i.history || [])]
   if (i.decidedBy && !steps.some((h) => h.at === i.decidedAt && h.by === i.decidedBy)) steps.push({ by: i.decidedBy, status: i.status, at: i.decidedAt })
   if (steps.length < 2) return ''
   const verb = { accepted: 'accepted', rejected: 'rejected', ask: 'asked about', new: 'reopened' }
-  return steps.map((h) => `${h.by === 'owner' ? 'you' : 'Tony'} ${verb[h.status] || h.status}${h.at ? ` ${shortDate(h.at)}` : ''}`).join('; ').replace(/^./, (c) => c.toUpperCase())
+  return steps.map((h) => `${whoDecided(h.by, lead)} ${verb[h.status] || h.status}${h.at ? ` ${shortDate(h.at)}` : ''}`).join('; ').replace(/^./, (c) => c.toUpperCase())
 }
 
 /**
@@ -188,6 +191,7 @@ export const historyLine = (i) => {
  * or 'open' for what still waits for a decision (new and Ask me). The phone's screen shows the same fields.
  */
 export function improvementsScreen(data, filter = 'open') {
+  const lead = data.lead || ''
   const match = (i) => (filter === 'open' ? OPEN_STATES.includes(i.status) : !filter || i.status === filter)
   const items = (data.items || []).filter(match)
   const head = `<div class="filters"><div class="seg" role="tablist" aria-label="Filter findings by status">${IMPROVEMENT_FILTERS.map(([id, name]) => {
@@ -200,11 +204,11 @@ export function improvementsScreen(data, filter = 'open') {
       <p class="dim">${[i.path ? `<code>${esc(i.path)}</code>` : '', i.who ? `found by ${esc(i.who)}` : ''].filter(Boolean).join(' · ')}</p>
       ${i.evidence ? `<p class="imp-evidence">Evidence: ${esc(i.evidence)}</p>` : ''}
       ${i.fix ? `<p>Smallest fix: ${esc(i.fix)}</p>` : ''}
-      ${i.decidedBy ? `<p class="imp-why"><b>${esc(decidedLine(i))}.</b> ${i.reason ? `Why: ${esc(i.reason)}` : '<span class="dim">No reason written.</span>'}</p>` : ''}
-      ${historyLine(i) ? `<p class="dim imp-history">${esc(historyLine(i))}</p>` : ''}
+      ${i.decidedBy ? `<p class="imp-why"><b>${esc(decidedLine(i, lead))}.</b> ${i.reason ? `Why: ${esc(i.reason)}` : '<span class="dim">No reason written.</span>'}</p>` : ''}
+      ${historyLine(i, lead) ? `<p class="dim imp-history">${esc(historyLine(i, lead))}</p>` : ''}
       <p class="imp-job">${i.job ? `Job: <button type="button" class="link" data-act="open-job" data-id="${esc(i.job)}"><b>${esc(i.job)}</b></button>` : '<span class="dim">No job yet</span>'}</p>
       <div class="acts imp-acts" role="group" aria-label="Your decision on ${esc(i.id)}">
-        ${button('improve-accept', 'Accept', i)}${button('improve-reject-open', 'Reject', i)}${button('improve-ask', 'Ask me', i)}${button('improve-send', 'Send to Tony', i)}
+        ${button('improve-accept', 'Accept', i)}${button('improve-reject-open', 'Reject', i)}${button('improve-ask', 'Ask me', i)}${button('improve-send', `Send to ${lead || 'the lead'}`, i)}
       </div>
       <div class="imp-reject" hidden>
         <label for="why-${esc(i.id)}">Why reject it? One line</label>
@@ -212,7 +216,7 @@ export function improvementsScreen(data, filter = 'open') {
         ${button('improve-reject-go', 'Reject it', i, 'danger')}
       </div>
     </article>`
-  return `<p class="hint">Findings from Freya's audits and Tony. Your decision always wins over Tony's, and you can change it again.</p>
+  return `<p class="hint">What the crew's audits found worth improving. Your decision always wins over ${esc(lead || 'the lead')}'s, and you can change it again.</p>
     ${head}
     ${items.length ? `<div class="findings">${items.map(card).join('')}</div>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
 }

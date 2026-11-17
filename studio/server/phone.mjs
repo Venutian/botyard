@@ -24,7 +24,7 @@ import { guardFolder, readGuard, writeGuard } from './lib/guard.mjs'
 import { companySettings } from './lib/company.mjs'
 import { crewFaces, readFace } from './lib/studio.mjs'
 import { ConnectorError, connectorList, loadTools, setAccess, settleHeld } from './lib/connectors.mjs'
-import { decideImprovement } from './lib/improvement-actions.mjs'
+import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -549,7 +549,7 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (run && req.method === 'GET') return send(res, 200, await runDetail(run[1], options))
       if (pathname === '/v1/activity' && req.method === 'GET') return send(res, 200, await activityPage({ page: page(), bot: q('bot'), ...options }))
       if (pathname === '/v1/spend' && req.method === 'GET') return send(res, 200, await moneyView({ folder: crew, ...options }))
-      if (pathname === '/v1/improvements' && req.method === 'GET') return send(res, 200, improvementsView({ folder: crew }))
+      if (pathname === '/v1/improvements' && req.method === 'GET') return send(res, 200, improvementsView({ folder: crew, lead: (await leadOf(options).catch(() => null))?.name || '' }))
       const finding = pathname.match(/^\/v1\/improvements\/(IMP-\d{1,6})$/)
       if (finding && req.method === 'POST') {
         const body = await readBody(req)

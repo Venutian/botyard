@@ -194,7 +194,7 @@ function triggerFields(body, before, now) {
   const cronExpression = body.cronExpression !== undefined ? String(body.cronExpression).trim().replace(/\s+/g, ' ') : before?.cronExpression
   const timezone = body.timezone !== undefined ? String(body.timezone || 'UTC').trim() : before?.timezone || 'UTC'
   const next = nextTime(cronExpression, now, timezone)
-  if (next === null) throw new Refused(400, 'A timetable is five fields (minute, hour, day, month, weekday) in a time zone like Europe/Stockholm')
+  if (next === null) throw new Refused(400, 'A timetable is five fields (minute, hour, day, month, weekday) in a time zone like Europe/Berlin')
   const enabled = body.enabled !== undefined ? Boolean(body.enabled) : before?.enabled ?? true
   return { cronExpression, timezone, enabled, nextRunAt: iso(next) }
 }

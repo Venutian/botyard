@@ -14,7 +14,7 @@ import {
 } from '../server/lib/work.mjs'
 import { attachmentFile, uploadAttachment } from '../server/lib/engine.mjs'
 
-const TONY = '11111111-1111-4111-8111-111111111111'
+const LEAD = '11111111-1111-4111-8111-111111111111'
 const FRED = '22222222-2222-4222-8222-222222222222'
 const JOB = '55555555-5555-4555-8555-555555555555'
 const CHILD = '56555555-5555-4555-8555-555555555555'
@@ -30,7 +30,7 @@ const LOCKED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status })
 
-function engine({ calls = [], triggers = [{ id: TRIGGER, kind: 'schedule', cronExpression: '0 3 * * *', timezone: 'Europe/Stockholm', nextRunAt: '2026-11-12T02:00:00Z' }] } = {}) {
+function engine({ calls = [], triggers = [{ id: TRIGGER, kind: 'schedule', cronExpression: '0 3 * * *', timezone: 'Europe/Berlin', nextRunAt: '2026-11-12T02:00:00Z' }] } = {}) {
   const issue = (id, n, title, status = 'todo', extra = {}) => ({ id, identifier: `LH-${n}`, title, status, projectId: PROJECT, assigneeAgentId: FRED, priority: 'high', lastActivityAt: '2026-11-11T10:00:00Z', ...extra })
   const fetcher = async (url, init = {}) => {
     const u = new URL(url)
@@ -38,7 +38,7 @@ function engine({ calls = [], triggers = [{ id: TRIGGER, kind: 'schedule', cronE
     calls.push({ path: p, query: Object.fromEntries(u.searchParams), method: init.method || 'GET', body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
     if (init.method && init.method !== 'GET') return json({ id: 'new' })
     if (p === '/companies') return json([{ id: 'co', status: 'active' }])
-    if (p === '/companies/co/agents') return json([{ id: TONY, name: 'Lead', role: 'ceo' }, { id: FRED, name: 'Freelancer' }])
+    if (p === '/companies/co/agents') return json([{ id: LEAD, name: 'Lead', role: 'ceo' }, { id: FRED, name: 'Freelancer' }])
     if (p === '/companies/co/projects') return json([{ id: PROJECT, name: 'Lighthouse' }])
     if (p === '/companies/co/chats') return json([{ id: CHAT }])
     if (p === '/companies/co/issues' && u.searchParams.get('parentId')) return json([issue(CHILD, 9, 'Check LH-7: Fix the map', 'done')])
@@ -58,14 +58,14 @@ function engine({ calls = [], triggers = [{ id: TRIGGER, kind: 'schedule', cronE
     }
     if (p === `/issues/${JOB}/comments`) return json([])
     if (p === `/issues/${JOB}/attachments`) return json([{ id: FILE, originalFilename: 'shot.png', contentType: 'image/png', byteSize: 1200, objectKey: 'co/secret/path.png' }])
-    if (p === `/issues/${JOB}/documents`) return json([{ key: 'plan', title: 'Plan', body: '# Plan', latestRevisionId: REV, latestRevisionNumber: 3, updatedByAgentId: TONY }])
+    if (p === `/issues/${JOB}/documents`) return json([{ key: 'plan', title: 'Plan', body: '# Plan', latestRevisionId: REV, latestRevisionNumber: 3, updatedByAgentId: LEAD }])
     if (p === `/issues/${JOB}/runs`) return json([{ runId: 'r1', agentId: FRED, status: 'failed', error: 'Too Many Requests', usageJson: { inputTokens: 10, outputTokens: 5 }, startedAt: '2026-11-11T10:00:00Z', finishedAt: '2026-11-11T10:01:00Z' }])
     if (p === `/issues/${JOB}/cost-summary`) return json({ inputTokens: 100, outputTokens: 50, cachedInputTokens: 900, costCents: 0, runCount: 2, runtimeMs: 60000, includeDescendants: true })
     if (p === `/projects/${PROJECT}`) return json({ id: PROJECT, companyId: 'co', name: 'Lighthouse', env: { KEY: 'secret-value' }, workspaces: [{ name: 'lighthouse', cwd: path.join(os.homedir(), 'Acme/lighthouse'), repoUrl: 'file:///x', isPrimary: true }] })
     if (p === '/companies/co/budgets/overview') return json({ policies: [{ scopeType: 'company', scopeId: 'co', amount: 5 }] })
-    if (p === '/companies/co/routines') return json([{ id: ROUTINE, title: 'Nightly', status: 'active', projectId: PROJECT, assigneeAgentId: TONY, triggers }, { id: 'old', title: 'Gone', status: 'archived', projectId: PROJECT }])
+    if (p === '/companies/co/routines') return json([{ id: ROUTINE, title: 'Nightly', status: 'active', projectId: PROJECT, assigneeAgentId: LEAD, triggers }, { id: 'old', title: 'Gone', status: 'archived', projectId: PROJECT }])
     if (p === '/companies/co/costs/by-project') return json([{ projectId: PROJECT, inputTokens: 10, outputTokens: 5, eventCount: 2 }, { projectId: null, inputTokens: 999 }])
-    if (p === `/routines/${ROUTINE}`) return json({ id: ROUTINE, title: 'Nightly', status: 'paused', assigneeAgentId: TONY, env: { TOKEN: 'secret-value' }, triggers })
+    if (p === `/routines/${ROUTINE}`) return json({ id: ROUTINE, title: 'Nightly', status: 'paused', assigneeAgentId: LEAD, env: { TOKEN: 'secret-value' }, triggers })
     if (p === `/routines/${ROUTINE}/runs`) return json([{ id: 'rr', status: 'failed', source: 'manual', failureReason: 'No bot', triggeredAt: '2026-11-10T03:00:00Z', linkedIssueId: JOB }])
     if (p === `/routines/${ROUTINE}/revisions`) return json([{ id: REV, revisionNumber: 2, createdAt: '2026-11-09T00:00:00Z', snapshot: { routine: { env: { TOKEN: 'secret-value' } } } }])
     if (p === '/companies/co/artifacts') return json({ artifacts: [{ id: 'work_product:1', source: 'work_product', mediaKind: 'image', title: 'shot.png', contentPath: `/api/attachments/${FILE}/content`, issue: { id: JOB, identifier: 'LH-7', title: 'Fix the map' }, project: { id: PROJECT, name: 'Lighthouse' }, createdByAgent: { name: 'Freelancer' } }], nextCursor: 'abc_D' })
@@ -127,10 +127,10 @@ test("a job's page has its parent, blockers, sub-jobs, documents, files once, ru
 
 test('editing a job changes only what was sent, and only to a bot or project of this studio', async () => {
   const fake = engine()
-  await editJob(JOB, { title: ' New title ', priority: 'low', botId: TONY, projectId: '' }, fake)
+  await editJob(JOB, { title: ' New title ', priority: 'low', botId: LEAD, projectId: '' }, fake)
   const patch = fake.calls.find((c) => c.method === 'PATCH')
   assert.equal(patch.path, `/issues/${JOB}`)
-  assert.deepEqual(patch.body, { title: 'New title', priority: 'low', projectId: null, assigneeAgentId: TONY })
+  assert.deepEqual(patch.body, { title: 'New title', priority: 'low', projectId: null, assigneeAgentId: LEAD })
   await assert.rejects(editJob(JOB, { botId: '12345678-1234-4234-8234-123456789012' }, engine()), /not in this studio/)
   await assert.rejects(editJob(JOB, { priority: 'urgent' }, engine()), /Priority/)
   await assert.rejects(editJob(JOB, {}, engine()), /Nothing to change/)
@@ -176,8 +176,8 @@ test("a routine's page says when it runs in words, with its runs and versions an
 
 test("a routine's schedule moves its own timer, or gets one when it has none", async () => {
   const moved = engine()
-  await setRoutineSchedule(ROUTINE, 'weekdays', 'Europe/Stockholm', moved)
-  assert.deepEqual(moved.calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.path, c.body]), [['PATCH', `/routine-triggers/${TRIGGER}`, { cronExpression: '0 7 * * 1-5', timezone: 'Europe/Stockholm' }]])
+  await setRoutineSchedule(ROUTINE, 'weekdays', 'Europe/Berlin', moved)
+  assert.deepEqual(moved.calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.path, c.body]), [['PATCH', `/routine-triggers/${TRIGGER}`, { cronExpression: '0 7 * * 1-5', timezone: 'Europe/Berlin' }]])
   const fresh = engine({ triggers: [] })
   await setRoutineSchedule(ROUTINE, 'weekly', null, fresh)
   assert.deepEqual(fresh.calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.path, c.body]), [['POST', `/routines/${ROUTINE}/triggers`, { kind: 'schedule', cronExpression: '0 4 * * 1', timezone: 'UTC' }]])

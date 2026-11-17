@@ -12,7 +12,7 @@ const INVITE = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
 function engine(calls = []) {
   const answers = {
     '/companies': [{ id: CO, status: 'active' }],
-    [`/companies/${CO}`]: { id: CO, name: 'Acme Yard', description: 'Studio', issuePrefix: 'NGE', budgetMonthlyCents: 0 },
+    [`/companies/${CO}`]: { id: CO, name: 'Acme Yard', description: 'Studio', issuePrefix: 'YRD', budgetMonthlyCents: 0 },
     [`/companies/${CO}/members`]: [
       { id: 'm1', principalType: 'user', status: 'active', membershipRole: 'owner', user: { name: 'Owner', email: 'o@example.com' }, grants: ['all'] },
       { id: 'm2', principalType: 'user', status: 'archived', membershipRole: 'odd', user: null },

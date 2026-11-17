@@ -7,9 +7,9 @@ import { nextTime, runRoutine, tickRoutines } from '../server/engine/routines.mj
 const at = (text) => Date.parse(text)
 
 test('a timetable gives its next time in the routine\'s own time zone, across the change of clocks', () => {
-  // Every night at 03:00 in Stockholm: 02:00 UTC in winter, 01:00 UTC in summer.
-  assert.equal(nextTime('0 3 * * *', at('2026-11-12T12:00:00Z'), 'Europe/Stockholm'), at('2026-11-13T02:00:00Z'))
-  assert.equal(nextTime('0 3 * * *', at('2026-07-01T12:00:00Z'), 'Europe/Stockholm'), at('2026-07-02T01:00:00Z'))
+  // Every night at 03:00 in Berlin: 02:00 UTC in winter, 01:00 UTC in summer.
+  assert.equal(nextTime('0 3 * * *', at('2026-11-12T12:00:00Z'), 'Europe/Berlin'), at('2026-11-13T02:00:00Z'))
+  assert.equal(nextTime('0 3 * * *', at('2026-07-01T12:00:00Z'), 'Europe/Berlin'), at('2026-07-02T01:00:00Z'))
   // Weekdays at 07:00: from a Friday afternoon the next is Monday.
   assert.equal(nextTime('0 7 * * 1-5', at('2026-11-13T15:00:00Z'), 'UTC'), at('2026-11-16T07:00:00Z'))
   // Mondays at 04:00, and Sunday written as 7.
@@ -74,7 +74,7 @@ test('a routine is made, given a timetable, rescheduled, paused, switched back o
   assert.equal((await call('POST', `/api/routines/${routine.id}/triggers`, { kind: 'schedule', cronExpression: 'every morning' })).status, 400)
   assert.equal((await call('POST', `/api/routines/${routine.id}/triggers`, { kind: 'schedule', cronExpression: '0 8 * * *', timezone: 'Mars/Olympus' })).status, 400)
   assert.equal((await call('POST', `/api/routines/${routine.id}/triggers`, { kind: 'webhook' })).status, 400)
-  const trigger = await ok('POST', `/api/routines/${routine.id}/triggers`, { kind: 'schedule', cronExpression: '0 8 * * *', timezone: 'Europe/Stockholm' })
+  const trigger = await ok('POST', `/api/routines/${routine.id}/triggers`, { kind: 'schedule', cronExpression: '0 8 * * *', timezone: 'Europe/Berlin' })
   assert.equal(trigger.enabled, true)
   assert.ok(Date.parse(trigger.nextRunAt) > Date.now())
   // The list is what the map reads: the routine with its timetable as it is now.
@@ -84,7 +84,7 @@ test('a routine is made, given a timetable, rescheduled, paused, switched back o
 
   // Rescheduled: another hour, and the next time moves with it.
   const moved = await ok('PATCH', `/api/routine-triggers/${trigger.id}`, { cronExpression: '30 17 * * 1-5' })
-  assert.equal(moved.timezone, 'Europe/Stockholm')
+  assert.equal(moved.timezone, 'Europe/Berlin')
   assert.notEqual(moved.nextRunAt, trigger.nextRunAt)
   assert.equal((await ok('GET', `/api/routines/${routine.id}`)).triggers[0].cronExpression, '30 17 * * 1-5')
   assert.equal((await call('PATCH', `/api/routine-triggers/${trigger.id}`, { cronExpression: '99 * * * *' })).status, 400)

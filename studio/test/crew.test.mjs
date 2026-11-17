@@ -12,7 +12,7 @@ import {
   resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions,
 } from '../server/lib/crew.mjs'
 
-const TONY = '11111111-1111-4111-8111-111111111111'
+const LEAD = '11111111-1111-4111-8111-111111111111'
 const FRED = '22222222-2222-4222-8222-222222222222'
 const CLAUDE = '33333333-3333-4333-8333-333333333333'
 const GONE = '44444444-4444-4444-8444-444444444444'
@@ -36,13 +36,13 @@ function folder({ waste, rested, thinker = {}, freeOut = {} } = {}) {
 
 function engine({ calls = [], bundleMode = 'external', log = '' } = {}) {
   const agents = [
-    { id: TONY, name: 'Lead', role: 'ceo', status: 'idle', adapterType: 'claude_local', adapterConfig: { model: 'claude-sonnet-5-5', env: { KEY: 'secret-value' } } },
-    { id: FRED, name: 'Freelancer', status: 'idle', reportsTo: TONY, adapterType: 'opencode_local', adapterConfig: { model: 'opencode/deepseek-v4.1-flash-free' } },
-    { id: CLAUDE, name: 'Senior', status: 'paused', reportsTo: TONY, adapterType: 'claude_local', adapterConfig: { model: 'claude-opus-5-5' } },
+    { id: LEAD, name: 'Lead', role: 'ceo', status: 'idle', adapterType: 'claude_local', adapterConfig: { model: 'claude-sonnet-5-5', env: { KEY: 'secret-value' } } },
+    { id: FRED, name: 'Freelancer', status: 'idle', reportsTo: LEAD, adapterType: 'opencode_local', adapterConfig: { model: 'opencode/deepseek-v4.1-flash-free' } },
+    { id: CLAUDE, name: 'Senior', status: 'paused', reportsTo: LEAD, adapterType: 'claude_local', adapterConfig: { model: 'claude-opus-5-5' } },
   ]
   const runs = [
     { id: RUN, agentId: FRED, issueId: JOB, status: 'failed', error: 'Rate limit exceeded: free-models-per-day-high-balance.', inputTokens: '1000', outputTokens: '500', cachedInputTokens: '9000', costUsd: '0', startedAt: '2026-11-11T14:00:00Z', finishedAt: '2026-11-11T14:02:00Z' },
-    { id: 'r2', agentId: TONY, issueId: JOB, status: 'succeeded', inputTokens: '10', outputTokens: '5', startedAt: '2026-11-11T13:00:00Z', finishedAt: '2026-11-11T13:00:30Z' },
+    { id: 'r2', agentId: LEAD, issueId: JOB, status: 'succeeded', inputTokens: '10', outputTokens: '5', startedAt: '2026-11-11T13:00:00Z', finishedAt: '2026-11-11T13:00:30Z' },
     { id: 'r3', agentId: GONE, issueId: JOB, status: 'failed', startedAt: '2026-11-11T12:00:00Z' },
   ]
   const fetcher = async (url, init) => {
@@ -55,7 +55,7 @@ function engine({ calls = [], bundleMode = 'external', log = '' } = {}) {
     if (p === '/companies/co/live-runs') return json([])
     if (plain === '/companies/co/issues' && !u.searchParams.has('q')) return json([{ id: JOB, identifier: 'LH-7', title: 'Fix the map', status: 'in_progress', projectId: PROJECT }])
     if (p === '/companies/co/projects') return json([{ id: PROJECT, name: 'Lighthouse' }])
-    if (p === '/companies/co/org') return json([{ id: TONY, name: 'Lead', reports: [{ id: FRED, name: 'Freelancer', reports: [] }, { id: GONE, name: 'Retired', reports: [] }] }])
+    if (p === '/companies/co/org') return json([{ id: LEAD, name: 'Lead', reports: [{ id: FRED, name: 'Freelancer', reports: [] }, { id: GONE, name: 'Retired', reports: [] }] }])
     if (plain === '/companies/co/costs/by-agent') return json([{ agentId: FRED, inputTokens: 100, outputTokens: 50, cachedInputTokens: 7, costCents: 0, eventCount: 3 }, { agentId: GONE, inputTokens: 9 }])
     if (plain === '/companies/co/costs/by-agent-model') return json([{ model: 'claude-opus-5-5', inputTokens: 5, outputTokens: 5 }, { model: 'claude-opus-5-5', inputTokens: 1, outputTokens: 1 }])
     if (plain === '/companies/co/costs/by-provider') return json([{ provider: 'anthropic', biller: 'a', inputTokens: 3, outputTokens: 0 }, { provider: 'anthropic', biller: 'b', inputTokens: 2, outputTokens: 0 }, { provider: 'nvidia', inputTokens: 0, outputTokens: 0 }])
@@ -74,15 +74,15 @@ function engine({ calls = [], bundleMode = 'external', log = '' } = {}) {
     if (plain === `/heartbeat-runs/${RUN}/log`) return json({ content: log })
     if (p === '/companies/co/timeline') {
       return json({
-        actors: [{ id: `agent:${TONY}`, type: 'agent', name: 'Lead' }, { id: `agent:${FRED}`, type: 'agent', name: 'Freelancer' }, { id: 'user:local-board', type: 'user', name: 'Board' }],
+        actors: [{ id: `agent:${LEAD}`, type: 'agent', name: 'Lead' }, { id: `agent:${FRED}`, type: 'agent', name: 'Freelancer' }, { id: 'user:local-board', type: 'user', name: 'Board' }],
         events: [
           { actorId: 'user:local-board', kind: 'created', issueId: JOB, at: '2026-11-11T10:00:00.000Z' },
           { actorId: `agent:${FRED}`, kind: 'commented', issueId: JOB, at: '2026-11-11T11:00:00Z' },
           { actorId: `agent:${FRED}`, kind: 'commented', issueId: JOB, at: '2026-11-11T11:01:00Z' },
           { actorId: `agent:${FRED}`, kind: 'commented', issueId: JOB, at: '2026-11-11T11:02:00Z' },
         ],
-        edges: [{ fromActorId: 'user:local-board', toActorId: `agent:${TONY}`, issueId: JOB, at: '2026-11-11T10:00:00.500Z', kind: 'assignment' }],
-        spans: [{ actorId: `agent:${FRED}`, issueId: JOB, runId: RUN, status: 'failed', start: '2026-11-11T12:00:00Z', end: '2026-11-11T12:05:00Z' }, { actorId: `agent:${TONY}`, status: 'succeeded', issueId: JOB, start: '2026-11-11T12:00:00Z' }],
+        edges: [{ fromActorId: 'user:local-board', toActorId: `agent:${LEAD}`, issueId: JOB, at: '2026-11-11T10:00:00.500Z', kind: 'assignment' }],
+        spans: [{ actorId: `agent:${FRED}`, issueId: JOB, runId: RUN, status: 'failed', start: '2026-11-11T12:00:00Z', end: '2026-11-11T12:05:00Z' }, { actorId: `agent:${LEAD}`, status: 'succeeded', issueId: JOB, start: '2026-11-11T12:00:00Z' }],
       })
     }
     if (init.method !== 'GET') return json({ ok: true })
@@ -117,7 +117,7 @@ test('waste is read from health.py, with plain causes and a flag past 30 % of 8 
 })
 
 test('a rested bot says until when, and one whose rest is over is dropped', () => {
-  const dir = folder({ rested: { [CLAUDE]: { name: 'Senior', until: NOW / 1000 + 7200, why: "You've hit your weekly limit · resets Nov 13, 6pm" }, [TONY]: { name: 'Lead', until: NOW / 1000 - 1 } } })
+  const dir = folder({ rested: { [CLAUDE]: { name: 'Senior', until: NOW / 1000 + 7200, why: "You've hit your weekly limit · resets Nov 13, 6pm" }, [LEAD]: { name: 'Lead', until: NOW / 1000 - 1 } } })
   const rested = readRested(dir, NOW)
   assert.deepEqual(Object.keys(rested), [CLAUDE])
   assert.match(rested[CLAUDE].text, /^Resting until \w{3} \d{2}:\d{2}$/)
@@ -143,7 +143,7 @@ test('the bot list says each engine and why, resting, waste and the org, and no 
   assert.equal(by.Senior.resting, true)
   assert.match(by.Senior.state, /^Resting until/)
   assert.equal(by.Senior.why, 'Claude subscription')
-  assert.deepEqual(list.org, [{ id: TONY, name: 'Lead', reports: [{ id: FRED, name: 'Freelancer', reports: [] }] }])
+  assert.deepEqual(list.org, [{ id: LEAD, name: 'Lead', reports: [{ id: FRED, name: 'Freelancer', reports: [] }] }])
   assert.doesNotMatch(JSON.stringify(list), /secret-value|adapterConfig/)
 })
 
@@ -199,8 +199,8 @@ test('runs across the crew are filtered by bot and how they ended, and retired b
   assert.equal(all.bots.length, 3)
   const failed = await runList({ fetcher, status: 'failed' })
   assert.deepEqual(failed.runs.map((r) => r.id), [RUN])
-  await runList({ fetcher, bot: TONY })
-  assert.ok(calls.some((c) => c.path.includes(`agentId=${TONY}`)))
+  await runList({ fetcher, bot: LEAD })
+  assert.ok(calls.some((c) => c.path.includes(`agentId=${LEAD}`)))
   await assert.rejects(runList({ fetcher, bot: '1&x=2' }), /bot id/)
 })
 
@@ -233,7 +233,7 @@ test('the activity timeline names who did what to which job, a run of comments a
     ['Freelancer', 'commented on', '', 'LH-7', 3],
     ['You or a script', 'made', 'Lead', 'LH-7', 1],
   ])
-  const freelancer = await activityPage({ fetcher, bot: TONY })
+  const freelancer = await activityPage({ fetcher, bot: LEAD })
   assert.equal(freelancer.items.length, 0)
 })
 

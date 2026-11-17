@@ -117,14 +117,14 @@ test('the gate lies beyond every bay of its ring, to the north', () => {
 })
 
 test('a project that left (archived) frees its place, and a new one takes the first free place', () => {
-  const kept = assign(['Old', 'Income', 'Sandbox', 'Aldis'])
-  assert.deepEqual(kept, { Old: 1, Income: 2, Sandbox: 3, Aldis: 4 })
-  // Old and Income are archived; Baltis and Ballotta are new.
-  const now = assign(['Aldis', 'Sandbox', 'Baltis', 'Ballotta'], kept)
-  assert.equal(now.Aldis, 4, 'a project that stayed keeps its place')
+  const kept = assign(['Old', 'Income', 'Sandbox', 'Harbour'])
+  assert.deepEqual(kept, { Old: 1, Income: 2, Sandbox: 3, Harbour: 4 })
+  // Old and Income are archived; Quarry and Mill are new.
+  const now = assign(['Harbour', 'Sandbox', 'Quarry', 'Mill'], kept)
+  assert.equal(now.Harbour, 4, 'a project that stayed keeps its place')
   assert.equal(now.Sandbox, 3)
-  assert.equal(now.Baltis, 1, 'the first freed place')
-  assert.equal(now.Ballotta, 2)
+  assert.equal(now.Quarry, 1, 'the first freed place')
+  assert.equal(now.Mill, 2)
   assert.equal(new Set(Object.values(now)).size, 4)
 })
 

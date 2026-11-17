@@ -7,7 +7,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { check, checkFile, checkLine, entropy, looksRandom, missingLinks } from '../../tools/release-check.mjs'
+import { check, checkCommits, checkFile, checkLine, entropy, looksRandom, missingLinks } from '../../tools/release-check.mjs'
+import { execFileSync } from 'node:child_process'
 
 const kinds = (file, line) => checkLine(file, line).map((hit) => hit.kind)
 // Made here from pieces, so this file holds nothing the check itself would stop.
@@ -108,4 +109,21 @@ test('a page that points to a picture or page that is not there is caught', () =
     { line: 3, kind: 'files', what: 'points to docs/none.md, which is not there' },
   ])
   assert.deepEqual(missingLinks(dir, 'docs/guide.md', ['![x](images/here.png) and [up](../docs/guide.md)']), [])
+})
+
+test('the commits being pushed: a lead bot\'s name or a job code in a message, and an author without a no-reply address, are caught', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-commits-'))
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+  const as = (name, mail) => ['-c', `user.name=${name}`, '-c', `user.email=${mail}`]
+  git('init', '-q')
+  git(...as('Sam', '1+sam@users.noreply.github.com'), 'commit', '-q', '--allow-empty', '-m', 'A clean change')
+  const clean = git('rev-parse', 'HEAD').trim()
+  git(...as('Test User', 'test@example.com'), 'commit', '-q', '--allow-empty', '-m', ['Merge ', 'N', 'GE-12: send to ', 'To', 'ny'].join(''))
+  git(...as('Sam', '1+sam@users.noreply.github.com'), 'commit', '-q', '--allow-empty', '-m', 'Another clean one')
+  assert.deepEqual(checkCommits(dir, `${clean}~0..${clean}`), [], 'nothing in an empty range')
+  const hits = checkCommits(dir, `${clean}..HEAD`)
+  const what = hits.map((h) => h.what).join(' | ')
+  assert.ok(/author is not a GitHub no-reply/.test(what) && /committer is not a GitHub no-reply/.test(what), what)
+  assert.equal(hits.filter((h) => h.kind === 'names' && /belongs to one person/.test(h.what)).length, 1, 'the message line is caught once')
+  assert.ok(!what.includes('"Sam"'), 'an author whose name is their own no-reply name is fine')
 })

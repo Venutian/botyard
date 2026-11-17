@@ -278,11 +278,12 @@ const projectPage = (id: string) => {
 };
 const improvements = {
   items: [
-    { id: 'IMP-3', title: 'Check reports name no commit', path: 'own/review-guard.py', evidence: 'NGE-931 and NGE-944 reports had no COMMIT line, so the merge card named none.', fix: 'Refuse a report whose last three lines are missing.', who: 'Freya The Checker', status: 'new', job: '', added: 1_795_000_000, decidedBy: '', decidedAt: 0, reason: '', history: [] },
-    { id: 'IMP-2', title: 'Run logs are read whole', path: 'crew/claude-bot.sh', evidence: 'A 4 MB log was read in one call.', fix: 'Pipe it through ngen-digest.', who: 'Tony Yayo', status: 'rejected', job: '', added: 1_794_000_000, decidedBy: 'owner', decidedAt: 1_794_900_000, reason: 'Logs are small enough today.', history: [{ by: 'tony', status: 'accepted', at: 1_794_800_000 }] },
-    { id: 'IMP-1', title: 'Old briefs stay in the folder', path: 'briefs/tony', evidence: '212 files, 190 older than a month.', fix: 'Move them to old-YYYY-MM.', who: 'Freya The Checker', status: 'done', job: 'NGE-955', added: 1_793_000_000, decidedBy: 'tony', decidedAt: 1_793_500_000, reason: 'Cheap and safe.', history: [] },
+    { id: 'IMP-3', title: 'Check reports name no commit', path: 'crew/review-guard.py', evidence: 'LH-29 and LH-31 reports had no COMMIT line, so the merge card named none.', fix: 'Refuse a report whose last three lines are missing.', who: 'Checker', status: 'new', job: '', added: 1_795_000_000, decidedBy: '', decidedAt: 0, reason: '', history: [] },
+    { id: 'IMP-2', title: 'Run logs are read whole', path: 'crew/claude-bot.sh', evidence: 'A 4 MB log was read in one call.', fix: 'Cut it to its errors before reading.', who: 'Lead', status: 'rejected', job: '', added: 1_794_000_000, decidedBy: 'owner', decidedAt: 1_794_900_000, reason: 'Logs are small enough today.', history: [{ by: 'lead', status: 'accepted', at: 1_794_800_000 }] },
+    { id: 'IMP-1', title: 'Old briefs stay in the folder', path: 'briefs', evidence: '212 files, 190 older than a month.', fix: 'Move them to old-YYYY-MM.', who: 'Checker', status: 'done', job: 'LH-20', added: 1_793_000_000, decidedBy: 'lead', decidedAt: 1_793_500_000, reason: 'Cheap and safe.', history: [] },
   ],
   counts: { new: 1, ask: 0, accepted: 0, done: 1, rejected: 1, stale: 0 },
+  lead: 'Lead',
 };
 const spend = {
   bots: crewBots.bots.filter((b) => b.tokensWeek).map((b) => ({ id: b.id, name: b.name, engine: b.engine, model: b.model, today: b.tokensToday, tokens: b.tokensWeek, cached: 0, cents: 0, runs: 20, waste: b.waste ? 360_000 : 0 })),

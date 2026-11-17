@@ -12,7 +12,7 @@ import { artifactList, documentRevisions, editJob, jobIdOf, jobList, jobPage, pr
 import { changeDetail } from './lib/changes.mjs'
 import { readTimers } from './lib/library.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
-import { decideImprovement } from './lib/improvement-actions.mjs'
+import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { crewFolder, readModels } from './lib/models.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions, tokenWindows } from './lib/crew.mjs'
 import { openrouterLeft, usageRows } from './lib/usage.mjs'
@@ -100,7 +100,7 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio/run' && read) return send(res, 200, await runDetail(q('id')))
     if (url.pathname === '/api/studio/activity' && read) return send(res, 200, await activityPage({ page: Number(q('page')) || 0, bot: q('bot') }))
     if (url.pathname === '/api/studio/spend' && read) return send(res, 200, await moneyView())
-    if (url.pathname === '/api/studio/improvements' && read) return send(res, 200, improvementsView())
+    if (url.pathname === '/api/studio/improvements' && read) return send(res, 200, improvementsView({ lead: (await leadOf().catch(() => null))?.name || '' }))
     // Shaping the studio: a bot's settings for its editor, what a new bot can be, the first run, setup, the helpers.
     if (url.pathname === '/api/studio/bot/settings' && read) return send(res, 200, await botSettings(q('id'), { connectors: connectorList({ crew: await connectorCrew().catch(() => []) }).connectors }))
     if (url.pathname === '/api/studio/bot/new' && read) return send(res, 200, await newBotChoices())

@@ -13,13 +13,13 @@ const FILTERS: { id: Filter; name: string }[] = [
   { id: 'accepted', name: 'Accepted' }, { id: 'done', name: 'Done' }, { id: 'rejected', name: 'Rejected' }, { id: 'stale', name: 'Stale' },
 ];
 
-function Finding({ item, last, busy, onDecide, onJob }: { item: Improvement; last: boolean; busy: boolean; onDecide: (action: ImprovementAction, reason?: string) => void; onJob: (ref: string) => void }) {
+function Finding({ item, lead, last, busy, onDecide, onJob }: { item: Improvement; lead: string; last: boolean; busy: boolean; onDecide: (action: ImprovementAction, reason?: string) => void; onJob: (ref: string) => void }) {
   const { t } = useLook();
   const [rejecting, setRejecting] = useState(false);
   const [why, setWhy] = useState('');
   const tone = item.status === 'done' ? t.good : item.status === 'accepted' ? t.accentText : item.status === 'rejected' || item.status === 'stale' ? t.ink3 : t.warn;
-  const decided = decidedLine(item);
-  const story = historyLine(item);
+  const decided = decidedLine(item, lead);
+  const story = historyLine(item, lead);
   return (
     <View style={[styles.item, !last && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }]}>
       <View style={styles.head}>
@@ -36,7 +36,7 @@ function Finding({ item, last, busy, onDecide, onJob }: { item: Improvement; las
         <View style={styles.cell}><Button label="Accept" disabled={busy} onPress={() => onDecide('accept')} /></View>
         <View style={styles.cell}><Button kind="quiet" label="Reject" disabled={busy} onPress={() => setRejecting(!rejecting)} /></View>
         <View style={styles.cell}><Button kind="quiet" label="Ask me" disabled={busy} onPress={() => onDecide('ask')} /></View>
-        <View style={styles.cell}><Button kind="quiet" label="Send to Tony" disabled={busy} onPress={() => onDecide('send')} /></View>
+        <View style={styles.cell}><Button kind="quiet" label={`Send to ${lead || 'the lead'}`} disabled={busy} onPress={() => onDecide('send')} /></View>
       </View>
       {rejecting ? (
         <View style={styles.reject}>
@@ -48,7 +48,7 @@ function Finding({ item, last, busy, onDecide, onJob }: { item: Improvement; las
   );
 }
 
-/** What Freya's audits and Tony found worth improving: the same list, filters and fields as the PC's Improvements page. */
+/** What the crew's audits found worth improving: the same list, filters and fields as the PC's Improvements page. */
 export function ImprovementsScreen({ connection, nav }: { connection: Connection; nav: Nav }) {
   const { t } = useLook();
   const insets = useSafeAreaInsets();
@@ -96,7 +96,7 @@ export function ImprovementsScreen({ connection, nav }: { connection: Connection
     >
       <GlassButton icon="back" label="Back" onPress={nav.back} />
       <Title>Improvements</Title>
-      <Txt color={t.ink2}>What Freya's audits and Tony found worth improving, who decided and why, and the job that carries each. Your decision always wins. Pull down to refresh.</Txt>
+      <Txt color={t.ink2}>What the crew's audits found worth improving, who decided and why, and the job that carries each. Your decision always wins. Pull down to refresh.</Txt>
       {error ? <Txt size={14} color={t.bad}>{data ? 'Showing the last update. ' : ''}{error}</Txt> : null}
       {!data && !error ? <ActivityIndicator color={t.accent} style={styles.spinner} /> : null}
       {!data && error ? <Button label="Try again" onPress={load} /> : null}
@@ -106,7 +106,7 @@ export function ImprovementsScreen({ connection, nav }: { connection: Connection
             <Segmented<Filter> key={row[0].id} value={filter} options={row.map((f) => ({ id: f.id, name: `${f.name} ${count(f.id)}` }))} onChange={setFilter} />
           ))}
           {shown.length ? (
-            <Group>{shown.map((item, index) => <Finding key={item.id} item={item} last={index === shown.length - 1} busy={busy} onDecide={(action, reason) => decide(item.id, action, reason)} onJob={(ref) => nav.push({ name: 'job', id: ref })} />)}</Group>
+            <Group>{shown.map((item, index) => <Finding key={item.id} item={item} lead={data.lead ?? ''} last={index === shown.length - 1} busy={busy} onDecide={(action, reason) => decide(item.id, action, reason)} onJob={(ref) => nav.push({ name: 'job', id: ref })} />)}</Group>
           ) : (
             <Txt color={t.ink2}>{data.items.length ? 'Nothing in this state.' : 'No improvements listed yet.'}</Txt>
           )}

@@ -674,7 +674,7 @@ test('routines list what is live, and only fixed schedules can be set', async ()
     assert.deepEqual(body.routines.map((r) => r.title), ['Nightly tests'])
     assert.equal(body.routines[0].bot, 'Scout')
     assert.equal(body.routines[0].project, 'Lighthouse')
-    const made = await ask('/v1/routines', { method: 'POST', body: { title: 'Nightly', schedule: 'nightly', timezone: 'Europe/Stockholm', projectId: PROJECT } })
+    const made = await ask('/v1/routines', { method: 'POST', body: { title: 'Nightly', schedule: 'nightly', timezone: 'Europe/Berlin', projectId: PROJECT } })
     assert.equal(made.status, 201)
     assert.equal(calls.find((c) => c.path.endsWith('/triggers')).body.cronExpression, '0 3 * * *')
     assert.equal((await ask('/v1/routines', { method: 'POST', body: { title: 'x', schedule: '* * * * *' } })).status, 400)
@@ -878,11 +878,11 @@ test('projects come in the owner\'s ranking, which the phone saves as the map do
 })
 
 test('the improvements read through the door, the same list the PC page shows, and nothing writes', async () => {
-  const items = [{ id: 'IMP-1', title: 'Old briefs stay', path: 'briefs/tony', evidence: '212 files', fix: 'Move them', who: 'Freya', status: 'accepted', job: 'NGE-961', added: 5 }]
+  const items = [{ id: 'IMP-1', title: 'Old briefs stay', path: 'briefs', evidence: '212 files', fix: 'Move them', who: 'Checker', status: 'accepted', job: 'LH-961', added: 5 }]
   await withDoor(async (ask) => {
     const page = await ask('/v1/improvements')
     assert.equal(page.status, 200)
-    assert.deepEqual(page.body.items.map((i) => [i.id, i.status, i.job, i.path]), [['IMP-1', 'accepted', 'NGE-961', 'briefs/tony']])
+    assert.deepEqual(page.body.items.map((i) => [i.id, i.status, i.job, i.path]), [['IMP-1', 'accepted', 'LH-961', 'briefs']])
     assert.equal(page.body.counts.accepted, 1)
     assert.notEqual((await ask('/v1/improvements', { method: 'POST', body: {} })).status, 200)
     assert.equal((await ask('/v1/improvements/IMP-1', { method: 'POST', body: { action: 'reject' } })).status, 400)

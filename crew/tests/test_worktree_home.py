@@ -37,9 +37,9 @@ class WorktreeHome(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_a_worktree_beside_the_projects_is_refused(self):
-        for command in ['git worktree add ../tools-1029 -b NGE-1029 main',
+        for command in ['git worktree add ../tools-1029 -b YRD-1029 main',
                         f'git -C {self.repo} worktree add {self.root}/wt-fix -b fix main',
-                        'cd .. && git worktree add -b b wt-NGE-9 main',
+                        'cd .. && git worktree add -b b wt-YRD-9 main',
                         'git worktree add "../tools-wt1" main; echo ok',
                         f'cd {self.root} && git worktree add wt-x -b wt-x main',
                         f'cd {self.root}; git worktree add ./wt-y main',
@@ -47,7 +47,7 @@ class WorktreeHome(unittest.TestCase):
             self.assertTrue(guard.worktree_at_root(command, cwd=self.repo, root=self.root), command)
 
     def test_a_worktree_under_its_repo_and_other_git_is_fine(self):
-        for command in ['git worktree add .botyard/worktrees/NGE-5 -b NGE-5 main', 'git worktree list',
+        for command in ['git worktree add .botyard/worktrees/YRD-5 -b YRD-5 main', 'git worktree list',
                         f'git -C {self.repo} worktree add {self.repo}/.botyard/worktrees/a -b a main',
                         'git worktree remove ../x', 'git status', f'cd {self.repo} && git worktree add .botyard/worktrees/q -b q main', 'git worktree add /tmp/scratch main']:
             self.assertFalse(guard.worktree_at_root(command, cwd=self.repo, root=self.root), command)
@@ -58,12 +58,12 @@ class WorktreeHome(unittest.TestCase):
         self.assertTrue(told is None or 'repo-worktree.py' in told)
 
     def test_the_helper_makes_the_worktree_under_the_repo_and_reuses_it(self):
-        path = maker.make('tools', 'NGE-1067-x', root=self.root)
-        self.assertEqual(path, os.path.join(self.repo, '.botyard', 'worktrees', 'NGE-1067-x'))
+        path = maker.make('tools', 'YRD-1067-x', root=self.root)
+        self.assertEqual(path, os.path.join(self.repo, '.botyard', 'worktrees', 'YRD-1067-x'))
         self.assertTrue(os.path.isfile(os.path.join(path, '.git')))
-        self.assertEqual(maker.make('tools', 'NGE-1067-x', root=self.root), path)
+        self.assertEqual(maker.make('tools', 'YRD-1067-x', root=self.root), path)
         out = subprocess.run(['git', '-C', path, 'branch', '--show-current'], capture_output=True, text=True).stdout.strip()
-        self.assertEqual(out, 'NGE-1067-x')
+        self.assertEqual(out, 'YRD-1067-x')
         # The folder it made is not a worktree at the top level, so the guard lets a later command in it through.
         self.assertFalse(guard.worktree_at_root('git worktree add .botyard/worktrees/y -b y', cwd=self.repo, root=self.root))
 

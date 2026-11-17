@@ -1,9 +1,11 @@
 /**
- * The owner's buttons on the Improvements page: Accept, Reject, Ask me, Send to Tony.
+ * The owner's buttons on the Improvements page: Accept, Reject, Ask me, and Send to the lead (the crew's
+ * lead bot, by its own name on the page).
  *
- * The findings are one plain file, improvements.json in the crew folder (own/improvements.py writes it
- * too). The server changes it directly with the same fields that script uses (status, decidedBy,
- * decidedAt, reason, job) instead of running the script: a Botyard install need not have ngen-own.
+ * The findings are one plain file, improvements.json in the crew folder, which a crew's own audit script
+ * may write too. The server changes it directly with the same fields (status, decidedBy, decidedAt,
+ * reason, job), so a yard needs no script of its own to use the page. A finding names its project in
+ * `project`; one that names none makes a job with no project.
  * Every owner decision is written whole to a temp file and renamed over the original, so a reader
  * never sees half a file, and the one it replaces is pushed onto the finding's `history` so no
  * decision is lost. An owner decision always wins: a second click just changes the status again.
@@ -16,7 +18,6 @@ import { crewFolder } from './models.mjs'
 
 export const ACTIONS = ['accept', 'reject', 'ask', 'send']
 const STATUS_OF = { accept: 'accepted', reject: 'rejected', ask: 'ask', send: 'accepted' }
-const DEFAULT_PROJECT = 'nGen Own'
 const URL = /https?:\/\/[^\s)\]>"']+|github\.com\/[\w.-]+\/[\w.-]+/g
 const norm = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim()
 const line = (t) => String(t ?? '').replace(/\s+/g, ' ').trim()
@@ -52,15 +53,16 @@ function remember(folder, item) {
   writeFile(file, { ...mem, titles, urls })
 }
 
-/** The engine's project and the bot to hand a job to, found by name. */
+/** The engine's project, found by name. */
 async function projectNamed(name, options) {
   const projects = await call(`/companies/${await companyId(options)}/projects`, options)
   const wanted = norm(name)
   return projects.find((p) => norm(p.name) === wanted) || null
 }
-async function botNamed(name, options) {
-  const bots = await crewOf(await companyId(options), options)
-  return bots.find((b) => norm(b.name) === norm(name) || norm(b.name).startsWith(`${norm(name)} `)) || null
+/** The crew's lead: the bot whose role is to lead it, else the one that answers to nobody. */
+export async function leadOf(options) {
+  const bots = (await crewOf(await companyId(options), options)).filter((b) => b.status !== 'terminated')
+  return bots.find((b) => b.role === 'ceo') || bots.find((b) => !b.reportsTo) || null
 }
 
 /**
@@ -77,17 +79,18 @@ export async function decideImprovement(id, { action, reason = '' } = {}, { fold
   if (!item) throw new EngineError(404, 'No such finding')
 
   let jobRef = ''
+  let lead = null
   if (action === 'accept' || action === 'send') {
-    const projectName = line(item.project) || DEFAULT_PROJECT
-    const project = await projectNamed(projectName, engine)
+    const projectName = line(item.project)
+    const project = projectName ? await projectNamed(projectName, engine) : null
     const plan = `Finding ${item.id}: ${item.title}\n\nWhere: ${item.path || 'not named'}\nEvidence: ${item.evidence || 'none given'}\nSmallest fix: ${item.fix || 'none given'}`
-    const tony = action === 'send' ? await botNamed('Tony', engine) : null
-    if (action === 'send' && !tony) throw new EngineError(409, 'Tony is not in this studio')
+    lead = action === 'send' ? await leadOf(engine) : null
+    if (action === 'send' && !lead) throw new EngineError(409, 'This yard has no lead bot to send it to')
     const made = await add({
       title: `Improve: ${line(item.title).slice(0, 150)}`,
       description: action === 'send' ? `${plan}\n\nPlan this and start it.` : `${plan}\n\nBrief outline: ${item.fix || item.title}`,
       ...(project ? { projectId: project.id } : {}),
-      ...(tony ? { botId: tony.id } : {}),
+      ...(lead ? { botId: lead.id } : {}),
       priority: 'medium',
     }, engine)
     jobRef = made.ref
@@ -99,7 +102,7 @@ export async function decideImprovement(id, { action, reason = '' } = {}, { fold
   item.status = STATUS_OF[action]
   item.decidedBy = 'owner'
   item.decidedAt = now
-  item.reason = why || (action === 'send' ? 'Sent to Tony.' : '')
+  item.reason = why || (action === 'send' ? `Sent to ${lead.name}.` : '')
   writeFile(file, items)
   return { ok: true, item: { id: item.id, status: item.status, decidedBy: item.decidedBy, decidedAt: item.decidedAt, reason: item.reason, job: item.job || '' }, jobRef }
 }

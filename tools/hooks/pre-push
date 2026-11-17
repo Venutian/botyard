@@ -1,0 +1,21 @@
+#!/bin/sh
+# Before a push: nothing personal, secret or heavy in the tree, and every commit being pushed is clean in its
+# message and has a GitHub no-reply author and committer. Turn it on with: git config core.hooksPath tools/hooks
+# git hands this hook one line per ref: <local ref> <local sha> <remote ref> <remote sha>
+zero=0000000000000000000000000000000000000000
+root=$(git rev-parse --show-toplevel)
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue   # a branch being deleted carries nothing
+  if [ "$remote_sha" = "$zero" ]; then range="$local_sha --not --remotes"; else range="$remote_sha..$local_sha"; fi
+  if [ "$(git rev-parse HEAD)" != "$local_sha" ]; then
+    echo "pre-push: $local_ref is not the checked-out commit; the tree check reads the working tree, so check out $local_ref and push again" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2086
+  first=$(git rev-list $range | tail -1)
+  [ -z "$first" ] && continue
+  node "$root/tools/release-check.mjs" --commits "$first^..$local_sha" || status=1
+done
+[ $status -eq 0 ] || echo "pre-push: refused. Fix what is listed above (a commit's message or author needs a new commit or a rebuilt one)." >&2
+exit $status

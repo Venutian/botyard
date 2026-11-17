@@ -116,7 +116,7 @@ function runLog(store, runId, query, { dataDir }) {
  * @returns {{ status: number, body?: unknown, file?: { path: string, type: string, name: string } }}
  */
 export function answer(store, request = {}, options = {}) {
-  // A job named by its project's letters (BAL-326) is the job the engine knows as NGE-326.
+  // A job named by its project's letters (QRY-326) is the job the engine knows as YRD-326.
   const asked = { ...request }
   if (typeof asked.url === 'string') asked.url = asked.url.replace(/^([^?#]*)/, (path) => path.split('/').map((part) => { try { return /^[A-Za-z][A-Za-z0-9]*-\d+$/.test(part) ? engineCode(store, part) : part } catch { return part } }).join('/'))
   if (typeof asked.url === 'string' && asked.url.includes('?')) {

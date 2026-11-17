@@ -352,8 +352,8 @@ test('a project is renamed, moved to another folder and archived without anythin
 
 test('a routine is added on a plain choice of when, and changed without touching what was not sent', async () => {
   const e = engine()
-  await addRoutine({ title: 'Check the shop', plan: { kind: 'hours', n: 4 }, timezone: 'Europe/Stockholm' }, e)
-  assert.deepEqual(e.writes().map((c) => c.body), [{ title: 'Check the shop', description: '', assigneeAgentId: LEAD }, { kind: 'schedule', cronExpression: '0 */4 * * *', timezone: 'Europe/Stockholm' }])
+  await addRoutine({ title: 'Check the shop', plan: { kind: 'hours', n: 4 }, timezone: 'Europe/Berlin' }, e)
+  assert.deepEqual(e.writes().map((c) => c.body), [{ title: 'Check the shop', description: '', assigneeAgentId: LEAD }, { kind: 'schedule', cronExpression: '0 */4 * * *', timezone: 'Europe/Berlin' }])
   await assert.rejects(addRoutine({ title: 'x', plan: { kind: 'cron', cron: 'every day' } }, e), /five parts/)
   await assert.rejects(addRoutine({ title: 'x', plan: { kind: 'daily', at: '07:00' } }, engine({ bots: [] })), /Add a bot first/)
   const edit = engine()

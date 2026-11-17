@@ -141,7 +141,7 @@ class NoPathOfThisComputer(unittest.TestCase):
     def test_nothing_personal_or_of_the_first_studio_is_left(self):
         # The release test: no person, product or bot of the studio this code was first written for.
         words = ['ng' + 'en', 'ven' + 'us', 'venu' + 'tian', 'yo' + 'el', 'mebra' + 'htu', 'bal' + 'tis', 'ballo' + 'tta', 'al' + 'dis',
-                 'night ' + 'rules', 'tony ' + 'yayo', 'gid' + 'eon', 'karen ' + 'the', 'brick ' + 'the', 'bob the ' + 'builder', 'kwa' + 'ku',
+                 'night ' + 'rules', 'to' + 'ny ' + 'yayo', 'gid' + 'eon', 'karen ' + 'the', 'brick ' + 'the', 'bob the ' + 'builder', 'kwa' + 'ku',
                  'fred ' + 'the', 'fre' + 'ya', 'taf' + 'ari', 'hu' + 'go', 'flip' + 'pa', 'hus' + 'tl', 'jobs' + 'desk', 'kin' + 'dle',
                  'unti' + 'red', 'paper' + 'clip', 'at' + 'rium']
         old = re.compile('|'.join(words), re.I)

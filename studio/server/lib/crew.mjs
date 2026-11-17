@@ -618,10 +618,13 @@ export async function moneyView({ folder = crewFolder(), now = Date.now(), ...op
 export const IMPROVEMENT_STATES = ['new', 'ask', 'accepted', 'done', 'rejected', 'stale']
 
 /**
- * What Freya's audits and Tony found worth improving: a plain file, improvements.json in the crew folder,
- * written by own/improvements.py. This only reads it, and answers the same list to the PC and the phone.
+ * What the crew's audits found worth improving: a plain file, improvements.json in the crew folder, written
+ * by the crew's own audit script. This only reads it, and answers the same list to the PC and the phone.
+ * A decision is the owner's ('owner') or the lead bot's (any other name is the lead's); `lead` is the lead
+ * bot's name, so the page can say who decided.
  */
-export function improvementsView({ folder = crewFolder() } = {}) {
+export function improvementsView({ folder = crewFolder(), lead = '' } = {}) {
+  const by = (who) => (who === 'owner' ? 'owner' : who ? 'lead' : '')
   const raw = readJson(path.join(folder, 'improvements.json'), [])
   const order = new Map(IMPROVEMENT_STATES.map((name, i) => [name, i]))
   const items = raw.filter((r) => r && typeof r === 'object' && r.title).map((r, i) => ({
@@ -634,14 +637,14 @@ export function improvementsView({ folder = crewFolder() } = {}) {
     status: order.has(r.status) ? r.status : 'new',
     job: cut(r.job, 40),
     added: Number(r.added) || 0,
-    decidedBy: r.decidedBy === 'tony' || r.decidedBy === 'owner' ? r.decidedBy : '',
+    decidedBy: by(typeof r.decidedBy === 'string' ? r.decidedBy : ''),
     decidedAt: Number(r.decidedAt) || 0,
     reason: cut(r.reason, 600),
-    history: (Array.isArray(r.history) ? r.history : []).filter((h) => h && (h.by === 'tony' || h.by === 'owner')).slice(-10)
-      .map((h) => ({ by: h.by, status: cut(h.status, 20), at: Number(h.at) || 0 })),
+    history: (Array.isArray(r.history) ? r.history : []).filter((h) => h && typeof h.by === 'string' && h.by).slice(-10)
+      .map((h) => ({ by: by(h.by), status: cut(h.status, 20), at: Number(h.at) || 0 })),
   })).sort((a, b) => order.get(a.status) - order.get(b.status) || b.added - a.added)
   const counts = Object.fromEntries(IMPROVEMENT_STATES.map((name) => [name, items.filter((i) => i.status === name).length]))
-  return { items, counts }
+  return { items, counts, lead: cut(lead, 60) }
 }
 
 // ── what the owner can change ──────────────────────────────────────────────────────

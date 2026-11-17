@@ -17,7 +17,7 @@ test('each plain choice becomes a timetable the engine can read, and reads back 
     assert.equal(cronOf(plan), cron)
     assert.deepEqual(planOf(cron), plan)
     assert.equal(wordsOf(cron), words)
-    assert.ok(nextTime(cron, Date.parse('2026-11-12T10:00:00Z'), 'Europe/Stockholm'), `the engine reads ${cron}`)
+    assert.ok(nextTime(cron, Date.parse('2026-11-12T10:00:00Z'), 'Europe/Berlin'), `the engine reads ${cron}`)
   }
 })
 
