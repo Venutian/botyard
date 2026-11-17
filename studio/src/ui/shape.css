@@ -25,12 +25,12 @@
 .hud.studio .plate-sec .two label.stack { margin-bottom: 0; }
 .hud.studio .plate-sec :is(input:not([type='radio']):not([type='checkbox']), select, textarea) { width: 100%; min-width: 0; box-sizing: border-box; }
 .hud.studio .studio-sheet .fields :is(input[type='number'], input[type='time'], input[type='password'], input[type='url']) {
-  padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--raise); color: var(--text); font: 14px/1.4 var(--body);
+  padding: 8px 10px; border: 2px solid var(--field-edge); border-radius: 8px; background: var(--raise); color: var(--text); font: 14px/1.4 var(--body);
 }
 .hud.studio .plate-sec .fields :is(input, select, textarea),
 .hud.studio .plate-sec.fields :is(input, select, textarea),
 .hud.studio form.fields .plate-sec :is(input:not([type='radio']):not([type='checkbox']), select, textarea),
-.hud.studio .plate-sec form.fields :is(input:not([type='radio']):not([type='checkbox']), select, textarea) { background: var(--panel-solid); border: 2px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; font: 14px/1.4 var(--body); color: var(--text); }
+.hud.studio .plate-sec form.fields :is(input:not([type='radio']):not([type='checkbox']), select, textarea) { background: var(--panel-solid); border: 2px solid var(--field-edge); border-radius: 8px; padding: 8px 10px; font: 14px/1.4 var(--body); color: var(--text); }
 .hud.studio form.fields .plate-sec :is(input, select, textarea):focus-visible { border-color: var(--edge); }
 .hud.studio .unit { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .hud.studio .unit input { width: 96px; flex: none; }
@@ -82,7 +82,7 @@
 
 .hud.studio .sheet-body.tall { display: flex; flex-direction: column; }
 .hud.studio .rules { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; margin: 0 8px; }
-.hud.studio .rules-edit { display: flex; flex-direction: column; min-height: 0; border: 2px solid var(--edge); border-top: 8px solid var(--bot, var(--edge)); border-radius: 8px; background: var(--raise); overflow: hidden; }
+.hud.studio .rules-edit { display: flex; flex-direction: column; min-height: 0; border: 2px solid var(--field-edge); border-top: 8px solid var(--bot, var(--edge)); border-radius: 8px; background: var(--raise); overflow: hidden; }
 .hud.studio .studio-sheet .rules .rules-edit textarea[data-part] {
   flex: 1; min-height: 46vh; width: 100%; box-sizing: border-box; padding: 14px 16px; border: 0; border-radius: 0; resize: none;
   background: var(--raise); color: var(--text); font: 13.5px/1.6 ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace; tab-size: 2; white-space: pre-wrap;
