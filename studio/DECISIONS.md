@@ -7,7 +7,7 @@ welcome when it argues with the reason; working around a decision quietly is not
 
 Everything a yard owns is in `$BOTYARD_HOME` (`~/.botyard` unless chosen): the store, run logs,
 the crew's own files, pasted keys, paired phones, the page's saved document. A folder's name comes
-from `server/lib/home.mjs` (`crew/studio_home.py` for the helpers) and nowhere else.
+from `server/lib/home.mjs` (`crew/botyard_home.py` for the helpers) and nowhere else.
 
 Why: a yard can be moved by copying one folder and removed by deleting it, a test gets an empty
 yard by naming a temp folder, and the code never has to be searched for a path.
