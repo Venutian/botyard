@@ -18,7 +18,8 @@ def load(file):
     return module
 
 
-CHECKS = {'identity': lambda: load('identity-check.py').faults(repos=[os.path.dirname(HERE)])}
+CHECKS = {'identity': lambda: load('identity-check.py').faults(repos=[os.path.dirname(HERE)]),
+          'connectors': lambda: load('connectors-check.py').faults()}
 
 
 def main():
