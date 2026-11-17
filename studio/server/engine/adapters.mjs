@@ -16,7 +16,7 @@ export class AdapterError extends Error {}
 const list = (value) => (Array.isArray(value) ? value.map(String) : [])
 
 /** Claude Code, through the crew's launcher. The prompt goes in on stdin. */
-function claude(agent, { model, session, instructionsFile, mcpConfig }) {
+function claude(agent, { model, session, instructionsFile, mcpConfig, readDirs = [] }) {
   const c = agent.adapterConfig || {}
   return {
     command: c.command || 'claude',
@@ -32,6 +32,8 @@ function claude(agent, { model, session, instructionsFile, mcpConfig }) {
       // Only what the engine and Botyard's connectors give: never the owner's own connected apps.
       '--mcp-config', mcpConfig, '--strict-mcp-config',
       ...(instructionsFile ? ['--add-dir', path.dirname(instructionsFile)] : []),
+      // The files it was woken with (a screenshot sent in chat) sit in the run's own folder.
+      ...readDirs.flatMap((dir) => ['--add-dir', dir]),
       ...list(c.extraArgs),
     ],
   }

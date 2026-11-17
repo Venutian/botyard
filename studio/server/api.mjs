@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { clearWork } from './lib/manager.mjs'
 import { readFace, staleStudioView, studioView } from './lib/studio.mjs'
 import { guardFolder, readGuard, writeGuard } from './lib/guard.mjs'
-import { MAX_ATTACH_BYTES, EngineError, companyId, crewOf, acceptQuestion, addComment, addJob, addRoutine, editRoutine, agentModels, answerQuestion, attachmentFile, cancelJob, chatList, decideApproval, jobWorkspace, pauseRoutine, removeRoutine, reopenJob, resumeRoutine, routineList, runRoutine, chatThread, pauseBot, rejectQuestion, resumeBot, sendChat, settleConnectCard, stopJob, studioSummary, uploadAttachment } from './lib/engine.mjs'
+import { MAX_ATTACH_BYTES, EngineError, companyId, crewOf, acceptQuestion, addComment, addJob, addRoutine, editRoutine, agentModels, answerQuestion, attachmentFile, cancelJob, chatList, decideApproval, jobWorkspace, pauseRoutine, removeRoutine, reopenJob, resumeRoutine, routineList, runRoutine, chatThread, pauseBot, rejectQuestion, resumeBot, sendChat, settleConnectCard, stopJob, studioSummary, uploadAttachment, uploadChatPicture } from './lib/engine.mjs'
 import { artifactList, documentRevisions, editJob, jobIdOf, jobList, jobPage, projectPage, saveGoal, restoreDocument, routinePage, saveDocument, saveSkillFile, setRoutineSchedule, skillFile, skillList } from './lib/work.mjs'
 import { changeDetail } from './lib/changes.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -146,13 +146,19 @@ async function studioRoute(req, res, url) {
       const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase()
       return send(res, 201, await uploadAttachment(q('id'), { name: q('name'), type, bytes }))
     }
+    // A picture for a chat message, put on the bot's conversation; the message then names it.
+    if (url.pathname === '/api/studio/chat/picture' && req.method === 'POST') {
+      const bytes = await readRawBody(req, MAX_ATTACH_BYTES)
+      const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase()
+      return send(res, 201, await uploadChatPicture(q('bot'), { name: q('name'), type, bytes }))
+    }
     // Instructions, documents and skill files can run to a few hundred kilobytes; everything else is a line or two.
     const big = ['/api/studio/instructions', '/api/studio/document', '/api/studio/skill', '/api/studio/job', '/api/studio/bot'].includes(url.pathname)
     const body = await readJsonBody(req, big ? 1024 * 1024 : 64 * 1024)
     // The owner's override of a finding: only the map's own page on this machine gets here (the guards above).
     const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
     if (finding && req.method === 'POST') return send(res, 200, await decideImprovement(finding[1], { action: String(body.action || ''), reason: body.reason }))
-    if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID()))
+    if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID(), { pictures: body.pictures }))
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))
     if (url.pathname === '/api/studio/routine' && req.method === 'POST') {
       // Removing one asks for a confirm on the page first.

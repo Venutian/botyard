@@ -12,7 +12,7 @@ import {
   artifactList, editJob, jobIdOf, jobList, jobPage, projectPage, restoreDocument, routinePage,
   saveDocument, saveSkillFile, scheduleWords, setRoutineSchedule, skillFile, skillList,
 } from '../server/lib/work.mjs'
-import { attachmentFile, uploadAttachment } from '../server/lib/engine.mjs'
+import { attachmentFile, uploadAttachment, uploadChatPicture } from '../server/lib/engine.mjs'
 
 const LEAD = '11111111-1111-4111-8111-111111111111'
 const FRED = '22222222-2222-4222-8222-222222222222'
@@ -253,6 +253,28 @@ test('a file is attached as the engine upload form, and only of the kinds the ma
   assert.equal(file.type, 'text/markdown')
   await assert.rejects(uploadAttachment(JOB, { name: 'a.html', type: 'text/html', bytes: Buffer.from('x') }, engine()), /Attach an image/)
   await assert.rejects(uploadAttachment(JOB, { name: 'a.png', type: 'image/png', bytes: Buffer.alloc(0) }, engine()), /empty/)
+})
+
+test('a chat picture goes on the bot\'s own conversation, and only a plain picture under 10 MB', async () => {
+  const BOT = '77777777-8888-4999-8aaa-111111111111'
+  const calls = []
+  const fetcher = async (url, init) => {
+    const where = new URL(url).pathname.replace('/api', '')
+    calls.push({ where, method: init.method, body: init.body })
+    if (where === '/companies') return new Response(JSON.stringify([{ id: 'co', name: 'Yard' }]))
+    if (where === `/companies/co/chats/${BOT}`) return new Response(JSON.stringify({ id: 'chat-1' }))
+    if (where === '/companies/co/issues/chat-1/attachments') return new Response(JSON.stringify({ id: 'f1' }), { status: 201 })
+    return new Response('{}', { status: 404 })
+  }
+  const done = await uploadChatPicture(BOT, { name: 'shot.png', type: 'image/png', bytes: Buffer.from('png') }, { fetcher })
+  assert.deepEqual(done, { id: 'f1', name: 'shot.png' })
+  assert.equal(calls.find((c) => c.where === `/companies/co/chats/${BOT}`).method, 'POST', 'the conversation is opened if it was not')
+  for (const type of ['image/svg+xml', 'text/html', 'application/pdf', 'application/zip', '']) {
+    await assert.rejects(uploadChatPicture(BOT, { name: 'a', type, bytes: Buffer.from('x') }, { fetcher }), (e) => e.status === 415, type)
+  }
+  await assert.rejects(uploadChatPicture(BOT, { name: 'a.png', type: 'image/png', bytes: Buffer.alloc(10 * 1024 * 1024 + 1) }, { fetcher }), (e) => e.status === 413)
+  await assert.rejects(uploadChatPicture(BOT, { name: 'a.png', type: 'image/png', bytes: Buffer.alloc(0) }, { fetcher }), (e) => e.status === 400)
+  await assert.rejects(uploadChatPicture('nope', { name: 'a.png', type: 'image/png', bytes: Buffer.from('x') }, { fetcher }), (e) => e.status === 400)
 })
 
 test('a file is shown as an image or text, and anything else only as a download', async () => {

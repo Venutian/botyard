@@ -144,7 +144,9 @@ export type ChatBot = Bot & { lastActiveAt: string | null; lastMessage: LastMess
 /** Who signs a line the service itself puts in a conversation: the app's name, or the older one. */
 export const SYSTEM = ['Botyard', 'Studio'];
 /** `note`: Botyard's or one of the crew's scripts' words, shown as a note, not as the bot speaking. */
-export type ChatMessage = { id: string; from: string; mine: boolean; note?: boolean; text: string; at: string };
+/** A picture sent with a message: on the studio (`id`), or, while it is still going, on this phone (`uri`). */
+export type ChatPicture = { id: string; name: string; uri?: string };
+export type ChatMessage = { id: string; from: string; mine: boolean; note?: boolean; text: string; at: string; pictures?: ChatPicture[] };
 /** A card a bot put in a conversation. One still `pending` carries its `question` when the app can answer it; a `connect` card is finished on the Connectors page. */
 export type ChatCard = { service?: string; id: string; at: string; state: 'pending' | 'done' | 'cancelled'; kind: 'choice' | 'confirm' | 'connect' | 'other'; title: string; detail?: string; question?: Question; path?: string };
 export type ChatThread = { bot: Looked & { id: string; name: string; title: string }; chatId?: string; working: boolean; messages: ChatMessage[]; cards?: ChatCard[] };
@@ -337,8 +339,48 @@ export const rejectQuestion = (c: Connection, job: string, id: string, reason?: 
 export const addComment = (c: Connection, id: string, text: string) => call(c, `/jobs/${id}/comments`, 'POST', { text });
 export const getChats = (c: Connection) => call<{ bots: ChatBot[]; error?: string }>(c, '/chats');
 export const getChat = (c: Connection, botId: string) => call<ChatThread>(c, `/chats/${botId}`);
-export const sendChat = (c: Connection, botId: string, text: string, requestId: string) =>
-  call(c, `/chats/${botId}/messages`, 'POST', { text, requestId });
+export const sendChat = (c: Connection, botId: string, text: string, requestId: string, pictures: string[] = []) =>
+  call(c, `/chats/${botId}/messages`, 'POST', { text, requestId, ...(pictures.length ? { pictures } : {}) });
+
+/** What a chat message may carry: the same kinds and size the studio takes. */
+export const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+export const MOST_PICTURES = 6;
+export const PICTURE_BYTES = 10 * 1024 * 1024;
+export type PickedPicture = { uri: string; name: string; type: string; size?: number };
+
+/**
+ * A picture for the next chat message, sent as its own bytes before the message names it. On a phone the
+ * file goes straight from where the picker left it, so a large screenshot is never read into memory here.
+ */
+export async function uploadChatPicture(c: Connection, botId: string, picture: PickedPicture): Promise<{ id: string; name: string }> {
+  const path = `/chats/${botId}/pictures?name=${encodeURIComponent(picture.name)}`;
+  if (Platform.OS === 'web') {
+    // The browser preview has no studio: it pretends, so the composer can be tried.
+    return require('./preview').sample(path, 'POST', picture) as { id: string; name: string };
+  }
+  let way: Route;
+  try {
+    way = await route(c);
+  } catch {
+    throw new Error(unreachable(c));
+  }
+  const FileSystem = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
+  let res: { status: number; body: string };
+  try {
+    res = await FileSystem.uploadAsync(`${way.base}/v1${path}`, picture.uri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: { ...way.headers, Authorization: `Bearer ${c.token}`, 'Content-Type': picture.type },
+    });
+  } catch {
+    routes.delete(routeKey(c));
+    throw new Error(unreachable(c));
+  }
+  let data: { id?: string; name?: string; error?: string } | null = null;
+  try { data = JSON.parse(res.body); } catch { /* not JSON */ }
+  if (res.status < 200 || res.status >= 300 || !data?.id) throw refusal(data, `The studio answered ${res.status}`);
+  return { id: data.id, name: data.name || picture.name };
+}
 
 /** Identifies one message, so a retry after a dropped connection cannot send it twice. */
 export const requestId = () =>

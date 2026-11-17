@@ -429,3 +429,55 @@ test('a chat is never closed: a bot closing it leaves it open, and a closed one 
   addComment(s.store, job.id, { body: 'Thanks.' }, { actor: { user: 'local-board' } })
   assert.equal(s.store.rows("SELECT id FROM wakes WHERE status = 'queued'").length, 0)
 })
+
+test('a picture sent with a chat message reaches the bot: tied to the message, copied into its run, named in its prompt, readable by Claude', async () => {
+  const { attach } = await import('../server/engine/files.mjs')
+  const s = studio()
+  const chat = openChat(s.store, COMPANY, 'bot-builder')
+  s.store.remove('wakes', 'agent_id', 'bot-builder')
+  const bytes = Buffer.from('\x89PNG\r\n\x1a\nnot really a picture')
+  const file = attach(s.store, COMPANY, chat.id, { name: 'map crash.png', type: 'image/png', bytes }, { actor: { user: 'local-board' }, dataDir: s.dataDir })
+  const said = addComment(s.store, chat.id, { body: 'What do you see here?', attachmentIds: [file.id] }, { actor: { user: 'local-board' } })
+  assert.equal(s.store.object('SELECT raw FROM attachments WHERE id = ?', file.id).issueCommentId, said.id)
+  assert.equal(s.store.row('SELECT comment_id FROM attachments WHERE id = ?', file.id).comment_id, said.id)
+
+  const run = (await tick(s.store, s.opts())).started[0]
+  await until(s, (r) => r.finished.find((f) => f.id === run.id))
+  const read = (kind) => fs.readFileSync(path.join(os.tmpdir(), `${kind}-${run.id}.txt`), 'utf8')
+  const prompt = read('prompt')
+  const place = /picture attached: (\S+) \(image\/png, sent as "map crash.png"\)/.exec(prompt)?.[1]
+  assert.ok(place, prompt)
+  assert.ok(prompt.indexOf('What do you see here?') < prompt.indexOf(place), 'shown under the words it came with')
+  assert.match(prompt, /Open each file above with your file-reading tool/)
+  assert.deepEqual(fs.readFileSync(place), bytes, 'the run has its own copy of the bytes')
+  const args = read('args').split('\n')
+  assert.equal(args[args.lastIndexOf('--add-dir') + 1], path.dirname(place), 'Claude may read the folder the picture is in')
+
+  // The next run is not shown the same picture again.
+  addComment(s.store, chat.id, { body: 'Thanks.' }, { actor: { user: 'local-board' } })
+  const next = (await tick(s.store, s.opts())).started[0]
+  await until(s, (r) => r.finished.find((f) => f.id === next.id))
+  const later = fs.readFileSync(path.join(os.tmpdir(), `prompt-${next.id}.txt`), 'utf8')
+  assert.doesNotMatch(later, /picture attached/)
+  assert.ok(!fs.readFileSync(path.join(os.tmpdir(), `args-${next.id}.txt`), 'utf8').split('\n').some((a, i, all) => a === '--add-dir' && all[i + 1].endsWith('/files')))
+})
+
+test('a picture alone is a message; a message cannot take a file of another job, one already sent, or too many', async () => {
+  const { attach } = await import('../server/engine/files.mjs')
+  const s = studio()
+  const chat = openChat(s.store, COMPANY, 'bot-builder')
+  const job = createJob(s.store, COMPANY, { title: 'Other work', assigneeAgentId: 'bot-builder' })
+  const put = (on) => attach(s.store, COMPANY, on, { name: 'shot.png', type: 'image/png', bytes: Buffer.from('png') }, { dataDir: s.dataDir })
+  const owner = { actor: { user: 'local-board' } }
+  const alone = addComment(s.store, chat.id, { body: '', attachmentIds: [put(chat.id).id] }, owner)
+  assert.equal(alone.body, '')
+  assert.throws(() => addComment(s.store, chat.id, { body: '' }, owner), (e) => e instanceof Refused && e.status === 400)
+  assert.throws(() => addComment(s.store, chat.id, { body: 'Look', attachmentIds: [put(job.id).id] }, owner), (e) => e instanceof Refused && e.status === 400)
+  const sent = s.store.objects('SELECT raw FROM attachments WHERE job_id = ?', chat.id)[0]
+  assert.throws(() => addComment(s.store, chat.id, { body: 'Again', attachmentIds: [sent.id] }, owner), (e) => e instanceof Refused && e.status === 409)
+  const many = Array.from({ length: 7 }, () => put(chat.id).id)
+  assert.throws(() => addComment(s.store, chat.id, { body: 'All', attachmentIds: many }, owner), /at most 6/)
+  assert.throws(() => addComment(s.store, chat.id, { body: 'Odd', attachmentIds: 'x' }, owner), /list of file ids/)
+  // A refused message ties nothing.
+  assert.equal(s.store.objects('SELECT raw FROM attachments WHERE job_id = ?', chat.id).filter((a) => a.issueCommentId).length, 1)
+})

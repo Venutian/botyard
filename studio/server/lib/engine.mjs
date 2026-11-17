@@ -492,7 +492,7 @@ async function lastSaid(chat, options) {
   if (!chat) return null
   const comments = await call(`/issues/${chat.id}/comments?limit=${PREVIEW_LOOKBACK}`, options)
   const said = comments.find((c) => c.authorType !== 'system')
-  return said ? { text: textOf(said).slice(0, PREVIEW_CHARS), mine: mineOf(said), at: said.createdAt } : null
+  return said ? { text: (textOf(said) || 'Sent a picture').slice(0, PREVIEW_CHARS), mine: mineOf(said), at: said.createdAt } : null
 }
 
 /** Everyone you can talk to, with whether a conversation has started. */
@@ -525,14 +525,20 @@ export async function chatThread(botId, options) {
   ])
   const bot = { id: agent.id, name: agent.name, title: agent.title || '' }
   if (!chat) return { bot, working: false, messages: [], cards: [] }
-  const [comments, interactions, live] = await Promise.all([
+  const [comments, interactions, live, files] = await Promise.all([
     call(`/issues/${chat.id}/comments?limit=${SHOWN_MESSAGES}`, options),
     orElse(call(`/issues/${chat.id}/interactions`, options), []),
     orElse(call(`/issues/${chat.id}/live-runs`, options), []),
+    orElse(call(`/issues/${chat.id}/attachments`, options), []),
   ])
   const names = new Map([[agent.id, agent.name]])
+  const pictures = new Map()
+  for (const f of files) {
+    if (!f.issueCommentId || !PROOF_TYPES.has(f.contentType)) continue
+    pictures.set(f.issueCommentId, [...(pictures.get(f.issueCommentId) || []), { id: f.id, name: f.originalFilename || 'Picture' }])
+  }
   const messages = comments
-    .map((c) => ({ id: c.id, from: authorOf(c, names), mine: mineOf(c), note: noteOf(c), text: textOf(c), at: c.createdAt }))
+    .map((c) => ({ id: c.id, from: authorOf(c, names), mine: mineOf(c), note: noteOf(c), text: textOf(c), at: c.createdAt, pictures: pictures.get(c.id) || [] }))
     .reverse()
   // Settled cards only as far back as the messages go; one still waiting always shows.
   const since = messages.length ? Date.parse(messages[0].at) : 0
@@ -555,16 +561,37 @@ export async function chatThread(botId, options) {
  * Say something to a bot. `requestId` comes from the phone, so a retry after a dropped connection
  * cannot send the same message twice.
  */
-export async function sendChat(botId, text, requestId, options) {
+export async function sendChat(botId, text, requestId, options = {}) {
   if (!ID.test(botId)) throw new EngineError(400, 'That is not a bot id')
   if (!ID.test(requestId || '')) throw new EngineError(400, 'A message needs a request id')
   const body = typeof text === 'string' ? text.trim() : ''
-  if (!body) throw new EngineError(400, 'Write a message first')
+  const { pictures, ...rest } = options
+  const ids = pictures === undefined || pictures === null ? [] : pictures
+  if (!Array.isArray(ids) || ids.some((p) => typeof p !== 'string' || !ID.test(p))) throw new EngineError(400, 'Those are not picture ids')
+  if (ids.length > MAX_CHAT_PICTURES) throw new EngineError(400, `A message carries at most ${MAX_CHAT_PICTURES} pictures`)
+  if (!body && !ids.length) throw new EngineError(400, 'Write a message first')
   if (body.length > MAX_TEXT) throw new EngineError(400, `Messages are limited to ${MAX_TEXT} characters`)
+  const id = await companyId(rest)
+  const chat = await call(`/companies/${id}/chats/${botId}`, { ...rest, method: 'POST', body: {} })
+  const comment = await call(`/issues/${chat.id}/comments`, { ...rest, method: 'POST', body: { body, clientRequestId: requestId, ...(ids.length ? { attachmentIds: ids } : {}) } })
+  return { id: comment.id }
+}
+
+/** Most pictures one chat message carries, as the engine allows. */
+export const MAX_CHAT_PICTURES = 6
+
+/**
+ * A picture for a chat message, put on the bot's own conversation before the message is sent with its
+ * id. Only plain image types, under the same size limit as any attachment.
+ */
+export async function uploadChatPicture(botId, { name, type, bytes } = {}, options = {}) {
+  if (!ID.test(botId)) throw new EngineError(400, 'That is not a bot id')
+  if (!PROOF_TYPES.has(type)) throw new EngineError(415, 'Send a picture: PNG, JPEG, WebP or GIF')
+  if (!bytes?.length) throw new EngineError(400, 'The picture is empty')
+  if (bytes.length > MAX_ATTACH_BYTES) throw new EngineError(413, 'Pictures are limited to 10 MB')
   const id = await companyId(options)
   const chat = await call(`/companies/${id}/chats/${botId}`, { ...options, method: 'POST', body: {} })
-  const comment = await call(`/issues/${chat.id}/comments`, { ...options, method: 'POST', body: { body, clientRequestId: requestId } })
-  return { id: comment.id }
+  return postFile(chat.id, { name: name || 'picture', type, bytes }, options)
 }
 
 /** A new job goes to the top of the org chart, which decides who does it, unless a bot is named. */
@@ -662,8 +689,13 @@ export const ATTACH_TYPES = new Set([...PROOF_TYPES, 'application/pdf', 'text/pl
 export const MAX_ATTACH_BYTES = 10 * 1024 * 1024
 
 /** Attach a file to a job, as the engine's own upload form does. */
-export async function uploadAttachment(jobId, { name, type, bytes } = {}, { fetcher = fetch, ...options } = {}) {
+export async function uploadAttachment(jobId, file, options) {
   if (!ID.test(jobId)) throw new EngineError(400, 'That is not a job id')
+  return postFile(jobId, file, options)
+}
+
+/** A file's bytes to a job the engine itself named, checked for name, type and size. */
+async function postFile(jobId, { name, type, bytes } = {}, { fetcher = fetch, ...options } = {}) {
   const file = String(name || '').replace(/[\\/\0]/g, '').trim().slice(0, 160)
   if (!file) throw new EngineError(400, 'The file needs a name')
   if (!ATTACH_TYPES.has(type)) throw new EngineError(415, 'Attach an image, a PDF, a text, CSV, JSON or zip file')

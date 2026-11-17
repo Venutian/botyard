@@ -81,6 +81,8 @@ const thread = {
     { id: 'm5', from: 'You', mine: true, text: 'And keep the bar high.', at: minutes(11) },
     { id: 'm6', from: 'Lead', mine: false, text: 'Will do. Every build gets a review now.', at: minutes(10) },
     { id: 'm7', from: 'Lead', mine: false, text: 'Lighthouse passed review. The report is on [LH-42](/LH/issues/LH-42#comment-1) when you want it.', at: minutes(4) },
+    { id: 'm9', from: 'You', mine: true, text: 'The map goes blank after the second level. What do you make of this?', at: minutes(3.5), pictures: [{ id: 'shot1', name: 'level-two.png' }] },
+    { id: 'm10', from: 'Lead', mine: false, text: 'The screenshot shows the tiles missing under the fog layer. I have given Builder a job to fix it.', at: minutes(3) },
     { id: 'm8', from: 'Crew check', mine: false, text: 'The crew check found 1 thing to fix. Act on each in this turn.\n\n1. LH-42 has 61 comments, and every wake on it reads them again.', at: minutes(2) },
   ],
   // A question the lead asked a while back, still waiting: the chat pins it at the top.
@@ -107,7 +109,8 @@ const detail = {
   ],
 };
 
-export const sampleImage = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#ffc371"/><stop offset="1" stop-color="#7a3e9d"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/></svg>')}`;
+// Raw markup: React Native Web encodes a `utf8,` SVG itself, so an encoded one would be encoded twice and draw nothing.
+export const sampleImage = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#ffc371"/><stop offset="1" stop-color="#7a3e9d"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/></svg>`;
 
 const changes = {
   branch: 'LH-31-fix-the-lighthouse-map-loading-crash',
@@ -549,6 +552,7 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (path === '/summary') return summary;
   if (path === '/manager') return manager;
   if (path === '/chats') return { bots: chats };
+  if (/^\/chats\/[^/]+\/pictures/.test(path) && method === 'POST') return { id: `shot-${Date.now()}`, name: (_body as { name?: string })?.name || 'picture' };
   if (path.startsWith('/chats/') && method === 'GET') return { ...thread, bot: chats.find((c) => path.endsWith(c.id)) ?? thread.bot };
   if (path.startsWith('/jobs/') && method === 'GET') return detail;
   return { id: 'j1', ref: 'LH-34' };

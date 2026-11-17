@@ -19,6 +19,7 @@ import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
 import { addComment } from './write.mjs'
+import { fileOf } from './files.mjs'
 import { instructionsOf, wakePrompt } from './prompt.mjs'
 import { MAY_NOT_VAR, PASS_PREFIX, PROVIDER_KEYS, isHidden, keysDir, runLogsDir, runVars, runsDir, worktreeDir } from './names.mjs'
 
@@ -30,6 +31,29 @@ const DEFAULT_TIMEOUT_SEC = 3600
 
 const slugOf = (text) => String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
 const hashOf = (token) => createHash('sha256').update(token).digest('hex')
+
+/**
+ * The files a bot is woken with: those tied to the words it is shown, and those someone else attached
+ * to the job since its last run. Each is copied into the run's own folder, where every kind of bot may
+ * read it, so a Claude or OpenCode bot can open a screenshot the owner sent. A file whose bytes are
+ * gone is named as missing rather than left out.
+ */
+export function filesForRun(store, job, agent, comments, since, into, { dataDir } = {}) {
+  const shown = new Set(comments.map((c) => c.id))
+  const all = store.objects('SELECT raw FROM attachments WHERE job_id = ? ORDER BY position', job.id)
+  const wanted = all.filter((a) => (a.issueCommentId ? shown.has(a.issueCommentId) : a.createdByAgentId !== agent.id && (!since || a.createdAt > since)))
+  return wanted.slice(-20).map((a, n) => {
+    const name = `${n + 1}-${String(a.originalFilename || 'file').replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, '_').slice(0, 100)}`
+    const place = path.join(into, name)
+    try {
+      fs.mkdirSync(into, { recursive: true })
+      fs.copyFileSync(fileOf(store, a.id, { dataDir }).path, place)
+      return { id: a.id, commentId: a.issueCommentId || '', name: a.originalFilename || 'file', type: a.contentType || '', path: place }
+    } catch {
+      return { id: a.id, commentId: a.issueCommentId || '', name: a.originalFilename || 'file', type: a.contentType || '', path: '' }
+    }
+  })
+}
 
 /** What the runner does outside the store. Replaced in tests. */
 export const realIo = {
@@ -262,16 +286,17 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
   const comments = store.objects('SELECT raw FROM comments WHERE job_id = ? ORDER BY position', job.id).filter((c) => !c.deletedAt && c.authorAgentId !== agent.id && (!since || c.createdAt > since)).slice(-20)
   const cards = store.objects('SELECT raw FROM cards WHERE job_id = ? ORDER BY position', job.id).filter((c) => since && c.resolvedAt && c.resolvedAt > since)
   const names = new Map(store.rows('SELECT id, name FROM agents').map((a) => [a.id, a.name]))
-  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, resumed: Boolean(session), inline: inlinesInstructions(agent), names })
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `botyard-run-${job.identifier.toLowerCase()}-`))
+  const files = filesForRun(store, job, agent, comments, since, path.join(scratch, 'files'), { dataDir })
+  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, files, resumed: Boolean(session), inline: inlinesInstructions(agent), names })
   const promptFile = path.join(runDir, 'prompt.txt')
   fs.writeFileSync(promptFile, prompt)
   const mcpConfig = path.join(runDir, 'mcp.json')
   fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: {} }))
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `botyard-run-${job.identifier.toLowerCase()}-`))
 
   const token = issueToken(store, runId, agent.id)
   const mayNot = mayNotOf(agent)
-  const { command, args, env: toolEnv = {} } = commandFor(agent, { model, session, cwd, instructionsFile: instructionsOf(agent).file, mcpConfig, mayNot })
+  const { command, args, env: toolEnv = {} } = commandFor(agent, { model, session, cwd, instructionsFile: instructionsOf(agent).file, mcpConfig, mayNot, readDirs: files.length ? [path.join(scratch, 'files')] : [] })
   const runEnv = {
     HOME: env.HOME, PATH: env.PATH, LANG: env.LANG || 'C.UTF-8', USER: env.USER, SHELL: env.SHELL, SSH_AUTH_SOCK: env.SSH_AUTH_SOCK, XDG_RUNTIME_DIR: env.XDG_RUNTIME_DIR, DISPLAY: env.DISPLAY, WAYLAND_DISPLAY: env.WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS,
     ...toolEnv,

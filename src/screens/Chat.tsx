@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { acceptQuestion, Answer, answerQuestion, ChatCard, ChatMessage, ChatThread, Connection, getChat, SYSTEM, rejectQuestion, settleConnectCard, requestId, sendChat } from '../api';
+import { acceptQuestion, Answer, answerQuestion, ChatCard, ChatMessage, ChatThread, Connection, getChat, MOST_PICTURES, PICTURE_BYTES, PICTURE_TYPES, PickedPicture, SYSTEM, rejectQuestion, settleConnectCard, requestId, sendChat, uploadChatPicture } from '../api';
 import { Crew, Nav } from '../crew';
 import { BotBadge } from '../mascot/BotBadge';
 import { portraitOf } from '../mascot/look';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
 import { Bubble, TypingBubble } from '../ui/Bubble';
+import { ChatPictures } from '../ui/Proof';
 import { Icon } from '../ui/Icon';
 import { Button, GlassButton, plainField, Txt, useTap } from '../ui/kit';
 import { Wallpaper } from '../ui/Wallpaper';
@@ -61,6 +63,8 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
   const [error, setError] = useState('');
   const [text, setText] = useState('');
   const [pending, setPending] = useState<ChatMessage | null>(null);
+  // Pictures chosen for the next message, shown above the composer until it is sent.
+  const [pictures, setPictures] = useState<PickedPicture[]>([]);
   const [quick, setQuick] = useState(false);
   const list = useRef<FlatList<Item>>(null);
   const [answering, setAnswering] = useState(false);
@@ -95,21 +99,46 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
     if (newest) markSeen(botId, newest);
   }, [newest, botId, markSeen]);
 
+  /** The system's own photo picker: it asks for no access to the phone's photos, only for the ones chosen. */
+  const pick = async () => {
+    const room = MOST_PICTURES - pictures.length;
+    if (room <= 0) return tell('That is the most for one message', `A message carries at most ${MOST_PICTURES} pictures.`);
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: room, quality: 1, exif: false });
+    if (picked.canceled) return;
+    const taken: PickedPicture[] = [];
+    const refused: string[] = [];
+    for (const [n, asset] of picked.assets.slice(0, room).entries()) {
+      const type = (asset.mimeType || '').toLowerCase();
+      const name = asset.fileName || `picture-${Date.now()}-${n + 1}.${type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'}`;
+      if (!PICTURE_TYPES.includes(type)) refused.push(`${name} is not a PNG, JPEG, WebP or GIF picture`);
+      else if (asset.fileSize && asset.fileSize > PICTURE_BYTES) refused.push(`${name} is larger than 10 MB`);
+      else taken.push({ uri: asset.uri, name, type, size: asset.fileSize });
+    }
+    if (refused.length) tell('Some pictures were left out', refused.join('\n'));
+    if (taken.length) setPictures((now) => [...now, ...taken].slice(0, MOST_PICTURES));
+  };
+
   const send = async (words: string) => {
     const message = words.trim();
-    if (!message) return;
+    const going = pictures;
+    if (!message && !going.length) return;
     tap('light');
     const id = requestId();
     setText('');
+    setPictures([]);
     setQuick(false);
     list.current?.scrollToOffset({ offset: 0, animated: true });
-    setPending({ id, from: 'You', mine: true, text: message, at: '' });
+    setPending({ id, from: 'You', mine: true, text: message, at: '', pictures: going.map((pic, n) => ({ id: `${id}-${n}`, name: pic.name, uri: pic.uri })) });
     try {
-      await sendChat(connection, botId, message, id);
+      // Each picture goes up first; the message then names them, so the bot sees them with the words.
+      const ids: string[] = [];
+      for (const pic of going) ids.push((await uploadChatPicture(connection, botId, pic)).id);
+      await sendChat(connection, botId, message, id, ids);
       await load();
       crew.reload();
     } catch (err) {
       setText(message);
+      setPictures(going);
       tell('That was not sent', (err as Error).message);
     } finally {
       setPending(null);
@@ -200,7 +229,16 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
           if (isCard(item)) return <CardRow card={item} busy={answering} onAnswer={(verb, answers) => answer(item, verb, answers)} onConnect={(how) => connect(item, how)} />;
           const mine = side(item);
           const fresh = known.current ? !known.current.has(item.id) : false;
-          return <Bubble message={item} first={side(newestFirst[index + 1]) !== mine} last={side(newestFirst[index - 1]) !== mine} bot={who} fresh={fresh} />;
+          const bubble = item.text || !item.pictures?.length
+            ? <Bubble message={item} first={side(newestFirst[index + 1]) !== mine || Boolean(item.pictures?.length)} last={side(newestFirst[index - 1]) !== mine} bot={who} fresh={fresh} />
+            : null;
+          if (!item.pictures?.length) return bubble;
+          return (
+            <View>
+              <ChatPictures connection={connection} pictures={item.pictures} mine={item.mine} />
+              {bubble}
+            </View>
+          );
         }}
         ListHeaderComponent={
           <>
@@ -268,8 +306,22 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
         </View>
       ) : null}
 
+      {pictures.length ? (
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} style={styles.trayRow} contentContainerStyle={styles.tray} accessibilityLabel="Pictures to send">
+          {pictures.map((pic, n) => (
+            <View key={`${pic.uri}-${n}`} style={[styles.trayItem, { borderColor: t.outline ? t.ink : t.line, borderWidth: t.outline ? 2 : 1 }]}>
+              <Image source={{ uri: pic.uri }} style={styles.trayImage} resizeMode="cover" accessibilityLabel={pic.name} />
+              <Pressable accessibilityRole="button" accessibilityLabel={`Take ${pic.name} out`} hitSlop={8} onPress={() => setPictures((now) => now.filter((_, i) => i !== n))} style={styles.trayDrop}>
+                <Icon name="close" size={14} color="#ffffff" weight={2.6} />
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <GlassButton icon={quick ? 'close' : 'plus'} label={quick ? 'Close quick messages' : 'Open quick messages'} onPress={() => setQuick(!quick)} size={42} />
+        <GlassButton icon="image" label="Add a picture" onPress={pick} size={42} />
         <View style={[styles.pill, { backgroundColor: t.composer, borderColor: t.outline ? t.ink : t.line, borderWidth: t.hair }]}>
           <TextInput
             value={text}
@@ -289,7 +341,7 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
             } : undefined}
             style={[styles.input, font(400), plainField, { color: t.ink }]}
           />
-          {text.trim() ? (
+          {text.trim() || pictures.length ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={Boolean(pending)} onPress={() => send(text)} style={({ pressed }) => [styles.send, { backgroundColor: t.accent }, pressed && styles.pressed]}>
               <Icon name="send" size={19} color={t.accentInk} weight={2.6} />
             </Pressable>
@@ -328,4 +380,9 @@ const styles = StyleSheet.create({
   pill: { alignItems: 'flex-end', borderRadius: 22, flex: 1, flexDirection: 'row', minHeight: 44, paddingLeft: 16, paddingRight: 4, paddingVertical: 3 },
   input: { flex: 1, fontSize: 16, maxHeight: 130, paddingVertical: 7 },
   send: { alignItems: 'center', borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
+  trayRow: { flexGrow: 0, flexShrink: 0 },
+  tray: { gap: 8, paddingHorizontal: 14, paddingTop: 6 },
+  trayItem: { borderRadius: 12, height: 72, overflow: 'hidden', width: 72 },
+  trayImage: { height: '100%', width: '100%' },
+  trayDrop: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 11, height: 22, justifyContent: 'center', position: 'absolute', right: 4, top: 4, width: 22 },
 });

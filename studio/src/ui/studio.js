@@ -40,6 +40,46 @@ async function call(url, payload) {
   return body
 }
 
+/** A file's own bytes to the server, which answers in JSON. */
+async function upload(url, file) {
+  let res
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+  } catch {
+    throw new Error('Botyard\'s own server is not answering. It may be restarting: try again in a moment')
+  }
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || `${res.status} ${res.statusText}`)
+  return body
+}
+
+/** A small picture of a chosen file for the tray, or '' when it is not a picture the browser can draw. */
+async function thumbOf(file, side = 128) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, side / Math.min(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close?.()
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
+/** This computer's date and time, for a pasted screenshot's name. */
+function localStamp(d = new Date()) {
+  const two = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`
+}
+
+/** A message's pictures, small; a click opens one large. */
+const pictureStrip = (pictures = []) => (pictures.length
+  ? `<div class="pics" data-gallery>${pictures.map((p) => `<a class="view-img" href="${fileUrl(p.id)}" target="_blank" rel="noopener" title="${esc(p.name)}" data-name="${esc(p.name)}"><img src="${fileUrl(p.id)}" alt="${esc(p.name)}" loading="lazy"></a>`).join('')}</div>`
+  : '')
+
 export const fetchStudio = () => call('/api/studio')
 
 function since(at, now = Date.now()) {
@@ -121,6 +161,11 @@ const COL = (key) => `<section class="deck-col studio-sheet col-${key}" data-col
     <button class="btn primary" data-act="confirm-yes"></button>
   </footer>
 </section>`
+/** What a chat message may carry: plain pictures, as many and as large as the server takes. */
+const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+const MOST_PICTURES = 6
+const PICTURE_BYTES = 10 * 1024 * 1024
+const fileUrl = (id) => `/api/studio/file?id=${encodeURIComponent(id)}`
 const svg = (path) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`
 const ICONS = {
   page: svg('<path d="M7 3.5h7l4 4V20.5H7z"/><path d="M14 3.5v4h4M10 12h5M10 16h5"/>'),
@@ -128,6 +173,7 @@ const ICONS = {
   work: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
   rooms: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/>'),
   chat: svg('<path d="M5 5h14v10H10l-5 4z"/>'),
+  picture: svg('<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>'),
   dials: svg('<path d="M5 7h8M17 7h2M5 17h2M11 17h8"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
   book: svg('<path d="M5 4.5h5a2 2 0 0 1 2 2V20a1.5 1.5 0 0 0-1.5-1.5H5z"/><path d="M19 4.5h-5a2 2 0 0 0-2 2V20a1.5 1.5 0 0 1 1.5-1.5H19z"/>'),
   search: svg('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/>'),
@@ -217,6 +263,9 @@ const TEMPLATE = `
   <p class="doing"></p>
   <div class="talk" tabindex="0"></div>
   <form>
+    <div class="tray" hidden aria-label="Pictures to send"></div>
+    <button class="btn icon ghost attach" type="button" data-act="add-picture" title="Add a picture (or paste one)" aria-label="Add a picture">${ICONS.picture}</button>
+    <input type="file" accept="${PICTURE_TYPES.join(',')}" multiple hidden>
     <textarea rows="2" maxlength="4000" placeholder="Write to this bot"></textarea>
     <button class="btn primary" type="submit">Send</button>
   </form>
@@ -498,6 +547,38 @@ export class Studio {
       this._answerCard(card.id, 'respond', answers)
     })
     this.chat.querySelector('form').addEventListener('submit', (e) => { e.preventDefault(); this.send() })
+    // Pictures for the next message: the button, a paste (a screenshot copied a moment ago), or a drop.
+    this._pictures = []
+    this.tray = this.chat.querySelector('.tray')
+    this.picker = this.chat.querySelector('input[type="file"]')
+    this.chat.querySelector('[data-act="add-picture"]').addEventListener('click', () => this.picker.click())
+    this.picker.addEventListener('change', () => { this._addPictures([...this.picker.files]); this.picker.value = '' })
+    this.tray.addEventListener('click', (e) => {
+      const drop = e.target.closest('[data-drop]')
+      if (!drop) return
+      this._pictures.splice(Number(drop.dataset.drop), 1)
+      this._showTray()
+      this.input.focus()
+    })
+    this.input.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.files || [])]
+      if (!files.length) return
+      e.preventDefault()
+      this._addPictures(files)
+    })
+    this.chat.addEventListener('dragover', (e) => {
+      if (![...(e.dataTransfer?.types || [])].includes('Files')) return
+      e.preventDefault()
+      this.chat.classList.add('dropping')
+    })
+    this.chat.addEventListener('dragleave', (e) => { if (!this.chat.contains(e.relatedTarget)) this.chat.classList.remove('dropping') })
+    this.chat.addEventListener('drop', (e) => {
+      this.chat.classList.remove('dropping')
+      const files = [...(e.dataTransfer?.files || [])]
+      if (!files.length) return
+      e.preventDefault()
+      this._addPictures(files)
+    })
     this.input.addEventListener('keydown', (e) => {
       // The map's own keys (R, A, H…) must not fire while a message is being written.
       e.stopPropagation()
@@ -2199,6 +2280,7 @@ setView(view) {
       this._last.talk = null
       this.talk.innerHTML = '<p class="none">Reading the conversation…</p>'
       this.input.value = ''
+      this._clearPictures()
     }
     this.chat.hidden = false
     this.root.classList.add('studio-chatting')
@@ -2250,7 +2332,7 @@ setView(view) {
       // it (the owner, 12 November 2026); where it was asked, the conversation keeps a line pointing up.
       const waiting = (chat.cards || []).filter((c) => c.state === 'pending')
       const parts = [
-        ...chat.messages.map((m) => ({ at: Date.parse(m.at), html: `<div class="msg ${m.mine ? 'mine' : ''}"><span class="from">${esc(m.mine ? 'You' : m.from)} <time>${clock(m.at)}</time></span><div class="said">${markdown(m.text, { jobs: true })}</div></div>` })),
+        ...chat.messages.map((m) => ({ at: Date.parse(m.at), html: `<div class="msg ${m.mine ? 'mine' : ''}"><span class="from">${esc(m.mine ? 'You' : m.from)} <time>${clock(m.at)}</time></span>${pictureStrip(m.pictures)}${m.text ? `<div class="said">${markdown(m.text, { jobs: true })}</div>` : ''}</div>` })),
         ...(chat.cards || []).map((c) => ({ at: Date.parse(c.at), html: c.state === 'pending'
           ? `<button type="button" class="asked-here" data-act="to-card" data-id="${esc(c.id)}">Asked here: ${esc(c.title)}. It waits at the top.</button>`
           : this._card(c) })),
@@ -2340,14 +2422,50 @@ setView(view) {
     if (this.chatBot) this._loadChat()
   }
 
+  /** Pictures chosen for the next message, checked here first so a wrong one is named before it is sent. */
+  async _addPictures(files) {
+    for (const file of files) {
+      if (!PICTURE_TYPES.includes(file.type)) { this.actions.toast(`${file.name || 'That file'} is not a picture Botyard can send. Use PNG, JPEG, WebP or GIF`, 'err'); continue }
+      if (file.size > PICTURE_BYTES) { this.actions.toast(`${file.name || 'That picture'} is larger than 10 MB`, 'err'); continue }
+      if (this._pictures.length >= MOST_PICTURES) { this.actions.toast(`A message carries at most ${MOST_PICTURES} pictures`, 'err'); break }
+      // A pasted screenshot has no name of its own.
+      const name = file.name && file.name !== 'image.png' ? file.name : `screenshot-${localStamp()}.${file.type.split('/')[1].replace('jpeg', 'jpg')}`
+      const url = await thumbOf(file)
+      if (!url) { this.actions.toast(`${file.name || 'That picture'} could not be read as a picture`, 'err'); continue }
+      if (this._pictures.length >= MOST_PICTURES) break
+      this._pictures.push({ file, name, url })
+    }
+    this._showTray()
+    this.input.focus()
+  }
+
+  _showTray() {
+    this.tray.hidden = !this._pictures.length
+    this.tray.innerHTML = this._pictures.map((p, i) => `<figure><img src="${esc(p.url)}" alt="${esc(p.name)}"><button type="button" data-drop="${i}" title="Take this picture out" aria-label="Take ${esc(p.name)} out">${CLOSE_ICON}</button></figure>`).join('')
+  }
+
+  _clearPictures() {
+    this._pictures = []
+    if (this.tray) this._showTray()
+  }
+
   async send() {
     const text = this.input.value.trim()
-    if (!text || !this.chatBot || this._sending) return
+    const pictures = [...(this._pictures || [])]
+    if ((!text && !pictures.length) || !this.chatBot || this._sending) return
+    const bot = this.chatBot
     this._sending = true
     this.chat.classList.add('sending')
     try {
-      await call('/api/studio/chat', { bot: this.chatBot, text })
+      // Each picture goes up first; the message then names them, so the bot sees them with the words.
+      const ids = []
+      for (const p of pictures) {
+        p.id ||= (await upload(`/api/studio/chat/picture?bot=${encodeURIComponent(bot)}&name=${encodeURIComponent(p.name)}`, p.file)).id
+        ids.push(p.id)
+      }
+      await call('/api/studio/chat', { bot, text, pictures: ids })
       this.input.value = ''
+      if (this.chatBot === bot) this._clearPictures()
       await this._loadChat()
       this.talk.scrollTop = this.talk.scrollHeight
     } catch (err) {

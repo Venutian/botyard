@@ -38,7 +38,8 @@ not use up your subscription, and helper scripts that move a finished job on to 
 One program that you start on your computer. It holds four things:
 
 - **The map.** A 3D page in your browser: a yard with a bay for each project, each bot of your crew standing where its work is, every
-  job with its state, and a chat with any bot.
+  job with its state, and a chat with any bot. A chat message can carry pictures (a screenshot pasted, dropped or
+  picked), and the bot opens them before it answers. The phone app does the same through the phone's own photo picker.
 - **The engine.** It keeps the jobs, hands each one to a bot, starts the bot's AI tool in the job's
   own folder, and records what the run did and what it used.
 - **The phone's door.** A separate, locked entrance for the phone app, so you can follow and steer

@@ -35,6 +35,7 @@ import {
   EngineError, acceptQuestion, addComment, addJob, addRoutine, editRoutine, agentModels, answerQuestion, cancelJob, chatList, chatThread, decideApproval,
   jobDetail, jobWorkspace, pauseBot, pauseRoutine, proofImage, rejectQuestion, removeRoutine, reopenJob, resumeBot, resumeRoutine,
   routineList, runRoutine, sendChat, settleConnectCard, stopJob, studioSummary, companyId, crewOf,
+  MAX_ATTACH_BYTES, PROOF_TYPES, uploadChatPicture,
 } from './lib/engine.mjs'
 import { PREVIEW_PORT, listPreviews, previewRoot, startPreviews } from './lib/previews.mjs'
 import { artifactList, documentRevisions, jobList, jobPage, projectPage, restoreDocument, routinePage, saveGoal, setRoutineSchedule } from './lib/work.mjs'
@@ -90,6 +91,18 @@ const hostOf = (req) => {
 
 /** Build links for an app that came through Cloudflare: signed, on the play address. */
 const playLink = (cloud) => (cloud ? (key) => `https://${cloud.play}/open/${key}?g=${signPlay(cloud.gate, key)}` : undefined)
+
+/** A file's own bytes, as the app sends a picture: no JSON around it. */
+async function readBytes(req, limit) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > limit) throw new EngineError(413, 'Pictures are limited to 10 MB')
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
 
 async function readBody(req, limit = MAX_BODY) {
   const chunks = []
@@ -372,6 +385,7 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
     const decision = /^\/v1\/approvals\/([^/]+)\/(approve|reject)$/.exec(pathname)
     const chat = /^\/v1\/chats\/([^/]+)$/.exec(pathname)
     const chatMessage = /^\/v1\/chats\/([^/]+)\/messages$/.exec(pathname)
+    const chatPicture = /^\/v1\/chats\/([^/]+)\/pictures$/.exec(pathname)
     const jobMore = /^\/v1\/jobs\/([^/]+)\/more$/.exec(pathname)
     const bot = /^\/v1\/bots\/([^/]+)$/.exec(pathname)
     const run = /^\/v1\/runs\/([^/]+)$/.exec(pathname)
@@ -612,7 +626,16 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (chat && req.method === 'GET') return send(res, 200, await chatThread(chat[1], options))
       if (chatMessage && req.method === 'POST') {
         const body = await readBody(req)
-        return send(res, 201, await sendChat(chatMessage[1], body.text, body.requestId, options))
+        return send(res, 201, await sendChat(chatMessage[1], body.text, body.requestId, { ...options, pictures: body.pictures }))
+      }
+      // A picture for a chat message: its bytes, with its type and name, before the message names it.
+      if (chatPicture && req.method === 'POST') {
+        const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase()
+        if (!PROOF_TYPES.has(type)) return send(res, 415, { error: 'Send a picture: PNG, JPEG, WebP or GIF' })
+        const declared = Number(req.headers['content-length'])
+        if (declared > MAX_ATTACH_BYTES) return send(res, 413, { error: 'Pictures are limited to 10 MB' })
+        const bytes = await readBytes(req, MAX_ATTACH_BYTES)
+        return send(res, 201, await uploadChatPicture(chatPicture[1], { name: q('name'), type, bytes }, options))
       }
       return send(res, 404, { error: 'Unknown endpoint' })
     } catch (err) {

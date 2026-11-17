@@ -201,14 +201,36 @@ export function patchJob(store, id, body = {}, { now = Date.now(), actor } = {})
 
 // ── comments ────────────────────────────────────────────────────────────────────────
 
+/** Most files one comment may carry. */
+export const MOST_FILES_PER_COMMENT = 6
+
+/**
+ * The files a comment names to carry: each one already uploaded to this same job and not yet tied to
+ * other words. Anything else is refused, so a comment cannot take another job's file.
+ */
+function filesFor(store, job, ids) {
+  if (ids === undefined || ids === null) return []
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw new Refused(400, 'attachmentIds is a list of file ids')
+  const wanted = [...new Set(ids)]
+  if (wanted.length > MOST_FILES_PER_COMMENT) throw new Refused(400, `A message carries at most ${MOST_FILES_PER_COMMENT} files`)
+  return wanted.map((id) => {
+    const raw = store.object('SELECT raw FROM attachments WHERE id = ? AND job_id = ?', id, job.id)
+    const position = store.row('SELECT position FROM attachments WHERE id = ?', id)?.position ?? 0
+    if (!raw) throw new Refused(400, 'That file is not on this job. Upload it to the job first')
+    if (raw.issueCommentId) throw new Refused(409, 'That file already belongs to another message')
+    return { raw, position }
+  })
+}
+
 export function addComment(store, jobId, body = {}, { now = Date.now(), actor, quiet = false } = {}) {
   const job = jobOr404(store, jobId)
   const said = text(body.body).trim()
-  if (!said) throw new Refused(400, 'Write something first')
   if (body.clientRequestId) {
     const before = store.objects('SELECT raw FROM comments WHERE job_id = ?', job.id).find((c) => c.clientRequestId === body.clientRequestId)
     if (before) return before
   }
+  const files = filesFor(store, job, body.attachmentIds)
+  if (!said && !files.length) throw new Refused(400, 'Write something first')
   const position = store.row('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM comments WHERE job_id = ?', job.id).n
   const comment = {
     id: randomUUID(), companyId: job.companyId, issueId: job.id, body: said,
@@ -221,6 +243,8 @@ export function addComment(store, jobId, body = {}, { now = Date.now(), actor, q
   const reopen = chat && ['done', 'cancelled'].includes(job.status)
   store.tx(() => {
     store.put('comments', comment, { position })
+    // Each file is tied to the words it came with, so the bot is shown it beside them.
+    for (const file of files) store.put('attachments', { ...file.raw, issueCommentId: comment.id, updatedAt: iso(now) }, { position: file.position })
     store.put('jobs', { ...job, ...(reopen ? { status: 'in_progress', completedAt: null, cancelledAt: null } : {}), updatedAt: iso(now), lastActivityAt: iso(now) })
   })
   // Words from anyone but the bot that has the job wake that bot, unless the job is closed. A chat is never closed.

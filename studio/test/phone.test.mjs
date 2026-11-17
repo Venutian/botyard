@@ -36,7 +36,7 @@ function engine({ calls = [], attentionDelay = 0, chatDelay = 0, summaryDelay = 
   ]
   const fetcher = async (url, init) => {
     const path = new URL(url).pathname.replace('/api', '') + new URL(url).search
-    calls.push({ path, method: init.method, body: init.body && JSON.parse(init.body) })
+    calls.push({ path, method: init.method, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
     // The machine running the engine is off: every call fails, the way it does when the service is down.
     if (state.down) throw new Error('The engine is off')
     if (attentionDelay && path === '/companies/co/attention') {
@@ -102,6 +102,8 @@ function engine({ calls = [], attentionDelay = 0, chatDelay = 0, summaryDelay = 
       ])
     }
     if (path === '/issues/chat/comments' && init.method === 'POST') return json({ id: 'm4' }, 201)
+    if (path === '/companies/co/issues/chat/attachments' && init.method === 'POST') return json({ id: QUESTION }, 201)
+    if (path === '/issues/chat/attachments') return json([{ id: QUESTION, issueCommentId: 'm1', contentType: 'image/png', originalFilename: 'hud.png' }, { id: 'x', issueCommentId: 'm1', contentType: 'application/zip' }])
     // The map's sections, as the phone now reads them.
     const u = new URL(url)
     const plain = u.pathname.replace('/api', '')
@@ -185,7 +187,7 @@ async function withDoor(run, { calls, away, edge, build, sessions, attentionDela
   // asks for `warm: false` and gets the answer before the warm has finished.
   if (warm) await handler.warmed
   const base = `http://127.0.0.1:${server.address().port}`
-  const ask = (path, { token = TOKEN, method = 'GET', body, headers = {} } = {}) => new Promise((resolve, reject) => {
+  const ask = (path, { token = TOKEN, method = 'GET', body, raw, headers = {} } = {}) => new Promise((resolve, reject) => {
     const req = http.request(`${base}${path}`, {
       method,
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
@@ -195,7 +197,7 @@ async function withDoor(run, { calls, away, edge, build, sessions, attentionDela
       res.on('end', () => resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null }))
     })
     req.on('error', reject)
-    req.end(body === undefined ? undefined : JSON.stringify(body))
+    req.end(raw !== undefined ? raw : body === undefined ? undefined : JSON.stringify(body))
   })
   try {
     await run(ask)
@@ -536,6 +538,52 @@ test('a chat message opens the chat and carries the phone\'s request id', async 
   }, { calls })
   const message = calls.find((c) => c.path === '/issues/chat/comments' && c.method === 'POST')
   assert.deepEqual(message.body, { body: 'Hello', clientRequestId: REQUEST })
+})
+
+test('a chat picture goes through the door to the bot\'s own conversation, and the message names it', async () => {
+  const calls = []
+  await withDoor(async (ask) => {
+    const png = Buffer.from('\x89PNG picture bytes')
+    const up = await ask(`/v1/chats/${BOT}/pictures?name=hud.png`, { method: 'POST', raw: png, headers: { 'Content-Type': 'image/png' } })
+    assert.equal(up.status, 201, JSON.stringify(up.body))
+    assert.deepEqual(up.body, { id: QUESTION, name: 'hud.png' })
+    const sent = await ask(`/v1/chats/${BOT}/messages`, { method: 'POST', body: { text: 'What is wrong here?', requestId: REQUEST, pictures: [QUESTION] } })
+    assert.equal(sent.status, 201)
+    // A picture alone is a message too.
+    assert.equal((await ask(`/v1/chats/${BOT}/messages`, { method: 'POST', body: { text: '', requestId: REQUEST, pictures: [QUESTION] } })).status, 201)
+    // The thread shows each message's pictures, and only pictures.
+    const thread = await ask(`/v1/chats/${BOT}`)
+    assert.deepEqual(thread.body.messages.find((m) => m.id === 'm1').pictures, [{ id: QUESTION, name: 'hud.png' }])
+    assert.deepEqual(thread.body.messages.find((m) => m.id === 'm2').pictures, [])
+  }, { calls })
+  const upload = calls.find((c) => c.path === '/companies/co/issues/chat/attachments')
+  const file = upload.body.get('file')
+  assert.equal(file.type, 'image/png')
+  assert.equal(file.name, 'hud.png')
+  assert.equal(Buffer.from(await file.arrayBuffer()).toString(), '\x89PNG picture bytes')
+  const message = calls.find((c) => c.path === '/issues/chat/comments' && c.method === 'POST')
+  assert.deepEqual(message.body, { body: 'What is wrong here?', clientRequestId: REQUEST, attachmentIds: [QUESTION] })
+})
+
+test('the door takes only pictures for a chat, under 10 MB, from a paired phone, with the same checks as every route', async () => {
+  const calls = []
+  await withDoor(async (ask) => {
+    const send = (opts) => ask(`/v1/chats/${BOT}/pictures?name=a.png`, { method: 'POST', raw: Buffer.from('png'), ...opts, headers: { 'Content-Type': 'image/png', ...opts?.headers } })
+    assert.equal((await send({ headers: { 'Content-Type': 'text/html' } })).status, 415)
+    assert.equal((await send({ headers: { 'Content-Type': 'image/svg+xml' } })).status, 415, 'a drawing that can carry a script is not a picture here')
+    assert.equal((await send({ headers: { 'Content-Type': 'application/pdf' } })).status, 415)
+    assert.equal((await send({ raw: Buffer.alloc(0) })).status, 400)
+    assert.equal((await send({ raw: Buffer.alloc(10 * 1024 * 1024 + 1) })).status, 413)
+    assert.equal((await send({ token: 'wrong'.repeat(10) })).status, 401)
+    assert.equal((await send({ token: '' })).status, 401)
+    assert.equal((await send({ headers: { Origin: 'https://evil.example' } })).status, 403)
+    assert.equal((await ask('/v1/chats/not-a-bot/pictures?name=a.png', { method: 'POST', raw: Buffer.from('png'), headers: { 'Content-Type': 'image/png' } })).status, 400)
+    assert.equal((await ask(`/v1/chats/${BOT}/pictures`, { headers: { 'Content-Type': 'image/png' } })).status, 404, 'there is nothing to read here')
+    // A message names only picture ids, and not too many.
+    assert.equal((await ask(`/v1/chats/${BOT}/messages`, { method: 'POST', body: { text: 'x', requestId: REQUEST, pictures: ['../etc'] } })).status, 400)
+    assert.equal((await ask(`/v1/chats/${BOT}/messages`, { method: 'POST', body: { text: 'x', requestId: REQUEST, pictures: Array(7).fill(QUESTION) } })).status, 400)
+  }, { calls })
+  assert.equal(calls.filter((c) => c.path.endsWith('/attachments') && c.method === 'POST').length, 0, 'nothing refused reached the engine')
 })
 
 test('an oversized body is refused', async () => {
