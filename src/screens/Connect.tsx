@@ -41,8 +41,8 @@ export function ConnectScreen({ onConnect }: { onConnect: (connection: Connectio
         <Txt color={t.ink2}>Scan the pairing code from your PC, or enter the details here.</Txt>
         <Field label="PC address" value={host} onChangeText={setHost} autoCapitalize="none" autoCorrect={false} placeholder="192.168.0.2:5288" />
         <Field label="Token" value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="Pairing token" />
-        {error ? <Txt color={t.bad}>{error}</Txt> : null}
-        <Button label="Connect" onPress={test} busy={busy} />
+        {error ? <Txt color={t.bad} accessibilityLiveRegion="polite">{error}</Txt> : null}
+        <Button label="Connect" onPress={test} busy={busy} disabled={!host.trim() || !token.trim()} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

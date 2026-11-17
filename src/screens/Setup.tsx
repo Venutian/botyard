@@ -74,7 +74,7 @@ function OneRow({ row, connection, onData, last }: { row: SetupRow; connection: 
           <Button label="Save the key" busy={busy === 'key'} disabled={key.trim().length < 8 || Boolean(busy)} onPress={save} />
           <Txt size={12} color={t.ink3}>It is sent once, kept in a file only you can read on the computer Botyard runs on, and never shown again.</Txt>
           {a.keysPage ? (
-            <Pressable accessibilityRole="link" onPress={() => Linking.openURL(a.keysPage!).catch(() => undefined)} style={({ pressed }) => pressed && kit.dim}>
+            <Pressable accessibilityRole="link" onPress={() => Linking.openURL(a.keysPage!).catch(() => undefined)} style={({ pressed }) => [{ alignSelf: 'flex-start', justifyContent: 'center', minHeight: 44 }, pressed && kit.dim]}>
               <Txt size={13} weight={600} color={t.accentText}>Where keys are made</Txt>
             </Pressable>
           ) : null}

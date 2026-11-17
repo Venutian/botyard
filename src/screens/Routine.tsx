@@ -77,7 +77,7 @@ export function RoutineScreen({ id, connection, crew, nav }: { id: string; conne
         <>
           <Group>
             <Row title={r.paused ? 'Paused' : 'Runs by itself'} detail={r.paused ? 'It does not start until you switch it on' : r.nextAt ? `Next run ${shortWhen(r.nextAt)}` : 'Waiting for its first run'} last
-              right={<Toggle label={`Run ${r.title} by itself`} value={!r.paused} onChange={(on) => { act(on ? 'resume' : 'pause'); }} />} />
+              right={<Toggle label={`${r.title}: runs by itself`} value={!r.paused} onChange={(on) => { act(on ? 'resume' : 'pause'); }} />} />
           </Group>
           <Button label="Run it now" kind="quiet" busy={busy === 'run'} disabled={Boolean(busy)} onPress={() => { act('run'); }} />
 

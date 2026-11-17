@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Image, ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ChatPicture, Connection, Proof, proofSource } from '../api';
 import { useLook } from '../theme/prefs';
+import { Icon } from './Icon';
 import { Txt } from './kit';
 
 function useProof(connection: Connection, id: string) {
@@ -17,12 +18,38 @@ function useProof(connection: Connection, id: string) {
   return source;
 }
 
+/** A picture's source once it has loaded, and whether it will not come, for a tile that says so. */
+function useProofState(connection: Connection, id: string) {
+  const [source, setSource] = useState<ImageSourcePropType | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let current = true;
+    proofSource(connection, id).then((found) => {
+      if (!current) return;
+      if (found) setSource(found);
+      else setFailed(true);
+    }).catch(() => current && setFailed(true));
+    return () => {
+      current = false;
+    };
+  }, [connection, id]);
+  return { source, failed, setFailed };
+}
+
 function Shot({ connection, proof, onOpen }: { connection: Connection; proof: Proof; onOpen: (source: ImageSourcePropType, name: string) => void }) {
   const { t } = useLook();
-  const source = useProof(connection, proof.id);
+  const { source, failed, setFailed } = useProofState(connection, proof.id);
+  const spoken = failed ? `${proof.name}, did not load` : source ? `Open ${proof.name}` : `${proof.name}, loading`;
   return (
-    <Pressable accessibilityRole="imagebutton" accessibilityLabel={`Open ${proof.name}`} disabled={!source} onPress={() => source && onOpen(source, proof.name)} style={[styles.shot, { backgroundColor: t.card, borderColor: t.outline ? t.ink : 'transparent', borderWidth: t.outline ? 2 : 0 }]}>
-      {source ? <Image source={source} style={styles.fill} resizeMode="cover" /> : null}
+    <Pressable accessibilityRole="imagebutton" accessibilityLabel={spoken} accessibilityState={{ disabled: !source || failed, busy: !source && !failed }} disabled={!source || failed} onPress={() => source && onOpen(source, proof.name)}
+      style={[styles.shot, { backgroundColor: t.card, borderColor: t.line, borderWidth: StyleSheet.hairlineWidth }]}>
+      {source && !failed ? <Image source={source} style={styles.fill} resizeMode="cover" onError={() => setFailed(true)} /> : (
+        // While it loads, and when it will not, the tile says so instead of standing empty.
+        <View style={styles.empty}>
+          {failed ? <Icon name="image" size={22} color={t.ink3} /> : <ActivityIndicator color={t.ink3} />}
+          <Txt size={12} color={t.ink2} numberOfLines={2} style={styles.emptyText}>{failed ? 'Did not load' : proof.name}</Txt>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -90,6 +117,8 @@ const styles = StyleSheet.create({
   chatSmall: { borderRadius: 12, height: 96, overflow: 'hidden', width: 128 },
   chatBig: { borderRadius: 14, height: 160, overflow: 'hidden', width: 220 },
   fill: { height: '100%', width: '100%' },
+  empty: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', padding: 12 },
+  emptyText: { textAlign: 'center' },
   row: { gap: 8 },
   shot: { borderRadius: 14, height: 120, overflow: 'hidden', width: 214 },
   viewer: { backgroundColor: 'rgba(0,0,0,0.94)', flex: 1, padding: 12 },

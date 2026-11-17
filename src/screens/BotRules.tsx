@@ -67,10 +67,10 @@ export function BotRulesScreen({ botId, botName, connection, crew, nav }: { botI
         </View>
         <View style={styles.name}>
           {who ? <View style={[styles.suit, { backgroundColor: who.colour, borderColor: edge }]} /> : null}
-          <Sign size={28} numberOfLines={1} style={kit.flex}>{who ? `${who.name}: instructions` : 'Instructions'}</Sign>
+          <Sign size={28} numberOfLines={1} accessibilityRole="header" style={kit.flex}>{who ? `${who.name}: instructions` : 'Instructions'}</Sign>
         </View>
 
-        {!ins ? (error ? <><Txt color={t.bad}>{error}</Txt><Button label="Try again" onPress={load} /></> : <ActivityIndicator color={t.accent} style={styles.wait} />) : !ins.managed ? (
+        {!ins ? (error ? <><Txt color={t.bad} accessibilityLiveRegion="polite">{error}</Txt><Button label="Try again" onPress={load} /></> : <ActivityIndicator color={t.accent} style={styles.wait} />) : !ins.managed ? (
           ins.content ? (
             <>
               <Note tone="warn">These instructions cannot be changed in Botyard on this engine yet. They are shown as the bot reads them.</Note>

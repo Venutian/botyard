@@ -94,7 +94,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
         <View style={{ marginTop: insets.top + 34 }}>
           <BotBadge who={who} size={130} />
         </View>
-        <Txt size={24} weight={700} style={styles.stageName}>{who.name}</Txt>
+        <Txt size={24} weight={700} accessibilityRole="header" style={styles.stageName}>{who.name}</Txt>
         <Txt size={14} color={t.ink2} numberOfLines={1}>{bot.title}</Txt>
       </View>
 
@@ -102,7 +102,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
         {chats ? <Button label={`Chat with ${who.name}`} onPress={() => nav.replace({ name: 'chat', botId })} /> : null}
 
         <Label>Now</Label>
-        {page.error && !info ? <Txt size={14} color={t.bad}>{page.error}</Txt> : null}
+        {page.error && !info ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{page.error}</Txt> : null}
         <Group>
           {info ? (
             <>
@@ -147,7 +147,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
             {STATES.map((state) => (
               <View key={state} style={styles.state}>
                 <BotBadge who={{ ...who, photo: undefined }} size={SHOWN} state={state} />
-                <Txt size={11} weight={600} color={who.state === state ? t.ink : t.ink2}>{STATE_WORDS[state]}</Txt>
+                <Txt size={12} weight={who.state === state ? 700 : 600} color={who.state === state ? t.ink : t.ink2}>{STATE_WORDS[state]}</Txt>
               </View>
             ))}
           </View>
@@ -159,7 +159,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
 
         <Label>Name and photo</Label>
         <View style={styles.stack}>
-          <Field value={look.nickname ?? ''} onChangeText={(nickname) => updateBot(botId, { nickname })} placeholder={bot.name} maxLength={30} />
+          <Field value={look.nickname ?? ''} onChangeText={(nickname) => updateBot(botId, { nickname })} placeholder={bot.name} accessibilityLabel={`Name on this phone, now ${look.nickname || bot.name}`} maxLength={30} />
           <Group>
             <Row title="Photo" detail={look.photo ? 'Shown in place of the drawing' : 'Use any image from your phone'} last={!look.photo} right={
               <Button label={look.photo ? 'Change' : 'Choose'} kind="quiet" icon="image" onPress={choosePhoto} />

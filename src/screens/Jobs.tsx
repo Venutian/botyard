@@ -84,10 +84,10 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
   const narrowed = [names.projects.find((p) => p.id === project)?.name, names.bots.find((b) => b.id === bot)?.name].filter(Boolean).join(', ');
   return (
     <Page title="Jobs" onBack={nav.back} onRefresh={load} error={error} loading={!jobs}>
-      <View style={[styles.search, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }]}>
-        <Icon name="search" size={18} color={t.ink3} />
-        <TextInput value={words} onChangeText={setWords} placeholder="Search every job" placeholderTextColor={t.ink3} autoCorrect={false} returnKeyType="search" style={[styles.input, font(400), plainField, { color: t.ink }]} />
-        {words ? <Pressable accessibilityRole="button" accessibilityLabel="Clear the search" hitSlop={8} onPress={() => setWords('')}><Icon name="close" size={16} color={t.ink3} /></Pressable> : null}
+      <View style={[styles.search, { backgroundColor: t.card, borderColor: t.edge, borderWidth: StyleSheet.hairlineWidth }]}>
+        <Icon name="search" size={18} color={t.ink2} />
+        <TextInput value={words} onChangeText={setWords} placeholder="Search every job" accessibilityLabel="Search every job" placeholderTextColor={t.ink3} autoCorrect={false} returnKeyType="search" style={[styles.input, font(400), plainField, { color: t.ink }]} />
+        {words ? <Pressable accessibilityRole="button" accessibilityLabel="Clear the search" hitSlop={8} onPress={() => setWords('')} style={styles.clear}><Icon name="close" size={16} color={t.ink2} /></Pressable> : null}
       </View>
       <Segmented<JobPile> value={pile} options={PILES} onChange={setPile} />
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: filters }} onPress={() => setFilters(!filters)} style={styles.filters}>
@@ -114,5 +114,6 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
 const styles = StyleSheet.create({
   search: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 12 },
   input: { flex: 1, fontSize: 16, paddingVertical: 8 },
-  filters: { alignItems: 'center', flexDirection: 'row', gap: 4, minHeight: 36 },
+  filters: { alignItems: 'center', flexDirection: 'row', gap: 4, minHeight: 44 },
+  clear: { padding: 6 },
 });

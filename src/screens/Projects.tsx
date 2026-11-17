@@ -28,8 +28,8 @@ function Move({ icon, label, disabled, onPress }: { icon: 'up' | 'down'; label: 
   const { t } = useLook();
   const tap = useTap();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} hitSlop={4} onPress={() => { tap(); onPress(); }}
-      style={({ pressed }) => [styles.move, { backgroundColor: t.control, opacity: disabled ? 0.3 : 1 }, pressed && kit.dim]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => { tap(); onPress(); }}
+      style={({ pressed }) => [styles.move, { backgroundColor: t.control, borderColor: t.edge, opacity: disabled ? 0.3 : 1 }, pressed && kit.dim]}>
       <Icon name={icon} size={18} color={t.ink} />
     </Pressable>
   );
@@ -85,7 +85,7 @@ export function ProjectsScreen({ connection, nav }: { connection: Connection; na
           {live.map((project, index) => (
             <View key={project.id} style={[styles.rank, index < live.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }]}>
               <Txt size={17} weight={700} color={t.accentText} style={styles.number}>{index + 1}</Txt>
-              <Pressable accessibilityRole="button" onPress={() => nav.push({ name: 'project', id: project.id })} style={({ pressed }) => [kit.flex, pressed && kit.dim]}>
+              <Pressable accessibilityRole="button" onPress={() => nav.push({ name: 'project', id: project.id })} style={({ pressed }) => [kit.flex, styles.open, pressed && kit.dim]}>
                 <Txt size={15} weight={600}>{project.name}</Txt>
                 <Txt size={13} color={project.blocked ? t.bad : t.ink2}>{countsLine(project)}</Txt>
               </Pressable>
@@ -288,7 +288,8 @@ export function ProjectScreen({ id, connection, nav }: { id: string; connection:
 const styles = StyleSheet.create({
   rank: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 60, paddingHorizontal: 14, paddingVertical: 9 },
   number: { textAlign: 'center', width: 22 },
-  move: { alignItems: 'center', borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
+  open: { justifyContent: 'center', minHeight: 44 },
+  move: { alignItems: 'center', borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, height: 40, justifyContent: 'center', width: 40 },
   goal: { borderLeftWidth: 3, borderRadius: 14, gap: 10, marginBottom: 14, padding: 14 },
   goalHead: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   goalPart: { gap: 2 },

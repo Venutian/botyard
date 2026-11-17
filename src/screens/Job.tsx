@@ -139,7 +139,7 @@ export function ChoiceCard({ question, onAnswer, busy }: { question: Extract<Que
             accessibilityLabel={item.options.length ? 'Other answer' : 'Your answer'}
             placeholder={item.options.length ? 'Other: none of these? Write your own answer' : 'Write your answer'}
             placeholderTextColor={t.ink3}
-            style={[styles.other, plainField, { backgroundColor: t.control, color: t.ink, borderColor: other[item.id]?.trim() ? t.accent : 'transparent' }]}
+            style={[styles.other, plainField, { backgroundColor: t.control, color: t.ink, borderColor: other[item.id]?.trim() ? t.accent : t.edge }]}
           />
         </View>
       ))}
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   failure: { borderRadius: 18, gap: 4, padding: 14 },
   question: { borderRadius: 18, gap: 10, padding: 14 },
   doc: { borderRadius: 18, gap: 8, padding: 14 },
-  docHead: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  docHead: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 44 },
   versionsHead: { borderTopWidth: StyleSheet.hairlineWidth, justifyContent: 'center', minHeight: 44, paddingTop: 6 },
   version: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 44 },
   option: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 9 },

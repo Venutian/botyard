@@ -49,7 +49,9 @@ function FileRow({ file, last }: { file: ChangeFile; last: boolean }) {
   const folder = file.path.slice(0, -(name?.length ?? 0));
   return (
     <View style={!last && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} disabled={file.binary} onPress={() => setOpen(!open)} style={styles.file}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open, disabled: file.binary }} disabled={file.binary}
+        accessibilityLabel={file.binary ? `${file.path}, a binary file` : `${file.path}, ${file.added} lines added, ${file.removed} taken out`}
+        onPress={() => setOpen(!open)} style={styles.file}>
         <View style={styles.flex}>
           <Txt size={15} weight={600} numberOfLines={1}>{name}</Txt>
           {folder ? <Txt size={12} color={t.ink3} numberOfLines={1}>{folder}</Txt> : null}
@@ -81,7 +83,7 @@ export function ChangesScreen({ id, connection, nav }: { id: string; connection:
     <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }]}>
       <GlassButton icon="back" label="Back" onPress={nav.back} />
       <Title>Code changes</Title>
-      {!changes ? (error ? <Txt color={t.bad}>{error}</Txt> : <ActivityIndicator color={t.accent} />) : (
+      {!changes ? (error ? <Txt color={t.bad} accessibilityLiveRegion="polite">{error}</Txt> : <ActivityIndicator color={t.accent} accessibilityLabel="Loading" />) : (
         <>
           <Txt size={14} color={t.ink2} selectable>{changes.branch}, compared with {changes.base}</Txt>
           {changes.commits.length ? <Label>Commits</Label> : null}

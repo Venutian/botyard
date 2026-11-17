@@ -30,7 +30,7 @@ function stepColor(state: StepState, t: Theme) {
   if (state === 'now') return t.accent;
   if (state === 'failed') return t.bad;
   if (state === 'queued') return t.warn;
-  return t.control;
+  return t.edge;
 }
 
 const Steps = memo(function Steps({ steps }: { steps: StepState[] }) {
@@ -201,7 +201,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   if (!view) {
     return (
       <View style={[styles.waiting, { paddingTop: insets.top }]}>
-        {error ? <Txt color={t.bad} style={styles.centerText}>{error}</Txt> : <ActivityIndicator color={t.accent} />}
+        {error ? <Txt color={t.bad} style={styles.centerText} accessibilityLiveRegion="polite">{error}</Txt> : <ActivityIndicator color={t.accent} accessibilityLabel="Loading" />}
         {error ? <Button label="Try again" onPress={load} /> : null}
       </View>
     );
@@ -223,7 +223,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
     >
       <View style={styles.head}>
         <View style={kit.flex}>
-          {t.plates ? <Sign size={30}>{view.state}</Sign> : <Txt size={22} weight={700} style={styles.state}>{view.state}</Txt>}
+          {t.plates ? <Sign size={30} accessibilityRole="header">{view.state}</Sign> : <Txt size={22} weight={700} accessibilityRole="header" style={styles.state}>{view.state}</Txt>}
           <Txt size={12} color={t.ink3}>As of {clock(new Date(view.at).toISOString())}</Txt>
           <ConnectionBadge connection={connection} />
         </View>
@@ -231,7 +231,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
           <GlassButton icon="plus" label="New job" onPress={() => nav.push({ name: 'new' })} />
         </View>
       </View>
-      {error ? <Txt size={14} color={t.bad}>Showing the last update. {error}</Txt> : null}
+      {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">Showing the last update. {error}</Txt> : null}
 
       <Label style={styles.firstLabel}>Needs you</Label>
       {calm ? <Txt color={t.ink2} style={styles.indent}>Nothing right now.</Txt> : null}
@@ -304,7 +304,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
 
 const styles = StyleSheet.create({
   headButtons: { alignItems: 'flex-end', gap: 8 },
-  allRead: { alignSelf: 'flex-end', paddingHorizontal: 4, paddingVertical: 6 },
+  allRead: { alignSelf: 'flex-end', justifyContent: 'center', minHeight: 44, paddingHorizontal: 4 },
   waiting: { alignItems: 'center', flex: 1, gap: 14, justifyContent: 'center', padding: 24 },
   centerText: { textAlign: 'center' },
   head: { alignItems: 'flex-start', flexDirection: 'row', gap: 12 },
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   steps: { alignItems: 'center', flexDirection: 'row', gap: 4, marginTop: 7 },
   step: { borderRadius: 3, height: 6, width: 28 },
   stepName: { marginLeft: 6 },
-  project: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 11 },
+  project: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 56, paddingHorizontal: 14, paddingVertical: 11 },
   feed: { alignItems: 'flex-start', flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 14, paddingVertical: 11 },
   dot: { borderRadius: 4, height: 8, marginTop: 6, width: 8 },
   feedTime: { marginTop: 1, width: 38 },

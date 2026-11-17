@@ -47,7 +47,10 @@ function LookTile({ choice, name, active, onPress }: { choice: LookChoice; name:
           </View>
         ))}
       </View>
-      <Txt size={13} weight={600} color={active ? t.ink : t.ink2} numberOfLines={1} style={styles.lookName}>{name}</Txt>
+      <View style={styles.lookName}>
+        {active ? <Icon name="check" size={14} color={t.ink} weight={3} /> : null}
+        <Txt size={13} weight={active ? 700 : 600} color={active ? t.ink : t.ink2} numberOfLines={1}>{name}</Txt>
+      </View>
     </Pressable>
   );
 }
@@ -83,11 +86,11 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
       <View style={styles.head}>
         <Title>Style</Title>
         <View style={styles.headActions}>
-          <Pressable accessibilityRole="button" onPress={() => { tap('done'); surprise(); }} style={({ pressed }) => [styles.surprise, { backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }, pressed && kit.dim]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Surprise me: a random look" onPress={() => { tap('done'); surprise(); }} style={({ pressed }) => [styles.surprise, { backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }, pressed && kit.dim]}>
             <Icon name="shuffle" size={17} color={t.accentInk} />
             <Txt size={14} weight={700} color={t.accentInk}>Surprise me</Txt>
           </Pressable>
-          {undo ? <GlassButton icon="reset" label="Undo the surprise" onPress={undo} size={40} /> : null}
+          {undo ? <GlassButton icon="reset" label="Undo the surprise" onPress={undo} /> : null}
         </View>
       </View>
 
@@ -116,7 +119,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
             <View style={[styles.paperFace, { backgroundColor: t.app, borderColor: p.wallpaper === id ? t.accent : t.line }]}>
               <Wallpaper id={id} strength={0.7} />
             </View>
-            <Txt size={12} weight={600} color={p.wallpaper === id ? t.ink : t.ink2}>{WALLPAPER_NAMES[id]}</Txt>
+            <Txt size={12} weight={p.wallpaper === id ? 700 : 600} color={p.wallpaper === id ? t.ink : t.ink2}>{p.wallpaper === id ? '\u2713 ' : ''}{WALLPAPER_NAMES[id]}</Txt>
           </Pressable>
         ))}
       </ScrollView>
@@ -206,7 +209,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
             <Row key={words} title={words} right={<GlassButton icon="close" label={`Remove ${words}`} size={32} onPress={() => update({ prompts: p.prompts.filter((w) => w !== words) })} />} />
           ))}
           <Row title="Add a prompt" detail="Type / in a chat to use these" last>
-            <Field value={prompt} onChangeText={setPrompt} onSubmitEditing={addPrompt} maxLength={200} placeholder="Show me the latest build" style={{ backgroundColor: t.control }} />
+            <Field value={prompt} onChangeText={setPrompt} onSubmitEditing={addPrompt} maxLength={200} accessibilityLabel="A new quick question" placeholder="Show me the latest build" style={{ backgroundColor: t.control }} />
             <Button label="Add" kind="quiet" onPress={addPrompt} disabled={!prompt.trim()} />
           </Row>
         </Group>
@@ -215,7 +218,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
         <Group>
           <Row title="Your look as a code" detail="Photos stay on this phone" right={<Button label="Share" kind="quiet" icon="share" onPress={() => Share.share({ message: lookCode() }).catch(() => undefined)} />} />
           <Row title="Use a code" last>
-            <Field value={code} onChangeText={setCode} multiline autoCapitalize="none" autoCorrect={false} placeholder="Paste a look code" style={{ backgroundColor: t.control }} />
+            <Field value={code} onChangeText={setCode} multiline autoCapitalize="none" autoCorrect={false} accessibilityLabel="Look code" placeholder="Paste a look code" style={{ backgroundColor: t.control }} />
             <Button label="Apply" kind="quiet" onPress={useCode} disabled={!code.trim()} />
           </Row>
         </Group>
@@ -240,7 +243,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
 const styles = StyleSheet.create({
   head: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 10, paddingHorizontal: 18 },
   headActions: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  surprise: { alignItems: 'center', borderRadius: 999, flexDirection: 'row', gap: 7, minHeight: 40, paddingHorizontal: 14 },
+  surprise: { alignItems: 'center', borderRadius: 999, flexDirection: 'row', gap: 7, minHeight: 44, paddingHorizontal: 14 },
   sticky: { paddingBottom: 6, paddingHorizontal: 16 },
   preview: { borderRadius: 22, overflow: 'hidden', paddingBottom: 12, paddingHorizontal: 12, paddingTop: 2 },
   page: { paddingHorizontal: 16 },
@@ -253,7 +256,7 @@ const styles = StyleSheet.create({
   miniPlate: { borderRadius: 4, borderWidth: 1, height: 16 },
   miniShort: { width: '62%' },
   miniPaint: { borderRadius: 3, bottom: 8, height: 10, left: 8, position: 'absolute', width: 22 },
-  lookName: { marginTop: 6, textAlign: 'center' },
+  lookName: { alignItems: 'center', flexDirection: 'row', gap: 4, justifyContent: 'center', marginTop: 6 },
   paper: { alignItems: 'center', gap: 5, width: 76 },
   paperFace: { borderRadius: 16, borderWidth: 2, height: 100, overflow: 'hidden', width: 76 },
   crewRight: { alignItems: 'center', flexDirection: 'row', gap: 4 },

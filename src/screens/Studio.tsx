@@ -46,7 +46,7 @@ function UsageCard({ plans, guard, connection, onChange }: { plans?: Plans; guar
           <View key={row.id}>
             <View style={styles.usageRow}>
               <Txt size={14} weight={600} style={styles.usageName}>{row.name}</Txt>
-              <View style={[styles.meter, { backgroundColor: t.control }]}>
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.meter, { backgroundColor: t.control, borderColor: t.edge, borderWidth: StyleSheet.hairlineWidth }]}>
                 <View style={{ backgroundColor: row.share >= 0.9 ? t.bad : row.share >= 0.8 ? t.warn : t.accent, height: '100%', width: `${Math.min(100, row.share * 100)}%` }} />
               </View>
               <Txt size={14} color={t.ink2} style={styles.usageCount}>{Math.round(row.share * 100)}%</Txt>
@@ -83,10 +83,10 @@ function ReportCard({ report, onOpen }: { report: DayReport; onOpen: (id: string
   const { t } = useLook();
   return (
     <Group>
-      <View style={styles.usage}>
+      <View style={styles.report}>
         <Txt size={15} weight={600}>{report.finishedCount ? `${report.finishedCount} job${report.finishedCount === 1 ? '' : 's'} finished` : 'Nothing finished yet'}</Txt>
         {report.finished.slice(0, 4).map((job) => (
-          <Pressable key={job.id} accessibilityRole="button" onPress={() => onOpen(job.id)} style={({ pressed }) => pressed && kit.dim}>
+          <Pressable key={job.id} accessibilityRole="button" onPress={() => onOpen(job.id)} style={({ pressed }) => [styles.reportLine, pressed && kit.dim]}>
             <Txt size={14} color={t.ink2} numberOfLines={1}>{job.title}</Txt>
           </Pressable>
         ))}
@@ -126,6 +126,8 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
   const tone = item.kind === 'failed' || item.kind === 'blocked' ? t.bad : item.kind === 'question' ? t.accentText : t.warn;
   return (
     <Pressable
+      accessibilityRole={item.kind === 'approval' || !item.id ? undefined : 'button'}
+      accessibilityLabel={item.kind === 'approval' || !item.id ? undefined : [item.read ? '' : 'New', tag, item.title, item.detail].filter(Boolean).join('. ')}
       disabled={item.kind === 'approval' || !item.id}
       onPress={() => onOpen(item)}
       style={[
@@ -140,7 +142,7 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
       <Txt size={12} weight={700} color={tone}>{item.read || t.plates ? '' : '● '}{tag}</Txt>
       <Txt size={16} weight={item.read ? 400 : 600} color={item.read ? t.ink2 : undefined}>{item.title}</Txt>
       {item.detail ? <Txt size={14} color={t.ink2}>{item.detail}</Txt> : null}
-      {item.kind === 'approval' ? <Field value={note} onChangeText={setNote} placeholder="Add a note (optional)" maxLength={2000} style={{ backgroundColor: t.control, minHeight: 42 }} /> : null}
+      {item.kind === 'approval' ? <Field value={note} onChangeText={setNote} placeholder="Add a note (optional)" accessibilityLabel="A note with your answer, optional" maxLength={2000} style={{ backgroundColor: t.control }} /> : null}
       {item.kind === 'approval' ? (
         <View style={styles.actions}>
           <View style={kit.flex}><Button label="Approve" onPress={() => act('approve')} busy={busy} /></View>
@@ -223,8 +225,8 @@ export function StudioScreen({ connection, nav }: { connection: Connection; nav:
           </View>
           <GlassButton icon="plus" label="New job" onPress={() => nav.push({ name: 'new' })} />
         </View>
-        {error ? <Txt size={14} color={t.bad}>{summary ? 'Showing the last update. ' : ''}{error}</Txt> : null}
-        {!summary && !error ? <ActivityIndicator color={t.accent} style={styles.firstLabel} /> : null}
+        {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{summary ? 'Showing the last update. ' : ''}{error}</Txt> : null}
+        {!summary && !error ? <ActivityIndicator color={t.accent} style={styles.firstLabel} accessibilityLabel="Loading" /> : null}
 
         <Label style={styles.firstLabel}>Sections</Label>
         <Group>
@@ -266,6 +268,7 @@ const styles = StyleSheet.create({
   head: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   firstLabel: { marginTop: 18 },
   usage: { gap: 12, padding: 14 },
+  report: { gap: 0, padding: 14 },
   usageRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   usageName: { width: 56 },
   usageCount: { textAlign: 'right', width: 52 },
@@ -276,5 +279,6 @@ const styles = StyleSheet.create({
   striped: { paddingTop: 21 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   sort: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
-  sortButton: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 5 },
+  sortButton: { borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 34, paddingHorizontal: 12, paddingVertical: 5 },
+  reportLine: { justifyContent: 'center', minHeight: 44 },
 });

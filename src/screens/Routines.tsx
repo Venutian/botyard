@@ -33,13 +33,13 @@ function Week({ routines }: { routines: Routine[] }) {
   const { t } = useLook();
   const days = useMemo(() => Array.from({ length: DAYS }, (_, offset) => {
     const date = new Date(Date.now() + offset * 86_400_000);
-    return { name: date.toLocaleDateString(undefined, { weekday: 'narrow' }), number: date.getDate(), today: offset === 0, count: routines.filter((r) => !r.paused && r.cron && runsOn(r, date.getDay())).length };
+    return { name: date.toLocaleDateString(undefined, { weekday: 'narrow' }), long: date.toLocaleDateString(undefined, { weekday: 'long' }), number: date.getDate(), today: offset === 0, count: routines.filter((r) => !r.paused && r.cron && runsOn(r, date.getDay())).length };
   }), [routines]);
   return (
     <Group>
       <View style={styles.week}>
         {days.map((day) => (
-          <View key={day.number} style={styles.day}>
+          <View key={day.number} accessible accessibilityLabel={`${day.today ? 'Today, ' : ''}${day.long} ${day.number}: ${day.count ? `${day.count} routine${day.count === 1 ? '' : 's'}` : 'nothing'} due`} style={styles.day}>
             <Txt size={12} color={t.ink3}>{day.name}</Txt>
             <View style={[styles.date, day.today && { backgroundColor: t.accent }]}>
               <Txt size={14} weight={600} color={day.today ? t.accentInk : t.ink}>{day.number}</Txt>
@@ -214,7 +214,7 @@ export function RoutinesScreen({ connection, crew, nav }: { connection: Connecti
                   <Txt size={16} weight={600}>{routine.title}</Txt>
                   <Txt size={13} color={t.ink2}>{[words, routine.bot, routine.project].filter(Boolean).join(', ')}</Txt>
                 </Pressable>
-                <Toggle label={`Run ${routine.title} on schedule`} value={!routine.paused} onChange={(on) => act(routine, on ? 'resume' : 'pause')} />
+                <Toggle label={`${routine.title}: runs on its timetable`} value={!routine.paused} onChange={(on) => act(routine, on ? 'resume' : 'pause')} />
               </View>
               <Txt size={12} color={t.ink3}>
                 {routine.paused ? 'Paused' : routine.nextAt ? `Next run ${shortWhen(routine.nextAt)}` : 'Waiting for its first run'}
