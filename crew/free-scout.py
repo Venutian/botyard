@@ -44,7 +44,8 @@ TASK = ('Write calc.py in the current folder with evaluate(expr, vars=None) -> f
 # owner signs in to, where every model is free but only coding-grade families are worth testing. Not Groq:
 # its free plan allows 8,000 tokens a minute, less than a coding agent's own instructions, so a run there
 # never starts (measured 17 November 2026: the call waits out the minute and times out).
-FREE_PROVIDERS = ('nvidia/', 'mistral/')
+# Hyperbolic: a phone-verified free tier, 60 requests a minute, set up as a provider in OpenCode's own config.
+FREE_PROVIDERS = ('nvidia/', 'mistral/', 'hyperbolic/')
 WORTH = re.compile(r'kimi|glm-5|deepseek-v4|qwen3[.-]?(coder|8|6)|devstral|codestral|mistral-(large|medium)|'
                    r'nemotron-3-ultra|nemotron-3.5-super|gpt-oss-120b|minimax-m\d|step-5|kat-coder|north-mini-code', re.I)
 SMALL = re.compile(r'(^|[-/:])(0\.\d|1(\.\d)?|2(\.\d)?|3|4|7|8|9)b\b|nano|(^|[-/:])mini([-:]|$)|lite|tiny|guard|safety|whisper|orpheus|embed', re.I)

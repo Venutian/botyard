@@ -34,6 +34,11 @@ class Picks(unittest.TestCase):
         self.assertFalse(scout.is_free('kilo/z-ai/glm-5.3'))
         self.assertFalse(scout.is_free('kilo/liquid/lfm-3-1.7b:free'))        # free but too small
 
+    def test_hyperbolic_big_coding_models(self):
+        for model in ('hyperbolic/kimi-k3', 'hyperbolic/glm-5.3', 'hyperbolic/minimax-m3', 'hyperbolic/deepseek-v4.1-flash'):
+            self.assertTrue(scout.is_free(model), model)
+        self.assertFalse(scout.is_free('hyperbolic/hy4-preview'))  # not a family worth a coding agent's test yet
+
     def test_paid_lists_stay_out(self):
         self.assertFalse(scout.is_free('openrouter/z-ai/glm-5.3'))       # no :free mark
         self.assertFalse(scout.is_free('zai/glm-5.3'))                   # Z.ai bills its non-Flash models
