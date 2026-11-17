@@ -128,3 +128,20 @@ export function markdown(source, { base = '', jobs = false } = {}) {
   flush()
   return html.join('')
 }
+
+/**
+ * Markdown read as plain words, for a one-line preview: no heading marks, stars, backticks or link
+ * addresses, so "# Checkout **first**" shows as "Checkout first".
+ */
+export function plainText(source = '') {
+  return String(source)
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/(\*\*|__|~~|`)(?=\S)(.*?\S)\1/g, '$2')
+    .replace(/(^|[\s(])[*_](?=\S)(.*?\S)[*_](?=[\s.,;:!?)]|$)/gm, '$1$2')
+    .replace(/`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

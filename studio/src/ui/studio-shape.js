@@ -62,7 +62,7 @@ export function helpersTable(h) {
       <td>${state}<small>${esc(j.when)}</small></td>
       <td class="t opt">${last}</td>
       <td class="t opt">${j.nextAt && j.on && !off ? esc(when(j.nextAt)) : ''}</td>
-      <td class="n nowrap"><button class="btn ghost" data-act="helper" data-do="run" data-name="${esc(j.name)}" ${j.running || !j.ready ? 'disabled' : ''}>Run now</button><button class="btn ghost" data-act="helper" data-do="${j.on ? 'off' : 'on'}" data-name="${esc(j.name)}" aria-pressed="${j.on}">${j.on ? 'Turn off' : 'Turn on'}</button></td></tr>`
+      <td class="n nowrap"><button class="btn ghost" data-act="helper" data-do="run" data-name="${esc(j.name)}" aria-label="Run ${esc(j.name)} now" ${j.running || !j.ready ? 'disabled' : ''}>Run now</button><button class="btn ghost" data-act="helper" data-do="${j.on ? 'off' : 'on'}" data-name="${esc(j.name)}" aria-label="${j.on ? 'Turn off' : 'Turn on'} ${esc(j.name)}">${j.on ? 'Turn off' : 'Turn on'}</button></td></tr>`
   }).join('')
   return `${off ? `<p class="flag warn"><i></i><span>The helper timetable is off${h.why ? `: ${esc(h.why)}` : '.'} “Run now” still works.</span></p>` : ''}
     <div class="acts"><button class="btn" data-act="helper" data-do="${off ? 'on' : 'off'}">${off ? 'Turn the timetable on' : 'Turn the whole timetable off'}</button></div>

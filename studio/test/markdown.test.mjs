@@ -2,7 +2,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { markdown } from '../src/ui/markdown.js'
+import { markdown, plainText } from '../src/ui/markdown.js'
 
 test('a reply is shown with its headings, lists, code and emphasis', () => {
   assert.equal(markdown('## Done\n\nTwo things:\n- **one**\n- `two`\n\n1. first\n2) second'),
@@ -35,4 +35,11 @@ test("on the map a link to a job's board page opens the job's own page, and othe
   assert.equal(markdown('See [LH-12](/YRD/issues/LH-12#comment-1).', { jobs: true }), '<p>See <button class="link" data-act="open-job" data-id="LH-12">LH-12</button>.</p>')
   assert.equal(markdown('[the board](/YRD/dashboard) and [x](//evil.example/a)', { jobs: true }), '<p>the board and [x](//evil.example/a)</p>')
   assert.equal(markdown('[a](/YRD/issues/LH-1"onclick=x)', { jobs: true }), '<p>a</p>')
+})
+
+test('a preview reads markdown as plain words: no marks, no link addresses, words with underscores kept', () => {
+  assert.equal(plainText('# Checkout on one page\n1. **Address**: postcode `first`, see [the brief](https://x.invalid/b)'), 'Checkout on one page Address: postcode first, see the brief')
+  assert.equal(plainText('- *one* and _two_\n> snake_case_name stays, 2*3*4 too'), 'one and two snake_case_name stays, 2*3*4 too')
+  assert.equal(plainText('```\ncode\n```\nafter'), 'after')
+  assert.equal(plainText(), '')
 })

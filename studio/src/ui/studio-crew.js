@@ -298,7 +298,7 @@ export function improvementsScreen(data, filter = 'open') {
 /** One run: how it ended and why, what it used, its job, and the end of its log. */
 export function runScreen(r) {
   const facts = [
-    ['Ended', `<span class="state ${r.failed ? 'bad' : r.status === 'running' ? 'go' : ''}">${esc(r.state)}</span>${r.why ? `<small>${esc(r.why)}</small>` : ''}`],
+    [r.status === 'running' ? 'Now' : 'Ended', `<span class="state ${r.failed ? 'bad' : r.status === 'running' ? 'go' : ''}">${esc(r.state)}</span>${r.why ? `<small>${esc(r.why)}</small>` : ''}`],
     ['Job', r.job ? jobLink(r.job) : '<span class="dim">No job</span>'],
     ['Started', `${esc(when(r.at))}${r.started ? `, ${esc(r.started.toLowerCase())}` : ''}${r.seconds != null ? `; took ${esc(duration(r.seconds))}` : ''}`],
     ['Used', `${tokens(r.tokens)} tokens${r.cached ? `, ${tokens(r.cached)} read from cache` : ''}${r.usd ? `; $${r.usd.toFixed(2)} at API prices` : ''}`],

@@ -3,7 +3,7 @@
  * as HTML. Pure functions of what the server sent, like `studio-crew.js`: the Studio class fetches,
  * routes clicks and asks for confirms. Each screen answers one question and keeps to one table.
  */
-import { markdown } from './markdown.js'
+import { markdown, plainText } from './markdown.js'
 import { duration, esc, jobLink, runRowHtml, tokens, when } from './studio-crew.js'
 import { whenPicker } from './studio-shape.js'
 
@@ -205,8 +205,8 @@ export function routinesScreen(routines, timers, { adding = false, crew = [], pr
   const rows = routines.map((r) => `<tr class="go-row ${r.paused ? 'paused' : ''}" data-act="open-routine" data-id="${esc(r.id)}" tabindex="0">
     <td><b>${esc(r.title)}</b>${r.project ? `<small>${esc(r.project)}</small>` : ''}</td>
     <td class="nowrap">${esc(r.bot)}</td>
-    <td>${r.paused ? '<span class="state warn">Paused</span>' : esc(r.nextAt ? at(r.nextAt) : '')}<small>${esc(r.when)}</small></td>
-    <td class="n"><button class="btn ghost" data-act="routine" data-do="run" data-id="${esc(r.id)}">Run now</button><button class="btn ghost" data-act="routine" data-do="${r.paused ? 'resume' : 'pause'}" data-id="${esc(r.id)}">${r.paused ? 'Resume' : 'Pause'}</button></td>
+    <td>${r.paused ? '<span class="state warn">Paused</span>' : `<span class="nowrap">${esc(r.nextAt ? at(r.nextAt) : '')}</span>`}<small>${esc(r.when)}</small></td>
+    <td class="n"><button class="btn ghost" data-act="routine" data-do="run" data-id="${esc(r.id)}" aria-label="Run now: ${esc(r.title)}">Run now</button><button class="btn ghost" data-act="routine" data-do="${r.paused ? 'resume' : 'pause'}" data-id="${esc(r.id)}" aria-label="${r.paused ? 'Resume' : 'Pause'}: ${esc(r.title)}">${r.paused ? 'Resume' : 'Pause'}</button></td>
   </tr>`).join('')
   const add = adding ? `<form class="fields routine-add" data-part="routine-add">
       <label class="stack">What should be done each time<input name="title" maxlength="180" required placeholder="One line, the outcome you want"></label>
@@ -269,7 +269,7 @@ export function madeScreen(items, { more = false } = {}) {
     const look = a.kind === 'image' && a.file ? `<a class="view-img" href="${fileUrl(a.file)}" target="_blank" rel="noopener" title="${esc(a.title)}" data-name="${esc(a.title)}"><img class="thumb" src="${fileUrl(a.file)}" alt="" loading="lazy"></a>`
       : `<span class="kind">${a.kind === 'document' ? 'Doc' : 'File'}</span>`
     const name = a.file && a.kind !== 'image' ? `<a href="${fileUrl(a.file)}" target="_blank" rel="noopener">${esc(a.title)}</a>` : a.document && a.job ? `<button class="link" data-act="open-job" data-id="${esc(a.job.id)}">${esc(a.title)}</button>` : esc(a.title)
-    return `<tr><td class="look">${look}</td><td>${name}${a.preview ? `<small>${esc(a.preview)}</small>` : ''}</td><td class="job">${a.job ? jobLink(a.job) : ''}</td><td class="nowrap opt">${esc(a.bot)}</td><td class="t">${esc(at(a.at))}</td></tr>`
+    return `<tr><td class="look">${look}</td><td>${name}${a.preview ? `<small>${esc(plainText(a.preview))}</small>` : ''}</td><td class="job">${a.job ? jobLink(a.job) : ''}</td><td class="nowrap opt">${esc(a.bot)}</td><td class="t">${esc(at(a.at))}</td></tr>`
   }).join('')
   return shelves('made') + (items.length
     ? `<div class="grid-wrap"><table class="grid made"><thead><tr><th></th><th>What</th><th>For</th><th class="opt">By</th><th>When</th></tr></thead><tbody>${rows}</tbody></table></div>`

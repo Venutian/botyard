@@ -6,6 +6,8 @@
 import { esc, when } from './studio-crew.js'
 
 const STATE_CLASS = { ready: 'done', 'signed-out': 'bad', 'signing-in': 'warn', trouble: 'bad' }
+/** Plain words, where a command in backticks is shown as code to copy. */
+const withCode = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>')
 const stateHtml = (c) => `<span class="state ${STATE_CLASS[c.state] || ''}">${esc(c.stateWords)}</span>`
 const LEVELS = [['off', 'No'], ['read', 'May look'], ['write', 'May change things']]
 const KINDS = { developer: 'Building', data: 'Data', analytics: 'Numbers', content: 'Content', productivity: 'Planning', communication: 'Messages', commerce: 'Selling', ai: 'AI', other: 'Other' }
@@ -20,7 +22,7 @@ export function connectorsScreen(d, { q = '' } = {}) {
     </tr>`).join('')
   const engines = d.engines.map((e) => `<tr><td><b>${esc(e.name)}</b><small>${esc(e.for)}</small></td>
       <td><span class="state ${e.ok ? 'done' : 'bad'}">${e.ok ? 'Signed in' : 'Needs sign-in'}</span></td>
-      <td>${esc(e.words)}${e.fix ? `<small class="warnish">${esc(e.fix)}</small>` : ''}</td></tr>`).join('')
+      <td>${esc(e.words)}${e.fix ? `<small class="warnish">${withCode(e.fix)}</small>` : ''}</td></tr>`).join('')
   const want = q.trim().toLowerCase()
   const found = d.catalogue.filter((a) => !want || `${a.name} ${a.about} ${KINDS[a.kind] || ''}`.toLowerCase().includes(want))
   const adds = found.map((a) => `<button class="pick-row" data-act="connector-new" data-from="${esc(a.id)}"><b>${esc(a.name)}</b><span>${esc(a.about)}</span><i>${esc(KINDS[a.kind] || 'Other')}</i></button>`).join('')

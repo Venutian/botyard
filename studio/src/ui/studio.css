@@ -820,6 +820,8 @@
   z-index: 4;
 }
 .studio-sheet[hidden] { display: none; }
+/* Inside a page, the hidden attribute always wins: a button or a field styled to show itself must not show when hidden (the run feed's "New steps below" sat over the last step). */
+.hud.studio .studio-sheet [hidden] { display: none !important; }
 
 .studio-sheet header {
   display: flex;
@@ -1315,9 +1317,9 @@
 
 /* A name that would sit on a more important one folds to its face; pointing at it shows it again. */
 .studio-tags .tag.tucked > span { display: none; }
-.studio-tags .tag.tucked { padding-right: 3px; opacity: 0.85; }
+.studio-tags .tag.tucked { padding-right: 3px; } /* folded to its face, at full strength: a fade let the map show through the initial (4.2:1) */
 .studio-tags .tag.tucked:hover > span { display: flex; }
-.studio-tags .tag.tucked:hover { opacity: 1; z-index: 2; }
+.studio-tags .tag.tucked:hover { z-index: 2; }
 
 /* A goal's long text: three lines, and the rest on Show all of it. */
 .studio-sheet .goal-card .goal-more.clip { max-height: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; -webkit-mask-image: none; mask-image: none; margin-bottom: 2px; }
