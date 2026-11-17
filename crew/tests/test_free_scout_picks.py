@@ -33,6 +33,12 @@ class Picks(unittest.TestCase):
                       'cloudflare-workers-ai/@cf/ibm-granite/granite-4.0-h-micro'):
             self.assertFalse(scout.is_free(model), model)
 
+    def test_kilo_only_its_free_models(self):
+        self.assertTrue(scout.is_free('kilo/nvidia/nemotron-3-ultra-550b-a55b:free'))
+        self.assertFalse(scout.is_free('kilo/anthropic/claude-sonnet-5-5'))   # sold on the same key
+        self.assertFalse(scout.is_free('kilo/z-ai/glm-5.3'))
+        self.assertFalse(scout.is_free('kilo/liquid/lfm-3-1.7b:free'))        # free but too small
+
     def test_paid_lists_stay_out(self):
         self.assertFalse(scout.is_free('openrouter/z-ai/glm-5.3'))       # no :free mark
         self.assertFalse(scout.is_free('zai/glm-5.3'))                   # Z.ai bills its non-Flash models

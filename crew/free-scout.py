@@ -43,7 +43,7 @@ TASK = ('Write calc.py in the current folder with evaluate(expr, vars=None) -> f
 # Which models are free: OpenCode's own free offers, OpenRouter's :free, and the free-tier providers the
 # owner signs in to, where every model is free but only coding-grade families are worth testing. Groq's
 # free plan covers every model it lists, within its rate limits.
-FREE_PROVIDERS = ('nvidia/', 'mistral/', 'kilo/', 'groq/')
+FREE_PROVIDERS = ('nvidia/', 'mistral/', 'groq/')
 WORTH = re.compile(r'kimi|glm-5|deepseek-v4|qwen3[.-]?(coder|8|6)|devstral|codestral|mistral-(large|medium)|'
                    r'nemotron-3-ultra|nemotron-3.5-super|gpt-oss-120b|minimax-m\d|step-5|kat-coder|north-mini-code', re.I)
 SMALL = re.compile(r'(^|[-/:])(0\.\d|1(\.\d)?|2(\.\d)?|3|4|7|8|9)b\b|nano|(^|[-/:])mini([-:]|$)|lite|tiny|guard|safety|whisper|orpheus|embed', re.I)
@@ -84,6 +84,9 @@ def is_free(model):
         return model.endswith('-free') or model == 'opencode/big-pickle'
     if model.startswith('openrouter/'):
         return model.endswith(':free')
+    # Kilo's gateway sells hundreds of models on the same key; only those marked free cost nothing.
+    if model.startswith('kilo/'):
+        return model.endswith((':free', '-free')) and bool(WORTH.search(model))
     # Providers the owner signed up to on 11 November 2026 where only some models are free: Z.ai's Flash
     # models cost nothing, its others bill the key; Cloudflare gives 10,000 "neurons" a day, enough for
     # these and then it refuses, as long as the account has no paid plan.
