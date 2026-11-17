@@ -101,11 +101,12 @@ const stateOf = (c, now) => {
   if (c.health && c.health.ok === false) return c.health.signIn ? 'signed-out' : 'trouble'
   return 'ready'
 }
-const STATE_WORDS = { ready: 'Ready', 'signed-out': 'Needs sign-in', 'signing-in': 'Waiting for you to sign in', trouble: 'Not answering' }
+const STATE_WORDS = { ready: 'Ready', 'signed-out': 'Needs sign-in', 'signing-in': 'Waiting for you to sign in', trouble: 'Not answering', unreachable: 'Not reachable' }
 
 /** A connector without anything secret in it. */
-export function connectorView(c, { crew = [], now = Date.now() } = {}) {
-  const state = stateOf(c, now)
+export function connectorView(c, { crew = [], now = Date.now(), reach = '' } = {}) {
+  // Ready on its own account, yet a bot's call cannot get to the gateway: say so, not "ready".
+  const state = reach && stateOf(c, now) === 'ready' ? 'unreachable' : stateOf(c, now)
   const tools = (c.tools || []).map((t) => ({ name: t.name, about: t.about || '', reads: Boolean(t.readOnly), allowed: Boolean(t.readOnly) || (c.writes || []).includes(t.name) }))
   return {
     id: c.id,
@@ -115,7 +116,7 @@ export function connectorView(c, { crew = [], now = Date.now() } = {}) {
     how: c.auth,
     state,
     stateWords: STATE_WORDS[state],
-    trouble: state === 'trouble' ? c.health?.error || '' : '',
+    trouble: state === 'unreachable' ? reach : state === 'trouble' ? c.health?.error || '' : '',
     signedInAt: c.signedInAt || 0,
     checkedAt: c.health?.at || 0,
     account: c.account || '',
@@ -127,12 +128,12 @@ export function connectorView(c, { crew = [], now = Date.now() } = {}) {
   }
 }
 
-export function connectorList({ crew = [], folder = keysFolder(), now = Date.now(), engines = engineSignIns } = {}) {
+export function connectorList({ crew = [], folder = keysFolder(), now = Date.now(), engines = engineSignIns, reach = {} } = {}) {
   const store = readStore(folder)
   const mine = Object.values(store.connectors).sort((a, b) => a.name.localeCompare(b.name))
   const have = new Set(mine.map((c) => c.from).filter(Boolean))
   return {
-    connectors: mine.map((c) => connectorView(c, { crew, now })),
+    connectors: mine.map((c) => connectorView(c, { crew, now, reach: reach[c.id] || '' })),
     catalogue: CATALOGUE.filter((a) => !have.has(a.id)).map((a) => ({ id: a.id, name: a.name, about: a.about, kind: a.kind, official: a.official !== false, signs: a.signs || '', ways: a.ways.map((w) => ({ kind: w.kind, ownApp: Boolean(w.ownApp), appPage: w.appPage || '', fields: w.kind === 'builtin' ? BUILTINS[w.builtin].fields : [], keyLabel: w.keyLabel || '', keysPage: w.keysPage || '' })) })),
     engines: engines(),
   }
@@ -631,6 +632,23 @@ async function builtinAnswer(c, message, allowed, { fetcher }) {
 }
 
 const allowedFor = (c, level) => new Set((c.tools || []).filter((t) => t.readOnly || (level === 'write' && (c.writes || []).includes(t.name))).map((t) => t.name))
+/**
+ * Can a bot's call get to the gateway at all? A call with a pass nobody holds goes down the same
+ * road a bot's would and nothing is sent on: the gateway turns it away with its own answer (403,
+ * in JSON-RPC shape). Any other answer, or none, is why the bots cannot reach connectors. Returns
+ * '' when it can, else the reason in plain words.
+ */
+export async function gatewayReach(base, id, { fetcher = fetch } = {}) {
+  try {
+    const res = await fetcher(`${base}/api/mcp/${encodeURIComponent(id)}/reach-check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":0,"method":"ping"}', signal: AbortSignal.timeout(3000) })
+    const body = await res.json().catch(() => null)
+    if (res.status === 403 && body?.jsonrpc === '2.0') return ''
+    return `A bot's call to ${id} gets "${body?.error?.message || body?.error || res.status}" (status ${res.status}) instead of the gateway`
+  } catch (err) {
+    return `A bot's call to ${id} cannot be sent: ${err?.message || err}`
+  }
+}
+
 const refuse = (id, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code: -32001, message } })
 
 /**

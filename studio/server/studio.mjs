@@ -45,6 +45,8 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const PASSED_ON = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip', 'cf-ray', 'x-real-ip', 'x-botyard-edge']
 /** The map's own paths outside /api/studio. A new one goes under /api/studio, which is always the map's. */
 const MAP_PATHS = new Set(['health', 'state'])
+/** A bot's call to a connector: /api/mcp/<connector>/<the bot's pass>. The gateway in api.mjs answers it. */
+export const GATEWAY_PATH = /^\/api\/mcp\/[a-z0-9-]+\/[\w-]+$/
 const MINE = new Set(['/api/studio/setup', '/api/studio/timetable', '/api/studio/pair'])
 const MAX_BODY = 64 * 1024
 
@@ -67,6 +69,7 @@ export function fromThisComputer(req) {
 /** Whose path is it: 'mine', 'map' or 'engine'. */
 export function whose(pathname) {
   if (MINE.has(pathname)) return 'mine'
+  if (GATEWAY_PATH.test(pathname)) return 'map'
   if (pathname === '/api/studio' || pathname.startsWith('/api/studio/')) return 'map'
   return MAP_PATHS.has(pathname.split('/')[2] || '') && pathname.split('/').length === 3 ? 'map' : 'engine'
 }

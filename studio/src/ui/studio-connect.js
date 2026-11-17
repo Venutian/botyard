@@ -5,7 +5,7 @@
  */
 import { esc, when } from './studio-crew.js'
 
-const STATE_CLASS = { ready: 'done', 'signed-out': 'bad', 'signing-in': 'warn', trouble: 'bad' }
+const STATE_CLASS = { ready: 'done', 'signed-out': 'bad', 'signing-in': 'warn', trouble: 'bad', unreachable: 'bad' }
 /** Plain words, where a command in backticks is shown as code to copy. */
 const withCode = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>')
 const stateHtml = (c) => `<span class="state ${STATE_CLASS[c.state] || ''}">${esc(c.stateWords)}</span>`

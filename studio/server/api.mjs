@@ -1,4 +1,4 @@
-import { ConnectorError, addConnector, connectorList, finishSignIn, gateway, loadTools, removeConnector, setAccess, settleHeld, startSignIn, writeBotConfigs } from './lib/connectors.mjs'
+import { ConnectorError, addConnector, connectorList, finishSignIn, gateway, gatewayReach, loadTools, removeConnector, setAccess, settleHeld, startSignIn, writeBotConfigs } from './lib/connectors.mjs'
 import { markCards, withCardState } from './lib/cards.mjs'
 import { dataDir } from './lib/home.mjs'
 import path from 'node:path'
@@ -20,7 +20,7 @@ import { readPlans } from './lib/plans.mjs'
 import { deviceView, devicesFile, readDevices, revokeDevice } from './lib/devices.mjs'
 import { companySettings, inviteMember, revokeInvite } from './lib/company.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
-import { fromOwnPage, readBytes, readJson, sendJson } from './lib/page-guard.mjs'
+import { fromOwnPage, ownHost, readBytes, readJson, sendJson } from './lib/page-guard.mjs'
 import { savedStore } from './lib/saved.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -292,7 +292,10 @@ async function connectorRoute(req, res, url) {
       return true
     }
     if (url.pathname === '/api/studio/connectors' && req.method === 'GET') {
-      send(res, 200, connectorList({ crew: await connectorCrew().catch(() => []) }))
+      const base = `http://127.0.0.1:${req.socket.localPort}`
+      const reach = {}
+      await Promise.all(connectorList().connectors.map(async (c) => { reach[c.id] = await gatewayReach(base, c.id) }))
+      send(res, 200, connectorList({ crew: await connectorCrew().catch(() => []), reach }))
       return true
     }
     if (url.pathname === '/api/studio/connector' && req.method === 'POST') {
@@ -324,7 +327,14 @@ export async function apiMiddleware(req, res, next) {
   if (pathname.slice(0, 5) !== '/api/') return next ? next() : send(res, 404, { error: 'Nothing is here' })
   req.startedAt = Date.now()
 
-  if (!fromOwnPage(req)) {
+  // A bot's call to a connector carries no Origin (it is not a page); its pass is what lets it in,
+  // and it must still name this computer, so a tunnel's name or a rebound name is refused.
+  const hop = /^\/api\/mcp\/[a-z0-9-]+\/[\w-]+$/.test(pathname)
+  if (hop) {
+    if (!ownHost(req)) return send(res, 403, { error: 'The connector gateway answers this computer only' })
+    if (!['GET', 'POST', 'DELETE'].includes(req.method)) return send(res, 405, { error: 'Use POST' })
+    try { if (await connectorRoute(req, res, url)) return } catch (err) { return send(res, err?.status >= 400 && err.status < 500 ? err.status : 500, { error: String(err?.message || err) }) }
+  } else if (!fromOwnPage(req)) {
     return send(res, 403, { error: 'Botyard only answers its own page on this machine' })
   }
 
