@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import time
 import sys
 import urllib.error
@@ -30,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import crew_set  # noqa: E402
 import skill_sets  # noqa: E402
 import botyard_home  # noqa: E402
+import git_identity  # noqa: E402
 
 HOME = os.path.expanduser('~')
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -523,10 +525,29 @@ GITCONFIG = """# Bots have network access, so this removes their ability to auth
 	pushInsteadOf = https://github.com/
 	pushInsteadOf = git@github.com:
 	pushInsteadOf = ssh://git@github.com/
-[user]
-	name = Botyard bot
-	email = bot@botyard.invalid
 """
+IDENTITY = """[user]
+	name = {name}
+	email = {mail}
+"""
+
+
+def gitconfig(mail=None):
+    """The sandbox git config, with the studio's GitHub no-reply address as the fallback author (BOTYARD_GIT_NOREPLY,
+    else the owner's global git user.email when it is one). With no no-reply address there is no [user] at all,
+    never a made-up address: identity-check.py then says so."""
+    mail = git_identity.no_reply() if mail is None else mail
+    return GITCONFIG + (IDENTITY.format(name=os.environ.get('BOTYARD_GIT_NAME') or 'Botyard bot', mail=mail) if mail else '')
+
+
+def gitconfig_ok_text(text):
+    return '@users.noreply.github.com' in text
+
+
+def gitconfig_ok(path):
+    """True when the file's own user.email is a GitHub no-reply address."""
+    done = subprocess.run(['git', 'config', '-f', path, 'user.email'], capture_output=True, text=True)
+    return bool(git_identity.SAFE.search(done.stdout.strip()))
 CODEX_CONFIG = """# Home for this studio's Codex bots. No connected apps or plugins: bots never reach mail, GitHub or a calendar.
 sandbox_mode = "workspace-write"
 
@@ -546,8 +567,11 @@ def safe_folder():
     safe = crew().places.safe
     os.makedirs(f'{safe}/gh-empty', exist_ok=True)
     os.chmod(safe, 0o700)
-    if not os.path.exists(f'{safe}/gitconfig'):
-        write(f'{safe}/gitconfig', GITCONFIG)
+    # Written when missing, and again when what is there would author a commit under any address but a no-reply
+    # (an old test address, say). A good file the owner has edited is left alone.
+    mine = gitconfig()
+    if not os.path.exists(f'{safe}/gitconfig') or (not gitconfig_ok(f'{safe}/gitconfig') and gitconfig_ok_text(mine)):
+        write(f'{safe}/gitconfig', mine)
     if any(crew().spec(slug)['ai'] == 'codex' for slug in crew().slugs()):
         if not os.path.exists(f'{safe}/config.toml'):
             write(f'{safe}/config.toml', CODEX_CONFIG)
