@@ -29,12 +29,12 @@ with one of those is welcome, as long as it argues with the reason.
 | What the phone may ask | `studio/server/phone.mjs`, and the app in `src/` and `App.tsx` |
 | The starter crew and its instructions | `crew/bots/` |
 | Helper scripts and when they run | `crew/*.py`, `crew/timetable.json` |
-| Support for another AI tool | `studio/server/engine/adapters.mjs` (to run bots on it), `studio/server/harnesses/` (to show its sessions on the map) |
+| Support for another AI tool | `studio/server/engine/adapters.mjs` (to run bots on it), `studio/server/lib/sessions.mjs` (to show its sessions on the phone) |
 
 ## The rules a change is held to
 
 - **One home folder.** A folder's name comes from `studio/server/lib/home.mjs` (or
-  `crew/studio_home.py`). New code never writes a folder name out by hand, and nothing is written
+  `crew/botyard_home.py`). New code never writes a folder name out by hand, and nothing is written
   outside `$BOTYARD_HOME` and the project a job belongs to.
 - **Variables are `BOTYARD_<NAME>`.**
 - **The engine answers this computer only.** A new path for the map goes under `/api/studio/`; a

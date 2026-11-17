@@ -43,7 +43,7 @@ The phone's door passes nothing on raw. Each thing a phone may ask is written ou
    | `BOTYARD_RUN_ID`, `BOTYARD_JOB_ID`, `BOTYARD_BOT_ID`, `BOTYARD_ID` | This run, its job, its bot, the yard |
 
    With them the bot reads its job, comments, asks the owner a question, and closes the job through
-   the engine's API. The skill that teaches a bot this is `crew/skills/studio/`.
+   the engine's API. The skill that teaches a bot this is `crew/skills/botyard/`.
 5. When the tool ends, the engine reads what it printed: the session to carry on next time, the
    tokens used, its last words, and whether it failed. That is the run's record.
 
@@ -54,7 +54,7 @@ own setting.
 ## Where everything is kept
 
 One folder, `$BOTYARD_HOME`, by default `~/.botyard`. Its name comes from one place per language,
-`server/lib/home.mjs` and `crew/studio_home.py`; nothing else writes a folder name out by hand.
+`server/lib/home.mjs` and `crew/botyard_home.py`; nothing else writes a folder name out by hand.
 
 | | |
 |---|---|
