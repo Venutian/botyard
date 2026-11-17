@@ -408,6 +408,15 @@ export async function fillSampleYard({ store }, { dataDir, now = Date.now(), cre
   const stampOf = (minsAgo) => { const d = new Date(now - minsAgo * MIN); return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` }
   fs.writeFileSync(path.join(crewDir, 'merges.log'), `${stampOf(25 * 60)} ${jobs.history.identifier} 4f2a9c1 into main harbour-shop: merged\n`)
 
+  // ── what the audits found worth improving: the Improvements page, made up ──────────────
+  const secs = (minsAgo) => Math.round((now - minsAgo * MIN) / 1000)
+  fs.writeFileSync(path.join(crewDir, 'improvements.json'), JSON.stringify([
+    { id: 'IMP-1', title: 'Checks re-run the whole test suite for a one-line change', path: 'crew/briefs/checker.md', evidence: 'The last 20 checks each ran all 412 tests; 17 of them changed one file. A run took 9 minutes on average.', fix: 'Run the tests of the files a change touches first, and the whole suite only before a merge.', who: nameOf.Sable || 'Sable', status: 'new', added: secs(90) },
+    { id: 'IMP-2', title: 'Reports do not name the commit they checked', path: 'crew/briefs/reviewer.md', evidence: '6 of the last 10 reports say "checked the branch" with no commit, so a later push cannot be told apart from the checked one.', fix: 'Put the short commit id on the first line of every report.', who: nameOf.Piper || 'Piper', status: 'ask', added: secs(300), decidedBy: 'lead', decidedAt: secs(240), reason: 'It changes every reviewer\'s brief, so the owner should say yes first.', history: [{ by: 'lead', status: 'ask', at: secs(240) }] },
+    { id: 'IMP-3', title: 'Old briefs stay in the plans folder after their job closes', path: 'plans/', evidence: '38 briefs in the folder belong to jobs closed more than a month ago.', fix: 'Move a brief to plans/done/ when its job closes.', who: nameOf.Sable || 'Sable', status: 'accepted', job: jobs.history.identifier, added: secs(2000), decidedBy: 'owner', decidedAt: secs(1500), reason: 'Cheap, and the folder is hard to read today.', history: [{ by: 'lead', status: 'accepted', at: secs(1800) }, { by: 'owner', status: 'accepted', at: secs(1500) }] },
+    { id: 'IMP-4', title: 'A failed build is retried at once with the same settings', path: 'crew/timetable.json', evidence: 'Three builds failed twice in a row on the same missing package.', fix: 'Wait for a fix before the retry, or retry once with the error in the brief.', who: nameOf.Piper || 'Piper', status: 'rejected', added: secs(4000), decidedBy: 'lead', decidedAt: secs(3500), reason: 'The retry rule already changed last week; measure it first.', history: [] },
+  ], null, 2))
+
   // ── two services the crew may use: connectors, as the Connectors page keeps them ────
   // Made-up addresses that are never called: listing a connector asks nothing of its service.
   const at = (minsAgo) => now - minsAgo * MIN

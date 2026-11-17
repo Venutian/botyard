@@ -1367,19 +1367,74 @@
 .owner-choice small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .studio-sheet .job-ref { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Improvements: one card per finding, the owner's buttons at 44 px */
-.studio-sheet .findings { display: grid; gap: 10px; margin: 0 4px 8px; }
-.studio-sheet .finding { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
-.studio-sheet .finding p { margin: 4px 0; line-height: 1.4; }
-.studio-sheet .finding header { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
-.studio-sheet .finding .chip { padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line-strong); font: 700 12px/1.4 var(--body); }
-.studio-sheet .finding .chip.imp-new, .studio-sheet .finding .chip.imp-ask { color: var(--warn, #c80); }
-.studio-sheet .finding .chip.imp-accepted { color: var(--go, #3a7); }
-.studio-sheet .finding .chip.imp-done { color: var(--good, #2a6); }
-.studio-sheet .finding .chip.imp-rejected, .studio-sheet .finding .chip.imp-stale { color: var(--muted); }
-.studio-sheet .imp-why { white-space: normal; }
+/*
+ * Records: a list of things to decide on (findings, ideas), one plate each. The state and the title lead, the
+ * few facts that decide it run under them with a label over each value, and the long notes wait behind
+ * Details. Nothing is wider than the sheet, so nothing scrolls sideways, down to a phone's width.
+ */
+.studio-sheet .rec-intro { margin: 2px 4px 12px; }
+.studio-sheet .rec-answer { margin: 0 0 4px; max-width: 64ch; font-size: 15px; line-height: 1.45; color: var(--text); }
+.studio-sheet .rec-answer b { display: block; margin-bottom: 2px; font: 800 28px/1.08 var(--sign, var(--body)); color: var(--text); }
+.studio-sheet .rec-intro .hint { margin: 0; }
+.studio-sheet .rec-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 12px; }
+.studio-sheet .rec-filters button { width: auto; min-height: 40px; padding: 7px 12px; border: 1.5px solid var(--line-strong); border-radius: 8px; background: transparent; color: var(--muted); font: 600 13px/1.2 var(--body); white-space: nowrap; text-align: center; }
+.studio-sheet .rec-filters button span { margin-left: 3px; font-variant-numeric: tabular-nums; color: var(--dim); }
+.studio-sheet .rec-filters button:hover { border-color: var(--edge, var(--text)); color: var(--text); }
+.hud .studio-sheet .rec-filters button.on, .hud .studio-sheet .rec-filters button.on:hover { border-color: var(--text); background: var(--text); color: var(--panel-solid, var(--panel)); }
+.studio-sheet .rec-filters button.on span { color: inherit; opacity: 0.75; }
+.studio-sheet .rec-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.studio-sheet .recs { display: grid; gap: 10px; margin: 0 4px 8px; padding: 0; list-style: none; }
+.studio-sheet .rec { min-width: 0; border: 2px solid var(--edge, var(--line-strong)); border-radius: 9px; background: var(--raise); box-shadow: 0 3px 0 var(--edge, transparent); overflow-wrap: break-word; cursor: pointer; }
+.studio-sheet .rec.open { cursor: auto; }
+.studio-sheet .rec-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: start; padding: 12px 14px 0; }
+.studio-sheet .rec-head { min-width: 0; }
+.studio-sheet .rec-name { margin: 0; font: 600 16px/1.3 var(--body); color: var(--text); }
+.studio-sheet .rec-line { margin: 3px 0 0; max-width: 72ch; font-size: 13.5px; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.studio-sheet .rec.open .rec-line { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
+.studio-sheet .rec-decide { display: grid; justify-items: end; gap: 5px; }
+.studio-sheet .rec-id { font: 500 12px/1 var(--body); font-variant-numeric: tabular-nums; color: var(--muted); }
+.studio-sheet .rec-mid { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; padding: 10px 14px 12px; }
+.studio-sheet .rec-facts { flex: 1 1 360px; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 16px; margin: 0; min-width: 0; }
+.studio-sheet .rec-fact { min-width: 0; }
+.studio-sheet .rec-fact dt { font: 500 12px/1.3 var(--body); color: var(--muted); }
+.studio-sheet .rec-fact dd { margin: 2px 0 0; font: 600 14px/1.3 var(--body); color: var(--text); }
+.studio-sheet .rec-fact dd b { font-weight: 600; }
+.studio-sheet .rec-fact button.link { width: auto; min-height: 32px; padding: 0; font: 600 14px/1.3 var(--body); color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.studio-sheet .rec-wait { display: inline-block; padding: 1px 7px; border: 2px solid var(--edge, var(--text)); border-radius: 5px; background: var(--yellow-paint, var(--amber)); color: #15181d; font-size: 13px; }
+.studio-sheet .rec-toggle { display: inline-flex; align-items: center; gap: 7px; width: auto; min-height: 44px; margin-left: auto; padding: 8px 14px; border: 2px solid var(--edge, var(--line-strong)); border-radius: 8px; background: var(--panel-solid, var(--panel)); color: var(--text); font: 600 13px/1.2 var(--body); box-shadow: 0 2px 0 var(--edge, transparent); }
+.hud .studio-sheet .rec .rec-toggle:hover { background: var(--sunk, var(--raise)); }
+.studio-sheet .rec-toggle:active { transform: translateY(2px); box-shadow: none; }
+.studio-sheet .rec-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.studio-sheet .rec-acts { padding: 0 14px 14px; cursor: auto; }
+.studio-sheet .rec-detail { padding: 12px 14px 14px; border-top: 2px solid var(--edge, var(--line-strong)); border-radius: 0 0 7px 7px; background: var(--panel-solid, var(--panel)); cursor: auto; }
+.studio-sheet .rec-notes { display: grid; gap: 10px; margin: 0 0 4px; max-width: 86ch; }
+.studio-sheet .rec-notes > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 2px 14px; }
+.studio-sheet .rec-notes dt { font: 600 13px/1.45 var(--body); color: var(--muted); }
+.studio-sheet .rec-notes dd { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+.studio-sheet .rec-notes code { font-size: 12.5px; overflow-wrap: anywhere; }
+.studio-sheet .rec-change { margin: 14px 0 6px; font: 600 13px/1.3 var(--body); color: var(--muted); }
+.studio-sheet .rec .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.studio-sheet .rec .chev { font-size: 15px; line-height: 1; }
+
+/* A finding's state is paint with its word: yellow waits for you, green is under way or done. */
+.studio-sheet .rec .chip { display: inline-block; padding: 2px 8px; border: 2px solid var(--edge, var(--line-strong)); border-radius: 5px; background: var(--raise); color: var(--text); font: 700 12.5px/1.3 var(--body); white-space: nowrap; }
+.studio-sheet .rec .chip.imp-new, .studio-sheet .rec .chip.imp-ask { background: var(--yellow-paint, var(--amber)); color: #15181d; }
+.studio-sheet .rec .chip.imp-accepted { background: var(--sunk, var(--panel)); color: var(--text); }
+.studio-sheet .rec .chip.imp-done { background: var(--green-paint, var(--green)); color: #15181d; }
+.studio-sheet .rec .chip.imp-rejected, .studio-sheet .rec .chip.imp-stale { border-style: dashed; background: transparent; color: var(--muted); }
+
+.studio-sheet .imp-acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .studio-sheet .imp-acts .btn, .studio-sheet .imp-reject .btn, .studio-sheet .imp-reject input { min-height: 44px; min-width: 44px; }
-.studio-sheet .imp-reject { display: grid; gap: 6px; margin-top: 8px; }
+.studio-sheet .imp-acts .btn { width: auto; flex: 0 1 auto; padding: 8px 16px; text-align: center; }
+.studio-sheet .imp-reject { display: grid; gap: 6px; margin-top: 10px; max-width: 560px; }
+.studio-sheet .imp-reject[hidden] { display: none; }
 .studio-sheet .imp-reject input { padding: 0 10px; font: inherit; }
-.studio-sheet .finding button.link { min-height: 44px; }
-@media (max-width: 480px) { .studio-sheet .imp-acts .btn { flex: 1 1 45%; } }
+@container (max-width: 520px) {
+  .studio-sheet .rec-top { grid-template-columns: minmax(0, 1fr); }
+  .studio-sheet .rec-decide { display: flex; flex-wrap: wrap; align-items: center; justify-items: start; gap: 8px; }
+  .studio-sheet .rec-facts { flex-basis: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .studio-sheet .rec-toggle { width: 100%; justify-content: center; margin-left: 0; }
+  .studio-sheet .rec-notes > div { grid-template-columns: minmax(0, 1fr); }
+  .studio-sheet .imp-acts .btn { flex: 1 1 45%; }
+}

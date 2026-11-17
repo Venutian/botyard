@@ -186,39 +186,113 @@ export const historyLine = (i, lead = '') => {
 }
 
 /**
- * "What did the audits find worth improving, who decided, why, and is anyone on it?" One card per finding,
- * with the owner's buttons. `data` is what /api/studio/improvements sent; `filter` is a state, '' for all,
- * or 'open' for what still waits for a decision (new and Ask me). The phone's screen shows the same fields.
+ * Gives each cell of the sheet's tables its column's name (data-label), so a narrow sheet can show a row
+ * as a small card with a label over each value instead of a table that scrolls sideways (studio.css).
+ * Safe to run again: a cell that has its label keeps it.
+ */
+export function labelTables(root) {
+  for (const table of root.querySelectorAll?.('table.grid') || []) {
+    const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim())
+    if (!heads.length) continue
+    for (const row of table.querySelectorAll('tbody tr')) {
+      ;[...row.children].forEach((cell, n) => { if (heads[n] && !cell.dataset.label) cell.dataset.label = heads[n] })
+    }
+  }
+}
+
+/**
+ * Open or close one record's details in place: its Details button says which, and so does its row.
+ * A click anywhere else on a closed record opens it too (see recordClick).
+ */
+export function toggleRecord(button) {
+  const row = button.closest('.rec')
+  const panel = row?.querySelector('.rec-detail')
+  if (!panel) return
+  const open = panel.hidden
+  panel.hidden = !open
+  row.classList.toggle('open', open)
+  button.setAttribute('aria-expanded', String(open))
+  button.firstChild.textContent = open ? 'Hide details' : 'Details'
+  const chev = button.querySelector('.chev')
+  if (chev) chev.innerHTML = open ? '&#9652;' : '&#9662;'
+}
+
+/** A click on a closed record, not on one of its buttons, links, fields or its open details: opens it. @returns {boolean} */
+export function recordClick(target) {
+  const row = target.closest?.('.rec')
+  if (!row || row.classList.contains('open') || target.closest('a, button, input, label, .rec-detail, .rec-acts')) return false
+  if (String(globalThis.getSelection?.() || '')) return false
+  const button = row.querySelector('.rec-toggle')
+  if (button) toggleRecord(button)
+  return Boolean(button)
+}
+
+/**
+ * "What did the audits find worth improving, and what is waiting for me?" One record per finding: its state
+ * and title first, the smallest fix in a line, then who found it, who decided and the job, each labelled.
+ * A finding waiting for the owner carries the four decision buttons on its face; one already decided keeps
+ * them behind Details with the evidence, the file, the reason and the history, so a long list stays short.
+ * `data` is what /api/studio/improvements sent; `filter` is a state, '' for all, or 'open' for what still
+ * waits for a decision (new and Ask me). The phone's screen shows the same fields and buttons.
  */
 export function improvementsScreen(data, filter = 'open') {
   const lead = data.lead || ''
   const match = (i) => (filter === 'open' ? OPEN_STATES.includes(i.status) : !filter || i.status === filter)
   const items = (data.items || []).filter(match)
-  const head = `<div class="filters"><div class="seg" role="tablist" aria-label="Filter findings by status">${IMPROVEMENT_FILTERS.map(([id, name]) => {
+  const head = `<div class="rec-filters" role="tablist" aria-label="Filter findings by status">${IMPROVEMENT_FILTERS.map(([id, name]) => {
     const n = id === 'open' ? OPEN_STATES.reduce((t, k) => t + (data.counts?.[k] || 0), 0) : id ? data.counts?.[id] || 0 : (data.items || []).length
-    return `<button type="button" role="tab" aria-selected="${filter === id}" class="${filter === id ? 'on' : ''}" data-act="improve-filter" data-status="${id}">${name} ${n}</button>`
-  }).join('')}</div></div>`
+    return `<button type="button" role="tab" aria-selected="${filter === id}" class="${filter === id ? 'on' : ''}" data-act="improve-filter" data-status="${id}">${name} <span>${n}</span></button>`
+  }).join('')}</div>`
   const button = (act, name, i, cls = '') => `<button type="button" class="btn imp-btn ${cls}" data-act="${act}" data-id="${esc(i.id)}" aria-label="${name} finding ${esc(i.id)}: ${esc(i.title)}">${name}</button>`
-  const card = (i) => `<article class="finding" data-finding="${esc(i.id)}" aria-label="${esc(i.id)}: ${esc(i.title)}">
-      <header><span class="chip imp-${esc(i.status)}">${esc(IMPROVEMENT_NAMES[i.status] || i.status)}</span> <b>${esc(i.title)}</b> <span class="dim">${esc(i.id)}</span></header>
-      <p class="dim">${[i.path ? `<code>${esc(i.path)}</code>` : '', i.who ? `found by ${esc(i.who)}` : ''].filter(Boolean).join(' · ')}</p>
-      ${i.evidence ? `<p class="imp-evidence">Evidence: ${esc(i.evidence)}</p>` : ''}
-      ${i.fix ? `<p>Smallest fix: ${esc(i.fix)}</p>` : ''}
-      ${i.decidedBy ? `<p class="imp-why"><b>${esc(decidedLine(i, lead))}.</b> ${i.reason ? `Why: ${esc(i.reason)}` : '<span class="dim">No reason written.</span>'}</p>` : ''}
-      ${historyLine(i, lead) ? `<p class="dim imp-history">${esc(historyLine(i, lead))}</p>` : ''}
-      <p class="imp-job">${i.job ? `Job: <button type="button" class="link" data-act="open-job" data-id="${esc(i.job)}"><b>${esc(i.job)}</b></button>` : '<span class="dim">No job yet</span>'}</p>
-      <div class="acts imp-acts" role="group" aria-label="Your decision on ${esc(i.id)}">
-        ${button('improve-accept', 'Accept', i)}${button('improve-reject-open', 'Reject', i)}${button('improve-ask', 'Ask me', i)}${button('improve-send', `Send to ${lead || 'the lead'}`, i)}
+  const decide = (i) => `<div class="acts imp-acts" role="group" aria-label="Your decision on ${esc(i.id)}">
+        ${button('improve-accept', 'Accept', i, OPEN_STATES.includes(i.status) ? 'primary' : '')}${button('improve-reject-open', 'Reject', i)}${button('improve-ask', 'Ask me', i)}${button('improve-send', `Send to ${lead || 'the lead'}`, i)}
       </div>
       <div class="imp-reject" hidden>
         <label for="why-${esc(i.id)}">Why reject it? One line</label>
         <input id="why-${esc(i.id)}" type="text" maxlength="400" autocomplete="off">
         ${button('improve-reject-go', 'Reject it', i, 'danger')}
+      </div>`
+  const fact = (label, value) => `<div class="rec-fact"><dt>${label}</dt><dd>${value}</dd></div>`
+  const card = (i) => {
+    const waiting = OPEN_STATES.includes(i.status)
+    const decided = decidedLine(i, lead)
+    const history = historyLine(i, lead)
+    const notes = [
+      i.evidence ? ['Evidence', esc(i.evidence)] : null,
+      i.path ? ['Where', `<code>${esc(i.path)}</code>`] : null,
+      decided ? ['Why', i.reason ? esc(i.reason) : '<span class="dim">No reason written.</span>'] : null,
+      history ? ['History', esc(history)] : null,
+    ].filter(Boolean)
+    return `<li class="rec finding imp-${esc(i.status)}" data-finding="${esc(i.id)}">
+      <div class="rec-top">
+        <div class="rec-head">
+          <div class="rec-name" role="heading" aria-level="3">${esc(i.title)}</div>
+          ${i.fix ? `<p class="rec-line">Smallest fix: ${esc(i.fix)}</p>` : ''}
+        </div>
+        <div class="rec-decide"><span class="chip imp-${esc(i.status)}">${esc(IMPROVEMENT_NAMES[i.status] || i.status)}</span><small class="rec-id">${esc(i.id)}</small></div>
       </div>
-    </article>`
-  return `<p class="hint">What the crew's audits found worth improving. Your decision always wins over ${esc(lead || 'the lead')}'s, and you can change it again.</p>
+      <div class="rec-mid">
+        <dl class="rec-facts">
+          ${fact('Found by', i.who ? esc(i.who) : '<span class="dim">Not said</span>')}
+          ${fact('Decision', decided ? `<b>${esc(decided)}.</b>` : '<span class="rec-wait">Waiting for you</span>')}
+          ${fact('Job', i.job ? `<button type="button" class="link" data-act="open-job" data-id="${esc(i.job)}">${esc(i.job)}</button>` : '<span class="dim">No job yet</span>')}
+        </dl>
+        <button type="button" class="rec-toggle" data-act="rec-toggle" aria-expanded="false" aria-controls="imp-more-${esc(i.id)}">Details<span class="chev" aria-hidden="true">&#9662;</span><span class="sr"> on ${esc(i.id)}</span></button>
+      </div>
+      ${waiting ? `<div class="rec-acts">${decide(i)}</div>` : ''}
+      <div class="rec-detail" id="imp-more-${esc(i.id)}" hidden>
+        ${notes.length ? `<dl class="rec-notes">${notes.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}
+        ${waiting ? '' : `<p class="rec-change">Change your decision</p>${decide(i)}`}
+      </div>
+    </li>`
+  }
+  const open = OPEN_STATES.reduce((t, k) => t + (data.counts?.[k] || 0), 0)
+  const answer = (data.items || []).length
+    ? open ? `<b>${open} waiting for you.</b> Accept, reject, ask to be asked again, or hand it to ${esc(lead || 'the lead')}.` : `<b>Nothing waits for you.</b> ${esc(lead || 'The lead')} or you decided every finding; open one to change it.`
+    : ''
+  return `<div class="rec-intro">${answer ? `<p class="rec-answer">${answer}</p>` : ''}<p class="hint">What the crew's audits found worth improving. Your decision always wins over ${esc(lead || 'the lead')}'s, and you can change it again.</p></div>
     ${head}
-    ${items.length ? `<div class="findings">${items.map(card).join('')}</div>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
+    ${items.length ? `<ol class="recs findings">${items.map(card).join('')}</ol>` : `<p class="none">${(data.items || []).length ? 'Nothing in this state.' : 'No improvements listed yet.'}</p>`}`
 }
 
 /** One run: how it ended and why, what it used, its job, and the end of its log. */

@@ -827,6 +827,19 @@
   .studio-sheet table.grid :is(th, td) { overflow-wrap: break-word; }
   .studio-sheet .grid-wrap { overflow-x: auto; }
 }
+/* Too narrow for any table: each row is a small card, its first cell the name, every other value under its
+   column's name (labelTables puts the names on the cells). Nothing scrolls sideways, down to a phone's width. */
+@container (max-width: 480px) {
+  .studio-sheet table.grid:not(.runs), .studio-sheet table.grid:not(.runs) tbody { display: block; width: 100%; }
+  .studio-sheet table.grid:not(.runs) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .studio-sheet table.grid:not(.runs) tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; padding: 9px 6px; border-bottom: 1px solid var(--line); }
+  .studio-sheet table.grid:not(.runs) td { display: block; min-width: 0 !important; padding: 0 !important; border: 0 !important; text-align: left !important; white-space: normal !important; overflow-wrap: break-word; }
+  .studio-sheet table.grid:not(.runs) td:first-child, .studio-sheet table.grid:not(.runs) td.bar { grid-column: 1 / -1; }
+  .studio-sheet table.grid:not(.runs) td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 1px; font: 500 11.5px/1.3 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .studio-sheet table.grid:not(.runs) td:empty { display: none; }
+  .studio-sheet table.grid:not(.runs) td .btn { margin: 2px 6px 2px 0 !important; }
+  .studio-sheet .grid-wrap { overflow-x: visible; }
+}
 /* Too narrow for six columns: each run is two lines, the job first, then when, who, how it ended and its cost. */
 @container (max-width: 620px) {
   .studio-sheet table.grid.runs, .studio-sheet table.grid.runs tbody { display: block; width: 100%; }

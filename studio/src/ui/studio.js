@@ -4,7 +4,7 @@ import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
 import { rankProjects } from './rank.js'
-import { botScreen, botsScreen, editSummary, improvementsScreen, moneyScreen, runScreen, runsScreen } from './studio-crew.js'
+import { botScreen, botsScreen, editSummary, improvementsScreen, labelTables, moneyScreen, recordClick, runScreen, runsScreen, toggleRecord } from './studio-crew.js'
 import { FeedView, feedFrameHtml } from './run-feed.js'
 import { usageHtml } from './usage.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
@@ -453,6 +453,9 @@ export class Studio {
     })
 
     for (const col of [this.cols.a, this.cols.b]) {
+      // Every table a sheet shows, however late it comes, gets its column names on its cells (labelTables).
+      let labelling = 0
+      new MutationObserver(() => { if (!labelling) labelling = requestAnimationFrame(() => { labelling = 0; labelTables(col.el) }) }).observe(col.el, { childList: true, subtree: true })
       col.el.addEventListener('click', (e) => this._colClick(col, e))
       col.el.addEventListener('submit', (e) => { this.cur = col; this._sheetSubmit(e) })
       col.el.addEventListener('change', (e) => { this.cur = col; this._sheetChange(e) })
@@ -592,7 +595,7 @@ export class Studio {
       const clear = e.target.closest('[data-clear]')
       if (clear) return this._askClear(clear.dataset.clear, clear.dataset.answer)
       const el = e.target.closest('[data-act],[data-bot],[data-verb],[data-line],[data-routine]')
-      if (!el) return
+      if (!el) return void recordClick(e.target)
       if (el.dataset.routine && !el.dataset.act) return this._go(() => this.openRoutine(el.dataset.routine))
       if (this._crewAct(el) || this._workAct(el) || this._connectAct(el) || this._shapeAct(el)) return
       if (el.dataset.act === 'close-sheet') return this.closeSheet()
@@ -2491,13 +2494,14 @@ setView(view) {
     if (act === 'models') { this._go(() => this.openMoney()); return true }
     if (act === 'improve-filter') { this._improve = el.dataset.status || ''; this.openImprovements(); return true }
     if (act === 'improve-reject-open') {
-      const form = el.closest('.finding')?.querySelector('.imp-reject')
+      const form = el.closest('.rec-acts, .rec-detail')?.querySelector('.imp-reject')
       if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input')?.focus() }
       return true
     }
+    if (act === 'rec-toggle') { toggleRecord(el); return true }
     if (['improve-accept', 'improve-ask', 'improve-send', 'improve-reject-go'].includes(act)) {
       const action = { 'improve-accept': 'accept', 'improve-ask': 'ask', 'improve-send': 'send', 'improve-reject-go': 'reject' }[act]
-      const reason = action === 'reject' ? (el.closest('.finding')?.querySelector('.imp-reject input')?.value || '').trim() : ''
+      const reason = action === 'reject' ? (el.closest('.imp-reject')?.querySelector('input')?.value || '').trim() : ''
       if (action === 'reject' && !reason) { this.actions.toast('Say in one line why you reject it', 'err'); return true }
       this._improveDecide(id, action, reason)
       return true

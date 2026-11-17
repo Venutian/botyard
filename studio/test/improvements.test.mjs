@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { improvementsView } from '../server/lib/crew.mjs'
 import http from 'node:http'
-import { decidedLine, historyLine, improvementsScreen } from '../src/ui/studio-crew.js'
+import { decidedLine, historyLine, improvementsScreen, recordClick, toggleRecord } from '../src/ui/studio-crew.js'
 import { decideImprovement } from '../server/lib/improvement-actions.mjs'
 import * as phoneText from '../../src/improvementText.ts'
 
@@ -57,18 +57,37 @@ test('the PC page shows status chip, who decided and when, the full reason, the 
   const data = improvementsView({ folder: folderWith(FINDINGS), lead: 'Foreman' })
   const all = improvementsScreen(data, '')
   assert.ok(all.includes('chip imp-rejected">Rejected') && all.includes('chip imp-new">New') && all.includes('chip imp-ask">Ask me'))
-  assert.ok(all.includes('Decided by Foreman, 16 Nov.') && all.includes('>Send to Foreman<') && all.includes('Why: We already do this in a long reason that must never be cut short, however many words it takes to say it in full.'))
-  assert.ok(all.includes('data-act="open-job" data-id="WRK-1190"') && all.includes('Evidence: 212 files') && all.includes('No job yet'))
+  assert.ok(all.includes('Decided by Foreman, 16 Nov.') && all.includes('>Send to Foreman<') && all.includes('<dt>Why</dt><dd>We already do this in a long reason that must never be cut short, however many words it takes to say it in full.</dd>'))
+  assert.ok(all.includes('data-act="open-job" data-id="WRK-1190"') && all.includes('<dt>Evidence</dt><dd>212 files</dd>') && all.includes('No job yet'))
   for (const act of ['improve-accept', 'improve-reject-open', 'improve-ask', 'improve-send', 'improve-reject-go']) assert.ok(all.includes(`data-act="${act}"`), act)
   assert.ok(all.includes('aria-label="Accept finding IMP-2: Reports name no commit"') && all.includes('<label for="why-IMP-2">'))
   assert.ok(!all.includes('…'), 'the reason is never truncated')
+})
+
+test('a finding leads with its state and title, labels its facts, and keeps its notes behind Details', () => {
+  const data = improvementsView({ folder: folderWith(FINDINGS), lead: 'Foreman' })
+  const all = improvementsScreen(data, '')
+  assert.match(all, /<b>2 waiting for you\.<\/b>/)
+  assert.match(all, /<dt>Found by<\/dt><dd>Checker<\/dd>/)
+  assert.match(all, /<dt>Decision<\/dt><dd><span class="rec-wait">Waiting for you<\/span>/, 'a new finding says it waits for the owner')
+  assert.match(all, /<dt>Job<\/dt><dd><button type="button" class="link" data-act="open-job" data-id="WRK-1190">WRK-1190<\/button>/)
+  assert.match(all, /<button type="button" class="rec-toggle" data-act="rec-toggle" aria-expanded="false" aria-controls="imp-more-IMP-1">Details/)
+  assert.match(all, /<div class="rec-detail" id="imp-more-IMP-1" hidden>/)
+  // A finding that waits for the owner carries its four buttons on its face; a decided one keeps them behind Details.
+  const face = (id) => all.slice(all.indexOf(`data-finding="${id}"`), all.indexOf(`id="imp-more-${id}"`))
+  assert.match(face('IMP-2'), /data-act="improve-accept"/)
+  assert.doesNotMatch(face('IMP-1'), /data-act="improve-accept"/)
+  assert.match(all.slice(all.indexOf('id="imp-more-IMP-1"')), /Change your decision/)
+  assert.match(all, /<div class="imp-reject" hidden>/)
+  assert.doesNotMatch(all, /<table/, 'no table, so nothing scrolls sideways')
+  assert.match(improvementsScreen({ items: [{ id: 'IMP-1', title: 'x', status: 'done' }], counts: { done: 1 }, lead: 'Foreman' }, ''), /<b>Nothing waits for you\.<\/b>/)
 })
 
 test('the page opens on what waits for a decision (New and Ask me), and every filter works', () => {
   const data = improvementsView({ folder: folderWith(FINDINGS) })
   const open = improvementsScreen(data)
   assert.ok(open.includes('Reports name no commit') && open.includes('Asked one') && !open.includes('Old briefs stay'))
-  for (const name of ['To decide 2', 'All 3', 'New 1', 'Ask me 1', 'Accepted 0', 'Done 0', 'Rejected 1', 'Stale 0']) assert.ok(open.includes(name), name)
+  for (const name of ['To decide <span>2', 'All <span>3', 'New <span>1', 'Ask me <span>1', 'Accepted <span>0', 'Done <span>0', 'Rejected <span>1', 'Stale <span>0']) assert.ok(open.includes(name), name)
   assert.ok(improvementsScreen(data, 'rejected').includes('Old briefs stay'))
   assert.ok(improvementsScreen(data, 'done').includes('Nothing in this state.'))
   assert.ok(improvementsScreen({ items: [], counts: {} }, '').includes('No improvements listed yet.'))
@@ -200,4 +219,35 @@ test('through the map\'s API: the page decides, any other caller is refused', as
       assert.equal((await post(mine, { action: 'nope' })).status, 400)
     } finally { server.close() }
   } finally { if (saved === undefined) delete process.env.BOTYARD_CREW_FOLDER; else process.env.BOTYARD_CREW_FOLDER = saved }
+})
+
+/** Just enough of a record's elements to open and close it without a browser. */
+function fakeRecord() {
+  const classes = new Set(['rec'])
+  const panel = { hidden: true }
+  const chev = { innerHTML: '' }
+  const attrs = { 'aria-expanded': 'false' }
+  const button = { firstChild: { textContent: 'Details' }, setAttribute: (k, v) => { attrs[k] = v }, querySelector: () => chev }
+  const row = { classList: { contains: (c) => classes.has(c), toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) }, querySelector: (sel) => (sel === '.rec-detail' ? panel : sel === '.rec-toggle' ? button : null) }
+  button.closest = () => row
+  const plain = { closest: (sel) => (sel === '.rec' ? row : null) }
+  return { row, panel, button, attrs, classes, plain }
+}
+
+test('Details opens a record in place and says so; a click on its face opens it, a click on a button does not', () => {
+  const r = fakeRecord()
+  toggleRecord(r.button)
+  assert.equal(r.panel.hidden, false)
+  assert.equal(r.attrs['aria-expanded'], 'true')
+  assert.equal(r.button.firstChild.textContent, 'Hide details')
+  assert.ok(r.classes.has('open'))
+  toggleRecord(r.button)
+  assert.deepEqual([r.panel.hidden, r.attrs['aria-expanded'], r.button.firstChild.textContent, r.classes.has('open')], [true, 'false', 'Details', false])
+  const s = fakeRecord()
+  assert.equal(recordClick(s.plain), true)
+  assert.equal(s.panel.hidden, false)
+  assert.equal(recordClick(s.plain), false, 'an open record is not closed by a click on its text')
+  const t = fakeRecord()
+  assert.equal(recordClick({ closest: (sel) => (sel === '.rec' ? t.row : { tag: 'button' }) }), false)
+  assert.equal(t.panel.hidden, true)
 })
