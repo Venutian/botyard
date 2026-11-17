@@ -23,7 +23,7 @@ def no_reply(env=None):
     if given:
         return given if SAFE.search(given) else ''
     try:
-        out = subprocess.run(['git', 'config', '--global', 'user.email'], capture_output=True, text=True, timeout=10).stdout.strip()
+        out = subprocess.run(['git', 'config', '--global', 'user.email'], capture_output=True, text=True, timeout=10, env={**os.environ, **env}).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ''
     return out if SAFE.search(out) else ''
