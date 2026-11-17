@@ -29,6 +29,7 @@ import os
 import re
 
 import botyard_home
+import git_identity
 
 AIS = {'claude': 'claude_local', 'codex': 'codex_local', 'gemini': 'gemini_local', 'free': 'opencode_local'}
 AI_OF = {adapter: ai for ai, adapter in AIS.items()}
@@ -299,6 +300,12 @@ class CrewSet:
         return {'GIT_CONFIG_GLOBAL': plain(f'{safe}/gitconfig'), 'GH_CONFIG_DIR': plain(f'{safe}/gh-empty'),
                 'GIT_TERMINAL_PROMPT': plain('0')}
 
+    @staticmethod
+    def git_id(spec):
+        """The bot's commit identity (its first name, the studio's no-reply address) for engines with no launcher of
+        ours: Codex and Antigravity. Claude and free bots set it themselves at launch (git_identity.py)."""
+        return {k: plain(v) for k, v in git_identity.identity_env(spec['slug']).items()}
+
     def claude_tools(self, spec, may_not):
         """The tool rules of a Claude bot: --disallowedTools, and for a builder that may edit, the merge allow too."""
         if 'edit' in may_not:
@@ -330,14 +337,14 @@ class CrewSet:
             config = {'engine': 'cli', 'cwd': cwd, 'model': spec['model'], 'modelReasoningEffort': spec['effort'],
                       'command': p.codex, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslyBypassApprovalsAndSandbox': False, 'extraArgs': CODEX_ARGS,
-                      'env': {**self.no_push(), **path_env, 'CODEX_HOME': plain(p.safe)}}
+                      'env': {**self.no_push(), **self.git_id(spec), **path_env, 'CODEX_HOME': plain(p.safe)}}
         elif ai == 'gemini':
             # Over ACP the prompt goes through a pipe: on the command line a long job thread is too big for Linux.
             # agy-acp.py sets the model and answers agy's permission requests within the bots' rules; agy-bin
             # comes first on PATH so its git refuses those commands too.
             config = {'engine': 'acp', 'agentCommand': f'{p.crew}/agy-acp.py', 'cwd': cwd, 'model': spec['model'],
                       'timeoutSec': seconds, 'graceSec': 15,
-                      'env': {**self.no_push(), **guarded,
+                      'env': {**self.no_push(), **self.git_id(spec), **guarded,
                               'AGY_MODELS': plain(','.join(m for m in ANTIGRAVITY if m != spec['model']))}}
         else:
             # OpenCode allows every tool to a bot, so the git on its PATH refuses what the owner does by hand
