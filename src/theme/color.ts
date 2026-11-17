@@ -29,8 +29,26 @@ export function luminance(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** The readable ink for text sitting on this colour. */
-export const inkOn = (hex: string) => (luminance(hex) > 0.36 ? '#101214' : '#ffffff');
+/** How far apart two colours read, as WCAG counts it: 1 is none, 21 is black on white. */
+export function contrast(a: string, b: string) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** The readable ink for text sitting on this colour: whichever of near-black and white stands out more. */
+export const inkOn = (hex: string) => (contrast(hex, '#101214') >= contrast(hex, '#ffffff') ? '#101214' : '#ffffff');
+
+/**
+ * This colour, moved towards `toward` only as far as it takes to reach `min` against every one of
+ * `under`. A colour that already reads comes back as it is.
+ */
+export function readable(hex: string, under: string[], min: number, toward: string) {
+  for (let step = 0; step <= 40; step += 1) {
+    const next = mix(hex, toward, step / 40);
+    if (under.every((bg) => contrast(next, bg) >= min)) return next;
+  }
+  return toward;
+}
 
 export function hexToHue(hex: string) {
   const [r, g, b] = channels(hex).map((v) => v / 255);

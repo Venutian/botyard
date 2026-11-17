@@ -3,7 +3,7 @@ import * as SystemUI from 'expo-system-ui';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, TextStyle, useColorScheme } from 'react-native';
 import { OwnLook } from '../mascot/look';
-import { alpha, inkOn, mix, shiftHue } from './color';
+import { alpha, contrast, inkOn, mix, readable, shiftHue } from './color';
 import { FontChoice, FONT_CHOICES, FontId, fontStyle, loadFont, loadSign, signStyle, Weight } from './fonts';
 import { LookChoice, Plates, platesFor } from './plates';
 
@@ -99,14 +99,18 @@ function themeFor(plates: Plates, accent: string | null): Theme {
     r: { card: 10, button: 8, chip: 6, field: 8 },
   };
   if (!accent) return base;
-  // Your own paint: what can be pressed and your own messages follow it.
+  // Your own paint: what can be pressed and your own messages follow it. A colour that would leave a
+  // button's word or a link hard to read is moved just far enough to read, so any colour is safe to pick.
+  const surfaces = [plates.app, plates.panel, plates.card, plates.raised, plates.control];
+  const ink = inkOn(accent);
+  const fill = contrast(accent, ink) >= 4.5 ? accent : readable(accent, [ink], 4.5, ink === '#ffffff' ? '#000000' : '#ffffff');
   return {
     ...base,
-    accent,
-    accentText: plates.dark ? mix(accent, '#ffffff', 0.3) : mix(accent, '#000000', 0.18),
-    accentInk: inkOn(accent),
-    mine: accent,
-    mineInk: inkOn(accent),
+    accent: fill,
+    accentText: readable(accent, surfaces, 4.5, plates.dark ? '#ffffff' : '#000000'),
+    accentInk: ink,
+    mine: fill,
+    mineInk: ink,
   };
 }
 

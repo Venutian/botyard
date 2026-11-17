@@ -17,7 +17,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Pattern, Rect, Stop } from 'react-native-svg';
-import { hexToHue, hsl, isHex } from '../theme/color';
+import { hexToHue, hsl, inkOn, isHex } from '../theme/color';
 import { Weight } from '../theme/fonts';
 import { useLook } from '../theme/prefs';
 import { Icon, IconName } from './Icon';
@@ -43,8 +43,8 @@ export function Txt({ size = 15, weight = 400, color, style, ...rest }: TextProp
 export function Title({ children }: { children: ReactNode }) {
   const { t, sign } = useLook();
   // A plate's title is a sign: taller, tighter, in the sign face.
-  if (t.plates) return <Txt size={40} weight={700} style={[styles.signTitle, sign()]}>{children}</Txt>;
-  return <Txt size={32} weight={700} style={styles.title}>{children}</Txt>;
+  if (t.plates) return <Txt accessibilityRole="header" size={40} weight={700} style={[styles.signTitle, sign()]}>{children}</Txt>;
+  return <Txt accessibilityRole="header" size={32} weight={700} style={styles.title}>{children}</Txt>;
 }
 
 /** A name, a job code or a short heading in the sign face (the bold body font outside Plates). */
@@ -55,7 +55,7 @@ export function Sign({ size = 20, color, style, ...rest }: TextProps & { size?: 
 
 export function Label({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const { t } = useLook();
-  return <View style={[styles.label, style]}><Txt size={14} weight={600} color={t.ink2}>{children}</Txt></View>;
+  return <View style={[styles.label, style]}><Txt accessibilityRole="header" size={14} weight={600} color={t.ink2}>{children}</Txt></View>;
 }
 
 export function GlassButton({ icon, label, onPress, size = 44 }: { icon: IconName; label: string; onPress: () => void; size?: number }) {
@@ -88,6 +88,8 @@ export function Button({ label, onPress, kind = 'primary', busy, disabled, icon 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(busy || disabled), busy: Boolean(busy) }}
       disabled={busy || disabled}
       onPress={() => {
         tap('light');
@@ -155,7 +157,7 @@ export function Toggle({ value, onChange, label }: { value: boolean; onChange: (
         onChange(!value);
       }}
       hitSlop={8}
-      style={[styles.track, { backgroundColor: value ? t.accent : t.control, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }]}
+      style={[styles.track, { backgroundColor: value ? t.accent : t.edge, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }]}
     >
       <Animated.View style={[styles.knob, { transform: [{ translateX: travel.interpolate({ inputRange: [0, 1], outputRange: [0, 20] }) }] }]} />
     </Pressable>
@@ -200,11 +202,12 @@ export function Chips<T extends string>({ value, options, onChange, styleFor }: 
             key={option.id}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            hitSlop={{ top: 2, bottom: 2 }}
             onPress={() => {
               tap();
               onChange(option.id);
             }}
-            style={[styles.chip, { borderRadius: t.r.chip, backgroundColor: active ? t.accent : t.plates ? t.card : t.control, borderColor: t.outline ? t.ink : 'transparent', borderWidth: t.outline ? 2 : 0 }]}
+            style={[styles.chip, { borderRadius: t.r.chip, backgroundColor: active ? t.accent : t.plates ? t.card : t.control, borderColor: active ? t.accent : t.line, borderWidth: StyleSheet.hairlineWidth }]}
           >
             <Txt size={13} weight={600} color={active ? t.accentInk : t.ink} style={styleFor?.(option.id)}>{option.name}</Txt>
           </Pressable>
@@ -254,7 +257,7 @@ export function Slider({ value, min, max, onChange, label, track }: { value: num
       <View pointerEvents="none" style={[styles.sliderTrack, { backgroundColor: t.control }]}>
         {track ?? <View style={{ backgroundColor: t.accent, height: '100%', width: `${share * 100}%` }} />}
       </View>
-      <View pointerEvents="none" style={[styles.thumb, { left: share * Math.max(0, width - THUMB), borderColor: t.outline ? t.ink : 'rgba(0,0,0,0.18)' }]} />
+      <View pointerEvents="none" style={[styles.thumb, { left: share * Math.max(0, width - THUMB), borderColor: t.edge }]} />
     </View>
   );
 }
@@ -290,15 +293,16 @@ export function ColorPicker({ value, palette, onChange, inherit }: { value: stri
         key={key}
         accessibilityRole="button"
         accessibilityLabel={color ?? inherit}
+        hitSlop={3}
         accessibilityState={{ selected: active }}
         onPress={() => {
           tap();
           setCustom(false);
           onChange(color);
         }}
-        style={[styles.swatch, { backgroundColor: color ?? t.control, borderColor: active ? t.ink : 'transparent' }]}
+        style={[styles.swatch, { backgroundColor: color ?? t.control, borderColor: active ? t.ink : t.line }]}
       >
-        {color === null ? <Icon name="reset" size={15} color={t.ink} /> : active ? <Icon name="check" size={15} color="#ffffff" weight={3} /> : null}
+        {color === null ? <Icon name="reset" size={15} color={t.ink} /> : active ? <Icon name="check" size={15} color={inkOn(color)} weight={3} /> : null}
       </Pressable>
     );
   };
@@ -312,6 +316,7 @@ export function ColorPicker({ value, palette, onChange, inherit }: { value: stri
           accessibilityRole="button"
           accessibilityLabel="Custom colour"
           accessibilityState={{ expanded: custom }}
+          hitSlop={3}
           onPress={() => setCustom(!custom)}
           style={[styles.swatch, { backgroundColor: t.control, borderColor: custom ? t.ink : 'transparent' }]}
         >
@@ -331,9 +336,10 @@ export function ColorPicker({ value, palette, onChange, inherit }: { value: stri
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={7}
+            accessibilityLabel="Colour as a hex code"
             placeholder="#ff2e97"
             placeholderTextColor={t.ink3}
-            style={[styles.field, font(400), { backgroundColor: t.control, color: t.ink }]}
+            style={[styles.field, font(400), { backgroundColor: t.control, color: t.ink, borderColor: t.edge, borderWidth: StyleSheet.hairlineWidth }]}
           />
         </View>
       ) : null}
@@ -349,9 +355,10 @@ export function Field({ label, tall, style, ref, ...rest }: TextInputProps & { l
       <TextInput
         placeholderTextColor={t.ink3}
         textAlignVertical={tall ? 'top' : 'center'}
+        accessibilityLabel={label ?? rest.placeholder}
         {...rest}
         ref={ref}
-        style={[styles.field, font(400), { borderRadius: t.r.field, backgroundColor: t.card, color: t.ink, borderColor: t.outline ? t.ink : 'transparent', borderWidth: t.outline ? 2 : 0 }, tall && styles.tall, style]}
+        style={[styles.field, font(400), { borderRadius: t.r.field, backgroundColor: t.card, color: t.ink, borderColor: t.edge, borderWidth: StyleSheet.hairlineWidth }, tall && styles.tall, style]}
       />
     </View>
   );
@@ -398,13 +405,13 @@ export const styles = StyleSheet.create({
   track: { borderRadius: 16, height: 30, justifyContent: 'center', paddingHorizontal: 2, width: 52 },
   knob: { backgroundColor: '#ffffff', borderRadius: 13, height: 26, width: 26 },
   segments: { borderRadius: 12, flexDirection: 'row', gap: 2, padding: 3 },
-  segment: { alignItems: 'center', borderRadius: 9, flex: 1, minHeight: 36, justifyContent: 'center', paddingHorizontal: 6 },
+  segment: { alignItems: 'center', borderRadius: 9, flex: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 999, minHeight: 36, justifyContent: 'center', paddingHorizontal: 14 },
-  slider: { height: 36, justifyContent: 'center' },
+  chip: { borderRadius: 999, minHeight: 40, justifyContent: 'center', paddingHorizontal: 14 },
+  slider: { height: 44, justifyContent: 'center' },
   sliderTrack: { borderRadius: 7, height: 14, overflow: 'hidden' },
-  thumb: { backgroundColor: '#ffffff', borderRadius: THUMB / 2, borderWidth: 1, height: THUMB, position: 'absolute', top: 5, width: THUMB },
-  swatch: { alignItems: 'center', borderRadius: 19, borderWidth: 2, height: 38, justifyContent: 'center', width: 38 },
+  thumb: { backgroundColor: '#ffffff', borderRadius: THUMB / 2, borderWidth: 1, height: THUMB, position: 'absolute', top: 9, width: THUMB },
+  swatch: { alignItems: 'center', borderRadius: 20, borderWidth: 2, height: 40, justifyContent: 'center', width: 40 },
   pickerGap: { gap: 10 },
   fieldWrap: { gap: 6 },
   field: { borderRadius: 14, fontSize: 16, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10 },

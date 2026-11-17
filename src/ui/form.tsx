@@ -75,7 +75,8 @@ export function Choice({ title, detail, active, locked, right, onPress, last, ch
 }) {
   const { t } = useLook();
   const tap = useTap();
-  const edge = t.plates && t.dark ? '#05070a' : t.ink;
+  // The ring of a choice not picked must show on the plate: light ink by night, dark by day.
+  const edge = t.dark ? t.ink2 : t.ink;
   return (
     <Pressable
       accessibilityRole={locked ? 'checkbox' : 'radio'}
@@ -140,7 +141,7 @@ function Inline({ value, onChangeText, label, width = 58, onFocus, ...rest }: { 
       placeholderTextColor={t.ink3}
       selectTextOnFocus
       {...rest}
-      style={[styles.inline, plainField, font(600), { width, backgroundColor: t.control, borderColor: t.outline ? t.ink3 : 'transparent', borderRadius: t.r.chip, color: t.ink }]}
+      style={[styles.inline, plainField, font(600), { width, backgroundColor: t.control, borderColor: t.edge, borderRadius: t.r.chip, color: t.ink }]}
     />
   );
 }
@@ -202,7 +203,7 @@ export function WhenPicker({ start, onChange }: { start?: Plan | null; onChange:
     onChange(planOf(k, next));
   };
   const digits = (text: string) => text.replace(/\D/g, '');
-  const edge = t.plates && t.dark ? '#05070a' : t.ink;
+  const edge = t.dark ? t.ink2 : t.ink;
 
   const row = (k: Plan['kind'], words: string, parts: ReactNode, last = false, under?: ReactNode) => {
     const active = kind === k;
@@ -244,7 +245,7 @@ export function WhenPicker({ start, onChange }: { start?: Plan | null; onChange:
           autoCorrect={false}
           spellCheck={false}
           maxLength={120}
-          style={[styles.cron, plainField, MONO, { backgroundColor: t.control, borderColor: t.outline ? t.ink3 : 'transparent', borderRadius: t.r.chip, color: t.ink }]}
+          style={[styles.cron, plainField, MONO, { backgroundColor: t.control, borderColor: t.edge, borderRadius: t.r.chip, color: t.ink }]}
         />
       ), true, <Txt size={12} color={t.ink3} style={styles.under}>Five parts: minute, hour, day of the month, month, day of the week. <Txt size={12} color={t.ink2} style={MONO}>30 7 * * 1-5</Txt> is 07:30 on weekdays.</Txt>) : (
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setAdvanced(true)} style={({ pressed }) => [styles.advanced, pressed && kit.dim]}>
@@ -267,9 +268,9 @@ const styles = StyleSheet.create({
   noteBar: { width: 8 },
   noteText: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
   small: { justifyContent: 'center', minHeight: 34, paddingHorizontal: 12, paddingVertical: 5 },
-  inline: { borderWidth: 2, fontSize: 15, minHeight: 36, paddingHorizontal: 6, paddingVertical: 4, textAlign: 'center' },
+  inline: { borderWidth: 1, fontSize: 15, minHeight: 40, paddingHorizontal: 6, paddingVertical: 4, textAlign: 'center' },
   sentence: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, minHeight: 28 },
   under: { marginTop: 10 },
-  cron: { borderWidth: 2, flex: 1, fontSize: 15, minHeight: 40, minWidth: 180, paddingHorizontal: 10, paddingVertical: 6 },
+  cron: { borderWidth: 1, flex: 1, fontSize: 15, minHeight: 44, minWidth: 180, paddingHorizontal: 10, paddingVertical: 6 },
   advanced: { justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
 });

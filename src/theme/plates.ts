@@ -27,7 +27,9 @@ export type Plates = {
   composer: string;
   /** A plate's edge, a rule between rows. */
   line: string;
-  /** Text: main, secondary, quiet. */
+  /** The outline of something you work: a field, a switch that is off, a swatch, a step not reached. At least 3:1 on every surface. */
+  edge: string;
+  /** Text: main, secondary, quiet. Each is at least 4.5:1 on every surface, the field included. */
   ink: string;
   ink2: string;
   ink3: string;
@@ -35,7 +37,7 @@ export type Plates = {
   accent: string;
   accentText: string;
   accentInk: string;
-  /** Paint for the state of work. */
+  /** Paint for the state of work, also read as text: at least 4.5:1 on every surface. */
   good: string;
   warn: string;
   bad: string;
@@ -56,6 +58,7 @@ export const NIGHT: Plates = {
   control: '#222a35',
   composer: '#10141a',
   line: '#2a3441',
+  edge: '#697380',
   ink: '#eef1f5',
   ink2: '#a3aebb',
   ink3: '#8794a3',
@@ -81,16 +84,17 @@ export const DAY: Plates = {
   control: '#e6dece',
   composer: '#fffdf8',
   line: '#d3c9b6',
+  edge: '#837d71',
   ink: '#15191f',
   ink2: '#4a5360',
-  ink3: '#69727e',
-  accent: '#c46a00',
+  ink3: '#5b636e',
+  accent: '#b26000',
   accentText: '#975000',
   accentInk: '#ffffff',
-  good: '#1c8a4f',
-  warn: '#a06400',
-  bad: '#c5362a',
-  mine: '#c46a00',
+  good: '#177141',
+  warn: '#8b5700',
+  bad: '#b53227',
+  mine: '#b26000',
   mineInk: '#ffffff',
 };
 

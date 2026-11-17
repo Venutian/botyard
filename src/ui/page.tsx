@@ -64,8 +64,8 @@ export function Page({ title, note, onBack, onRefresh, error, loading, right, ch
       </View>
       <Title>{title}</Title>
       {note ? <Txt color={t.ink2}>{note}</Txt> : null}
-      {error ? <Txt size={14} color={t.bad}>{loading ? '' : 'Showing the last update. '}{error}</Txt> : null}
-      {loading && !error ? <ActivityIndicator color={t.accent} style={styles.spinner} /> : null}
+      {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{loading ? '' : 'Showing the last update. '}{error}</Txt> : null}
+      {loading && !error ? <ActivityIndicator color={t.accent} style={styles.spinner} accessibilityLabel="Loading" /> : null}
       {loading && error && onRefresh ? <Button label="Try again" onPress={onRefresh} /> : null}
       {children}
     </ScrollView>
@@ -93,7 +93,8 @@ export function Line({ title, detail, note, alert, right, tone, onPress, last, d
       {onPress ? <Icon name="chevron" size={16} color={t.ink3} /> : null}
     </View>
   );
-  return onPress ? <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && kit.dim}>{body}</Pressable> : body;
+  const spoken = [dot ? 'New' : '', title, detail, note, alert].filter(Boolean).join('. ');
+  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => pressed && kit.dim}>{body}</Pressable> : body;
 }
 
 /** A small word in colour: a state, a verdict, a flag. */
@@ -104,13 +105,13 @@ export function Tag({ text, color }: { text: string; color: string }) {
     const paint = color === t.good ? '#35d07f' : color === t.bad ? '#ff5b4d' : color === t.warn ? '#ffc61a' : color === t.accentText || color === t.accent ? '#9db8ff' : '#dfe3e8';
     return (
       <View style={[styles.tag, styles.painted, { backgroundColor: paint, borderColor: t.dark ? '#05070a' : t.ink }]}>
-        <Txt size={11} weight={700} color="#15181d">{text}</Txt>
+        <Txt size={12} weight={700} color="#15181d">{text}</Txt>
       </View>
     );
   }
   return (
     <View style={[styles.tag, { borderColor: color }]}>
-      <Txt size={11} weight={700} color={color}>{text}</Txt>
+      <Txt size={12} weight={700} color={color}>{text}</Txt>
     </View>
   );
 }
