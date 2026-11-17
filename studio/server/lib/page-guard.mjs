@@ -32,6 +32,11 @@ export function hostOf(header) {
   try { return new URL(text.includes('://') ? text : `http://${text}`).hostname.replace(/^\[(.*)\]$/, '$1') } catch { return '' }
 }
 
+/** Does the request name this computer in `Host`? (A bot's call has no page, so no Origin to check.) */
+export function ownHost(req, names = ownNames()) {
+  return names.has(hostOf(req.headers.host)) && !['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip', 'cf-ray', 'x-real-ip', 'x-botyard-edge'].some((h) => req.headers[h] !== undefined)
+}
+
 /** Is this request from the page this service served? */
 export function fromOwnPage(req, names = ownNames()) {
   if (!names.has(hostOf(req.headers.host))) return false
