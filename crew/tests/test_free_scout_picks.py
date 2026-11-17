@@ -13,23 +13,18 @@ spec.loader.exec_module(scout)
 
 
 class Picks(unittest.TestCase):
-    def test_groq_big_coding_models_are_tested(self):
-        self.assertTrue(scout.is_free('groq/openai/gpt-oss-120b'))
-        self.assertTrue(scout.is_free('groq/qwen/qwen3.8-27b'))
-
-    def test_groq_small_and_speech_models_are_not(self):
-        for model in ('groq/openai/gpt-oss-20b', 'groq/whisper-large-v3', 'groq/canopylabs/orpheus-v1-english',
-                      'groq/meta-llama/llama-prompt-guard-2-86m', 'groq/allam-2-7b'):
+    def test_groq_is_not_tested_its_minute_is_smaller_than_an_agents_instructions(self):
+        for model in ('groq/openai/gpt-oss-120b', 'groq/qwen/qwen3.8-27b', 'groq/openai/gpt-oss-20b', 'groq/whisper-large-v3'):
             self.assertFalse(scout.is_free(model), model)
 
     def test_cloudflare_newer_coding_models_are_tested(self):
-        for model in ('cloudflare-workers-ai/@cf/zai-org/glm-5.3', 'cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017',
-                      'cloudflare-workers-ai/@cf/qwen/qwen3.8-27b', 'cloudflare-workers-ai/@cf/zai-org/glm-4.7-flash',
+        for model in ('cloudflare-workers-ai/@cf/qwen/qwen3.8-27b', 'cloudflare-workers-ai/@cf/zai-org/glm-4.7-flash',
                       'cloudflare-workers-ai/@cf/openai/gpt-oss-120b'):
             self.assertTrue(scout.is_free(model), model)
 
-    def test_cloudflare_small_models_are_not(self):
-        for model in ('cloudflare-workers-ai/@cf/openai/gpt-oss-20b', 'cloudflare-workers-ai/@cf/meta/llama-guard-3-8b',
+    def test_cloudflare_small_and_paid_plan_models_are_not(self):
+        for model in ('cloudflare-workers-ai/@cf/zai-org/glm-5.3', 'cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017',
+                      'cloudflare-workers-ai/@cf/openai/gpt-oss-20b', 'cloudflare-workers-ai/@cf/meta/llama-guard-3-8b',
                       'cloudflare-workers-ai/@cf/ibm-granite/granite-4.0-h-micro'):
             self.assertFalse(scout.is_free(model), model)
 
