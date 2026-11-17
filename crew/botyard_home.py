@@ -21,6 +21,7 @@ No script writes a folder of this computer, a variable's name or a tool's path o
     python3 botyard_home.py crew_dir   prints one
 """
 import json
+import re
 import os
 import shutil
 import sys
@@ -202,9 +203,33 @@ def has_key(name, env=None):
         return True
     try:
         with open(os.path.join(user_home(env), '.local', 'share', 'opencode', 'auth.json'), encoding='utf8') as f:
-            return bool(json.load(f).get(name))
+            if json.load(f).get(name):
+                return True
     except (OSError, ValueError, AttributeError):
-        return False
+        pass
+    return name in configured_providers(env)
+
+
+def configured_providers(env=None):
+    """Providers set up by hand in OpenCode's own config (~/.config/opencode/opencode.json or .jsonc) with a key
+    in their options: a provider OpenCode does not list itself, reached by its OpenAI-compatible address."""
+    env = os.environ if env is None else env
+    folder = os.path.join(user_home(env), '.config', 'opencode')
+    for name in ('opencode.jsonc', 'opencode.json'):
+        try:
+            with open(os.path.join(folder, name), encoding='utf8') as f:
+                text = f.read()
+        except OSError:
+            continue
+        # JSONC: drop // comments that start a line or follow a value, but never inside a string.
+        text = re.sub(r'("(?:\\.|[^"\\])*")|//[^\n]*', lambda m: m.group(1) or '', text)
+        text = re.sub(r',(\s*[}\]])', r'\1', text)
+        try:
+            providers = json.loads(text).get('provider') or {}
+        except (ValueError, AttributeError):
+            return set()
+        return {p for p, v in providers.items() if isinstance(v, dict) and (v.get('options') or {}).get('apiKey')}
+    return set()
 
 
 # The variable each provider's own tools read its key from.
