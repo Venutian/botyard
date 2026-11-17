@@ -21,10 +21,25 @@ export function learnColours(bots = []) {
   }
 }
 
+const DARK = '#000000'
+const WHITE = '#ffffff'
+const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+
+/**
+ * The ink that reads best on a paint: black or white, whichever stands further from it. One of the
+ * two always reaches 4.58:1 (WCAG AA for text is 4.5); a fixed lightness cut-off gave white on mid
+ * tones such as pink and tan, where it fell to about 2:1. The dark ink is true black on purpose: the
+ * plates' near-black (#14161a) tops out at 4.25:1 on a mid red.
+ */
+export function inkOn(paint) {
+  const l = light(paint)
+  return ratio(l, light(DARK)) >= ratio(l, 1) ? DARK : WHITE
+}
+
 /** The bot's paint and the ink that reads on it, by its name as the crew lists it. */
 export function botColour(name) {
   const paint = paints.get(String(name || '')) || SPARE
-  return { paint, ink: light(paint) > 0.3 ? '#14161a' : '#ffffff' }
+  return { paint, ink: inkOn(paint) }
 }
 
 /** The same as an inline style, for a tag that draws itself from `--bot` and `--bot-ink`. */

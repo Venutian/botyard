@@ -657,7 +657,7 @@ export class Studio {
   _sheetKey(e) {
     {
       // A table row that opens something opens on Enter too.
-      if (e.key === 'Enter' && e.target.matches('tr[data-act]')) { e.preventDefault(); this._crewAct(e.target) || this._workAct(e.target) || this._connectAct(e.target) || this._shapeAct(e.target); return }
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')) { e.preventDefault(); this._crewAct(e.target) || this._workAct(e.target) || this._connectAct(e.target) || this._shapeAct(e.target); return }
       // Typing a number must not fire the map's own keys.
       if (e.target.closest('input,textarea,select')) e.stopPropagation()
       if (e.key === 'Escape' && !this.sheet.querySelector('.sheet-confirm').hidden) { e.stopPropagation(); this._confirmAsk(null); return }
@@ -1241,7 +1241,7 @@ setView(view) {
     const src = this.view?.faces?.[bot.id]
     return src
       ? `<img class="face" src="${esc(src)}" alt="" draggable="false">`
-      : `<i class="face plain" style="--hue:${hueOf(bot.name)}">${esc(bot.name.slice(0, 1))}</i>`
+      : `<i class="face plain" style="--hue:${hueOf(bot.name)};${botStyle(bot.name)}" aria-hidden="true">${esc(bot.name.slice(0, 1))}</i>`
   }
 
   /** Dress each bot of the crew in a roster as itself: its own colour and the kit its job wears. */
