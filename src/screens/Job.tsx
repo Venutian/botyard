@@ -7,6 +7,7 @@ import {
 import { Crew, handsOf, leadOf, Nav } from '../crew';
 import { BotBadge } from '../mascot/BotBadge';
 import { portraitOf } from '../mascot/look';
+import { readable } from '../theme/color';
 import { useLook } from '../theme/prefs';
 import { ask, tell } from '../ui/ask';
 import { Icon } from '../ui/Icon';
@@ -415,7 +416,7 @@ export function JobScreen({ id, connection, crew, nav }: { id: string; connectio
                 <View key={comment.id} style={styles.update}>
                   <BotBadge who={who} size={34} />
                   <View style={[styles.updateBody, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }]}>
-                    <Txt size={13} weight={700} color={who.colour}>{who.name}</Txt>
+                    <Txt size={13} weight={700} color={readable(who.colour, [t.card], 4.5, t.dark ? '#ffffff' : '#000000')}>{who.name}</Txt>
                     <Markdown text={comment.text} ink={t.ink} size={15} />
                   </View>
                 </View>

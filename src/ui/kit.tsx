@@ -176,6 +176,7 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
             key={option.id}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            hitSlop={{ top: 3, bottom: 3 }}
             onPress={() => {
               tap();
               onChange(option.id);

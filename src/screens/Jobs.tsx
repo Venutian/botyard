@@ -113,7 +113,7 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
 
 const styles = StyleSheet.create({
   search: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 12 },
-  input: { flex: 1, fontSize: 16, paddingVertical: 8 },
+  input: { flex: 1, fontSize: 16, minHeight: 44, paddingVertical: 8 },
   filters: { alignItems: 'center', flexDirection: 'row', gap: 4, minHeight: 44 },
   clear: { padding: 6 },
 });
