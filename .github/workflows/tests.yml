@@ -1,0 +1,51 @@
+# The tests on every push and pull request, so main is never only tested on one computer.
+# The same checks as the release's first job; nothing is built for a release and nothing is published.
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Tests and the release check
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Nothing personal, secret or heavy in the tree
+        run: node tools/release-check.mjs
+      - name: The service's tests
+        working-directory: studio
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm test
+      - name: The helper scripts' tests
+        working-directory: crew
+        run: python3 -m unittest discover -s tests
+      - name: The phone app's tests
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+      - name: From a fresh clone to a first job
+        working-directory: studio
+        run: |
+          git config --global user.name "Tests"
+          git config --global user.email "check@botyard.invalid"
+          node tools/fresh-clone-check.mjs
