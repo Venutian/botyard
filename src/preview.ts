@@ -443,7 +443,7 @@ const helperJobs = [
 ];
 const helpers = { available: true, state: 'on', why: '', jobs: helperJobs };
 /** The sample PC's load: Light by day, None at night, set from the phone or the page. */
-const pcLoad = { configured: true, levels: ['none', 'light', 'medium', 'heavy', 'full'], now: 'light', day: 'light', night: 'none', paused: 0, heldGb: 0, line: 'Light (day Light, night None)' };
+const pcLoad = { configured: true, levels: ['max', 'none', 'light', 'medium', 'heavy', 'full'], now: 'light', day: 'light', night: 'none', paused: 0, heldGb: 0, line: 'Light (day Light, night None)' };
 const loadNames: Record<string, string> = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' };
 function pcLoadLine() {
   if (pcLoad.now === 'full') return `Full: ${pcLoad.paused} job${pcLoad.paused === 1 ? '' : 's'} paused${pcLoad.heldGb ? `, ${pcLoad.heldGb} GB held` : ''}`;

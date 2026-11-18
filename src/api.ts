@@ -621,7 +621,7 @@ export const getHelpers = (c: Connection) => call<Helpers>(c, '/helpers');
 export const helperAction = (c: Connection, action: 'on' | 'off' | 'run', name?: string) => call<Helpers>(c, '/helpers', 'POST', name ? { action, name } : { action });
 
 /** How hard the crew may work the PC. Hidden when the PC names no throttle tool (`configured: false`). */
-export type LoadLevel = 'none' | 'light' | 'medium' | 'heavy' | 'full';
+export type LoadLevel = 'max' | 'none' | 'light' | 'medium' | 'heavy' | 'full';
 export type PcLoad = { configured: boolean; levels: LoadLevel[]; now?: LoadLevel | ''; day?: LoadLevel | ''; night?: LoadLevel | ''; paused?: number; heldGb?: number; line?: string };
 export const getPcLoad = (c: Connection) => call<PcLoad>(c, '/throttle');
 /** Set as the owner: the PC writes the change in its log as made from the phone. */

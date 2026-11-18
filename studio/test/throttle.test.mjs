@@ -1,5 +1,5 @@
 /**
- * The PC load control: the route takes five level names and nothing else, reads the tool's real `show --json`,
+ * The PC load control: the route takes six level names and nothing else, reads the tool's real `show --json`,
  * is hidden when the yard names no tool, tells the tool the change is the owner's, and refuses a bot's run.
  */
 import test from 'node:test'
@@ -33,7 +33,7 @@ function fake(show = JSON.stringify({ day: 'heavy', night: 'heavy', now: 'heavy'
   return { tool, dir, calls, sets: () => calls().filter((c) => !c.startsWith('show')) }
 }
 
-test('only the five level names reach the tool; anything else is refused before it runs', async () => {
+test('only the six level names reach the tool; anything else is refused before it runs', async () => {
   const f = fake()
   const marker = path.join(f.dir, 'ran')
   for (const bad of ['', 'FULL', `heavy; touch ${marker}`, `$(touch ${marker})`, '--day', 'light --night', '--help', 'none\nfull', 5, null, ['heavy'], {}]) {
@@ -52,7 +52,7 @@ test('each valid level runs the tool with plain arguments, day and night when as
   for (const level of LEVELS) assert.equal((await throttleAct({ level }, { tool: f.tool, setBy: 'owner (page)' }))[0], 200)
   await throttleAct({ level: 'light', scope: 'night' }, { tool: f.tool, setBy: 'owner (phone)' })
   await throttleAct({ level: 'none', scope: 'day' }, { tool: f.tool, setBy: 'owner (page)' })
-  assert.deepEqual(f.sets(), ['none|owner (page)', 'light|owner (page)', 'medium|owner (page)', 'heavy|owner (page)', 'full|owner (page)', 'light --night|owner (phone)', 'none --day|owner (page)'])
+  assert.deepEqual(f.sets(), ['max|owner (page)', 'none|owner (page)', 'light|owner (page)', 'medium|owner (page)', 'heavy|owner (page)', 'full|owner (page)', 'light --night|owner (phone)', 'none --day|owner (page)'])
 })
 
 test('the tool never runs looking like a bot run, even when the server was started from one', async () => {
@@ -124,11 +124,18 @@ test('a process is known as a bot run by its own variables or a parent\'s, read 
   assert.equal(botRunOf('', { proc }), '')
 })
 
+test('Max comes first, before None, and its hint says the weekly Claude limit is lifted', () => {
+  assert.deepEqual(LEVELS, ['max', 'none', 'light', 'medium', 'heavy', 'full'])
+  const html = throttleHtml({ configured: true, now: 'light', day: 'light', night: 'light', line: '' })
+  assert.ok(html.indexOf('data-level="max"') < html.indexOf('data-level="none"'))
+  assert.match(html, /title="Max: no slowdown and no weekly Claude limit; the week may run out early"/)
+})
+
 test('the page shows each level as the chosen one, with names for a screen reader', () => {
   for (const now of LEVELS) {
     const html = throttleHtml({ configured: true, now, day: now, night: now, line: stateLine({ now, paused: 0 }) })
     assert.match(html, /role="radiogroup"/)
-    assert.equal((html.match(/role="radio"/g) || []).length, 5)
+    assert.equal((html.match(/role="radio"/g) || []).length, 6)
     assert.equal((html.match(/aria-checked="true"/g) || []).length, 1)
     assert.match(html, new RegExp(`aria-checked="true"[^>]*data-level="${now}"`))
   }

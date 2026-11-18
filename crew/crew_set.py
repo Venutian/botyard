@@ -360,6 +360,9 @@ class CrewSet:
             if spec.get('checker') or spec['role'] == 'checker':
                 # A checker never judges a build on the model family that made it.
                 config['env']['BOTYARD_CHECKER'] = plain('1')
+            if spec.get('freeModels') == 'light':
+                # A scout takes the light free models first, leaving the strong ones to builds and checks.
+                config['env']['BOTYARD_FREE_TIER'] = plain('light')
         for name in spec.get('variables') or []:
             value = (self.crew.get('variables') or {}).get(name)
             if value is not None:
