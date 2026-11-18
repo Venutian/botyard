@@ -167,7 +167,23 @@ def brain_denials(env=None):
     return {'read': deny, 'glob': deny, 'grep': deny, 'list': deny, 'edit': {**deny, f'{root}/*': 'deny', f'*{name}/*': 'deny'}, 'bash': shell, 'external_directory': outside}
 
 
-def write_for(bot, adapter, skills=None, want=None):
+def read_only(perm, reads):
+    """The OpenCode permissions with the bot's `reads` folders opened for reading: outside its own folder OpenCode asks,
+    and an unattended run refuses, so a bot that judges a product could not open the product (18 Nov: the scout's
+    judge job read nothing and ended, every 30 minutes). Its edit tool stays refused there, and the owner's notes stay
+    closed whatever `reads` says."""
+    folders = [os.path.realpath(os.path.expanduser(f)).rstrip('/') for f in (reads or []) if isinstance(f, str) and f.strip()]
+    if not folders:
+        return perm
+    perm = {k: (dict(v) if isinstance(v, dict) else v) for k, v in perm.items()}
+    closed = {k: v for k, v in (perm.get('external_directory') or {}).items() if v == 'deny'}
+    outside = {'*': 'ask', **{p: 'allow' for f in folders for p in (f, f'{f}/*')}, **closed}
+    edit = perm.get('edit') if isinstance(perm.get('edit'), dict) else {'*': 'allow'}
+    edit = {**edit, **{f'{f}/*': 'deny' for f in folders}, **{k: v for k, v in edit.items() if v == 'deny'}}
+    return {**perm, 'external_directory': outside, 'edit': edit}
+
+
+def write_for(bot, adapter, skills=None, want=None, reads=None):
     """Writes the bot's skill file and returns the env entries that point its runs at it. `want` is the
     bot's own list of skill names, from its settings file; with none it is asked from the files. {} for
     a bot that sees every skill, or an AI that does not read ~/.claude/skills."""
@@ -195,7 +211,7 @@ def write_for(bot, adapter, skills=None, want=None):
     # OpenCode: hide every skill but the set; add the folders of the plugin skills it needs.
     folders = sorted({os.path.dirname(s['dir']) for s in skills if s['kind'] == 'plugin' and s['name'] in want})
     config = {'$schema': 'https://opencode.ai/config.json',
-              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}, **brain_denials()}}
+              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}, **read_only(brain_denials(), reads)}}
     if folders:
         config['skills'] = {'paths': folders}
     path = f'{OUT}/{_slug(bot)}.opencode.json'
