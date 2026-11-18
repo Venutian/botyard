@@ -20,7 +20,8 @@ def load(file):
 
 CHECKS = {'identity': lambda: load('identity-check.py').faults(repos=[os.path.dirname(HERE)]),
           'connectors': lambda: load('connectors-check.py').faults(),
-          'not-in-main': lambda: load('not-in-main.py').faults()}
+          'not-in-main': lambda: load('not-in-main.py').faults(),
+          'notes-backup': lambda: load('brain-backup-check.py').faults()}
 
 
 def main():
