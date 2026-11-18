@@ -50,6 +50,22 @@ class OwnerGuard(unittest.TestCase):
         # Sending around the script is still refused, as before.
         self.assertIsNotNone(bash('curl -X POST https://api.resend.com/emails -d @mail.json'))
 
+    def test_a_command_the_studio_closed_is_refused_and_reading_it_is_not(self):
+        # A studio names commands only its owner runs in its crew/own/guard.json, as patterns, with what a bot is told.
+        import re
+        saved = guard.closed_commands
+        guard.closed_commands = lambda: [(re.compile(r'(?:^|[;&|(]\s*)(?:\S*/)?pc-level\s+(?:none|light|medium|heavy|full)\b'), 'Refused: the PC level is the owner\'s.')]
+        try:
+            for command in ['pc-level full', 'pc-level none --day', 'cd x && pc-level full --help 2>&1 | head -3']:
+                self.assertIn("owner's", bash(command) or '', command)
+            for command in ['pc-level show', 'pc-level --help', 'grep pc-level notes.md']:
+                self.assertIsNone(bash(command), command)
+        finally:
+            guard.closed_commands = saved
+
+    def test_a_studio_without_closed_commands_refuses_nothing_more(self):
+        self.assertIsInstance(guard.closed_commands(), list)
+
     def test_stand_ins_for_the_free_bots_refuse_the_same(self):
         stand_in = os.path.join(CREW, 'agy-bin', 'eas')
         refused = subprocess.run([stand_in, 'submit', '-p', 'ios'], capture_output=True, text=True)
