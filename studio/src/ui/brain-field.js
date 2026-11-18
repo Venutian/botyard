@@ -18,8 +18,9 @@ import { RADIUS, brainDust, fieldLayout } from './brain-layout.js'
 /** Light inks on the dark field, one per area, in the order the areas come. */
 export const INKS = ['#6ea8ff', '#46f0cc', '#b98cff', '#ff9a5c', '#ff6fcf', '#9be564', '#ffd166', '#ff7a7a', '#6fd8ff', '#e7c99a']
 /** Ink on the pale day window: the same hues, deep enough to read on it (at least 3:1). */
-export const DAY_INKS = ['#1f5fbf', '#0b7a63', '#7a3fd1', '#b0461a', '#a3127a', '#4a7512', '#8a6000', '#b8261b', '#20698c', '#6b5838']
-const DAY_VOID = '#eef2f7'
+/** Ink on the mid-tone day window (#b9c2ce): each mark at least 3:1 on it. */
+export const DAY_INKS = ['#0d3f8f', '#05543f', '#4d1f9e', '#7e2c06', '#7a0a5a', '#2e4f05', '#5c3f00', '#8a130a', '#0b4766', '#463620']
+const DAY_VOID = '#b9c2ce'
 const AMBER = new THREE.Color('#e08a00')
 const ASH = new THREE.Color('#5d6676')
 const WHITE = new THREE.Color('#ffffff')
@@ -56,10 +57,10 @@ void main() {
   float ring = vRing * smoothstep(0.08, 0.0, abs(d - 0.78)) * 0.7;
   if (day > 0.5) {
     // By day a neuron is ink with a soft halo of its own colour, laid over the pale window.
-    float dot = smoothstep(0.34, 0.24, d);
-    float glow = exp(-d * d * 3.2) * 0.42;
+    float dot = smoothstep(0.40, 0.30, d);
+    float glow = exp(-d * d * 4.0) * 0.30;
     float a = clamp((dot + glow + ring) * min(vGlow, 1.2), 0.0, 1.0);
-    gl_FragColor = vec4(mix(vColor, vColor * 0.7, dot), a);
+    gl_FragColor = vec4(vColor, a);
   } else {
     vec3 c = mix(vColor, vec3(1.0), core * 0.55);
     gl_FragColor = vec4(c * (core + halo + ring) * vGlow, 1.0);
@@ -67,12 +68,13 @@ void main() {
 }`
 const DUST_FRAG = `
 varying vec3 vTint;
+varying float vKeep;
 uniform float strength;
 uniform float day;
 void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   if (d > 1.0) discard;
-  if (day > 0.5) gl_FragColor = vec4(vTint * 0.5, (1.0 - d) * 0.9);
+  if (day > 0.5) { if (vKeep > 0.22) discard; gl_FragColor = vec4(vec3(0.20, 0.25, 0.36), (1.0 - d * d) * 0.38); }
   else gl_FragColor = vec4(vTint * (1.0 - d) * strength, 1.0);
 }`
 
@@ -191,9 +193,10 @@ export class BrainField {
       tint.set([c.r, c.g, c.b], i)
     }
     geo.setAttribute('tint', new THREE.BufferAttribute(tint, 3))
+    geo.setAttribute('keep', new THREE.BufferAttribute(Float32Array.from({ length: dust.length / 3 }, (_, i) => ((i * 0.6180339887) % 1)), 1))
     const mat = new THREE.ShaderMaterial({
       uniforms: { strength: { value: 0.5 }, scale: { value: 300 }, day: this.day },
-      vertexShader: 'attribute vec3 tint; varying vec3 vTint; uniform float scale; void main(){ vTint = tint; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = 1.7 * scale / -mv.z; gl_Position = projectionMatrix * mv; }',
+      vertexShader: 'attribute vec3 tint; attribute float keep; varying vec3 vTint; varying float vKeep; uniform float scale; uniform float day; void main(){ vTint = tint; vKeep = keep; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = (1.7 + day * 1.6) * scale / -mv.z; gl_Position = projectionMatrix * mv; }',
       fragmentShader: DUST_FRAG, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
     })
     this.dust = new THREE.Points(geo, mat)

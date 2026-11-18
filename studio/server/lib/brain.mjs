@@ -88,6 +88,42 @@ const DAY = /^(\d{4}-\d{2}-\d{2})/
 
 const words = (s) => String(s).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '')
 
+/**
+ * The categories, in the order the view shows them. `folders`: a note in such a folder is in it, whatever its
+ * tags. `words`: tags or area words that point a work note at it. `kind`: a note of that type with no matching
+ * word lands here. Every note ends in exactly one.
+ */
+export const CATEGORIES = [
+  { id: 'career', name: 'Work and career', personal: true, folders: ['career', 'work'] },
+  { id: 'money', name: 'Money and investing', personal: true, folders: ['money', 'investments', 'finance'] },
+  { id: 'life', name: 'Life', personal: true, folders: ['life', 'health', 'family', 'personal', 'private'] },
+  { id: 'products', name: 'Products', words: ['product', 'products', 'projects', 'apps', 'games', 'game', 'website', 'web', 'design', 'ux', 'map', 'monetization', 'shop', 'store', 'brand', 'copy', 'writing', 'quality', 'releases', 'art', 'assets'] },
+  { id: 'crew', name: 'Crew and process', words: ['crew', 'bots', 'agents', 'roles', 'rulings', 'reviews', 'priorities', 'tracks', 'approvals', 'safety', 'schedule', 'process', 'usage-limits', 'throttle', 'models', 'claude', 'codex', 'gemini', 'free-builder', 'merge', 'repos', 'cleanup', 'working-style', 'answers', 'money-ideas', 'money'] },
+  { id: 'tools', name: 'Tools', words: ['tools', 'tooling', 'ai-tools', 'paperclip', 'atrium', 'networking', 'remote-access', 'cloudflare', 'hardware', 'github', 'git', 'local-ai', 'testing', 'memory', 'second-brain', 'engram', 'backup', 'privacy', 'studio', 'botyard', 'ngen-studio'] },
+  { id: 'decisions', name: 'Decisions', kind: 'decision' },
+  { id: 'preferences', name: 'Preferences', kind: 'preference' },
+  { id: 'inbox', name: 'Inbox, to review', folders: ['inbox'] },
+  { id: 'other', name: 'Other' },
+]
+
+/** The one category a note is in. */
+export function categoryOf(n) {
+  const folder = words(n.folder || '')
+  const byFolder = CATEGORIES.find((c) => c.folders?.includes(folder))
+  if (byFolder) return byFolder.id
+  if (n.private) return 'life'
+  const said = [...new Set([n.areaWord, ...n.tags].filter(Boolean))]
+  let best = null
+  let most = 0
+  for (const c of CATEGORIES) {
+    if (!c.words) continue
+    const hits = said.filter((w) => c.words.includes(w)).length
+    if (hits > most) { best = c; most = hits }
+  }
+  if (best) return best.id
+  return CATEGORIES.find((c) => c.kind === n.kind)?.id || 'other'
+}
+
 let cache = { key: '', value: null }
 
 /**
@@ -131,23 +167,11 @@ export function readBrain(folder = brainFolder()) {
       words: body.split(/\s+/).filter(Boolean).length,
     })
   }
-  // Areas: personal folders first, then the tags and area words most notes share (up to nine).
-  const count = new Map()
-  for (const n of raw) for (const t of new Set([n.areaWord, ...n.tags].filter(Boolean))) if (!n.folder || KINDS_FOLDERS.has(n.folder)) count.set(t, (count.get(t) || 0) + 1)
-  const folders = [...new Set(raw.filter((n) => n.folder && !KINDS_FOLDERS.has(n.folder)).map((n) => words(n.folder)))]
-  const common = [...count.entries()].filter(([t, c]) => c >= 2 && !folders.includes(t)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  // Greedy: the commonest tag takes its notes, the next takes what is left, so each band holds a real share.
+  // Categories, not projects: what a note is about. A personal folder is its own category; a work note goes
+  // to the category most of its tags and its area word point at; failing that, to Decisions or Preferences by
+  // its type. Project names stay as tags (the search finds them). See CATEGORIES.
   const areaOf = new Map()
-  const chosen = []
-  for (const n of raw) if (n.folder && !KINDS_FOLDERS.has(n.folder)) areaOf.set(n.id, words(n.folder))
-  for (const [tag] of common) {
-    if (chosen.length >= 9) break
-    const takers = raw.filter((n) => !areaOf.has(n.id) && (n.areaWord === tag || n.tags.includes(tag)))
-    if (takers.length < 2) continue
-    chosen.push(tag)
-    for (const n of takers) areaOf.set(n.id, tag)
-  }
-  for (const n of raw) if (!areaOf.has(n.id)) areaOf.set(n.id, n.folder === 'inbox' ? 'inbox' : 'other')
+  for (const n of raw) areaOf.set(n.id, categoryOf(n))
   const ids = new Map(raw.map((n) => [n.id.toLowerCase(), n.id]))
   const resolve = (t) => ids.get(String(t).toLowerCase()) || ids.get(path.basename(String(t)).toLowerCase())
   const notes = raw.map(({ areaWord, ...n }) => ({
@@ -162,8 +186,7 @@ export function readBrain(folder = brainFolder()) {
   const byId = new Map(notes.map((n) => [n.id, n]))
   for (const n of notes) for (const s of n.supersedes) { const old = byId.get(s); if (old && !old.supersededBy.includes(n.id)) old.supersededBy.push(n.id) }
   for (const n of notes) if (n.supersededBy.length && n.status === 'accepted') n.status = 'superseded'
-  const areaIds = [...folders, ...chosen, ...['inbox', 'other'].filter((a) => notes.some((n) => n.area === a))]
-  const areas = areaIds.map((id) => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '), count: notes.filter((n) => n.area === id).length, private: folders.includes(id) && notes.filter((n) => n.area === id).every((n) => n.private) }))
+  const areas = CATEGORIES.filter((c) => notes.some((n) => n.area === c.id)).map((c) => ({ id: c.id, name: c.name, count: notes.filter((n) => n.area === c.id).length, private: Boolean(c.personal) }))
   const dates = notes.map((n) => n.date).sort()
   const value = { on: true, folder, name: path.basename(folder), notes: notes.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), areas, from: dates[0] || '', to: dates.at(-1) || '' }
   cache = { key, value }
