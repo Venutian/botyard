@@ -43,7 +43,8 @@ const VIEW_WAIT_MS = 25_000
  * The pictures. `view` is the word given to the page's own `show`; `clicks` are the controls to
  * click in turn when it has none (each a list of selectors, the first that is there is used; a
  * selector may end in ` >> words` to mean the one whose text holds those words);
- * `needs` is how much more text the view must put on the page before it counts as filled.
+ * `atLeast` (with `fewer`) is how much text a view that shows little must say, 300 when not given;
+ * `size` is the window, 1440 by 900 when not given; `needs` is how much more text the view must put on the page before it counts as filled.
  */
 export const SHOTS = [
   { name: 'crewmap', file: 'crew-map.png', what: 'the crew map: who leads, who does what, who tells whom', view: 'crew', clicks: [], needs: 0 },
@@ -55,6 +56,12 @@ export const SHOTS = [
   { name: 'crew', file: 'crew-editor.png', what: 'the crew editor: one bot\'s settings', view: 'bot-edit', clicks: [['[data-tab="bots"]'], ['[data-act="open-bot"] >> Hands out the work', '[data-act="open-bot"]'], ['[data-act="bot-edit"]']], needs: 150 },
   { name: 'rules', file: 'instructions.png', what: 'a bot\'s instructions, with their earlier versions', view: 'bot-rules', clicks: [['[data-tab="bots"]'], ['[data-act="open-bot"] >> Hands out the work', '[data-act="open-bot"]'], ['[data-act="bot-rules"]']], needs: 150 },
   { name: 'setup', file: 'setup.png', what: 'Setup: what is signed in and how to fix what is not', view: 'setup', clicks: [['[data-tab="setup"]']], needs: 200 },
+  // Senth, the Brain view, on the demo yard's made-up vault: at 1440 and at a phone's 375, day and night.
+  { name: 'senth', file: 'senth.png', what: 'Senth: the notes vault as strata of areas over time', view: 'senth', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200 },
+  { name: 'senth-note', file: 'senth-note.png', what: 'Senth with a note open on the side', view: 'senth-note', clicks: [['[data-home="brain"]'], ['.bm-n[data-note*="release-when-green"]']], needs: 0, fewer: true, pause: 1500 },
+  { name: 'senth-night', file: 'senth-night.png', what: 'Senth after dark', view: 'senth-night', clicks: [['[data-act="shift"]'], ['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800 },
+  { name: 'senth-375', file: 'senth-phone.png', what: 'Senth at a phone\'s width', view: 'senth-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
+  { name: 'senth-375-night', file: 'senth-phone-night.png', what: 'Senth at a phone\'s width after dark', view: 'senth-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },
   // Night is switched to on the page, as a person would: the map's light follows the switch.
   { name: 'night', file: 'map-night.png', what: 'the map at night, with the work in hand open', view: 'night', clicks: [['[data-act="shift"]'], ['[data-tab="work"]']], needs: 200, pause: 3500 },
   // The phone app is another program (`npm run web` in the top folder): taken only when its address is given.
@@ -128,8 +135,8 @@ async function startBrowser(file) {
 }
 
 /** One page of the browser, at the picture's size. */
-async function openPage(browser, { plates, phone }) {
-  const [width, height] = phone ? [390, 844] : [WIDTH, HEIGHT]
+async function openPage(browser, { plates, phone, size }) {
+  const [width, height] = size || (phone ? [390, 844] : [WIDTH, HEIGHT])
   const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true })
   const cdp = (method, params) => browser.send(method, params, sessionId)
@@ -176,7 +183,7 @@ const CLICK = (selectors) => `(() => {
   for (const selector of ${JSON.stringify(selectors)}) {
     const [css, words] = selector.split(' >> ')
     const el = [...document.querySelectorAll(css)].find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (!words || (e.innerText || '').toLowerCase().includes(words.toLowerCase())) })
-    if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return selector }
+    if (el) { el.scrollIntoView({ block: 'center' }); if (el.click) el.click(); else el.dispatchEvent(new MouseEvent('click', { bubbles: true })); return selector }
   }
   return ''
 })()`
@@ -212,7 +219,7 @@ async function take(browser, base, shot, outDir) {
     }
     if (shot.pause) await sleep(shot.pause)
     // A view that replaces the home's own words (the yard after the crew map) says less, not more: it only has to say something.
-    const look = await settled(page, { until: (now) => (shot.fewer ? now.text > 300 : now.text >= before + shot.needs), why: `"${shot.what}"` }).catch((err) => { throw new Error(`${err.message}: the view is empty or still loading`) })
+    const look = await settled(page, { until: (now) => (shot.fewer ? now.text > (shot.atLeast ?? 300) : now.text >= before + shot.needs), why: `"${shot.what}"` }).catch((err) => { throw new Error(`${err.message}: the view is empty or still loading`) })
     if (look.inTheWay) throw new Error(`a sheet is in the way ("${look.inTheWay}…")`)
     const { data } = await page.cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     const bytes = Buffer.from(data, 'base64')

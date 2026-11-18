@@ -47,6 +47,7 @@ import { liveSessions as readLiveSessions } from './lib/sessions.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
+import { brainRoute } from './lib/brain.mjs'
 
 const MIN_TOKEN = 32
 const MAX_BODY = 16 * 1024
@@ -603,6 +604,8 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (pathname === '/v1/runs' && req.method === 'GET') return send(res, 200, await runList({ bot: q('bot'), status: q('status'), page: page(), ...options }))
       if (run && req.method === 'GET') return send(res, 200, await runDetail(run[1], options))
       if (pathname === '/v1/activity' && req.method === 'GET') return send(res, 200, await activityPage({ page: page(), bot: q('bot'), ...options }))
+      // The owner's notes, read-only (lib/brain.mjs); the door's key is already checked, a bot's run is refused.
+      if (await brainRoute(req, res, { pathname, query: searchParams, base: '/v1/brain', send, readBody, local: false, botBehind })) return
       if (pathname === '/v1/spend' && req.method === 'GET') return send(res, 200, await moneyView({ folder: crew, ...options }))
       if (pathname === '/v1/improvements' && req.method === 'GET') return send(res, 200, improvementsView({ folder: crew, lead: (await leadOf(options).catch(() => null))?.name || '' }))
       const finding = pathname.match(/^\/v1\/improvements\/(IMP-\d{1,6})$/)

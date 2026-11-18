@@ -706,3 +706,19 @@ export const getTrayQuestions = (c: Connection, which: { job?: string; bot?: str
 export const holdInTray = (c: Connection, item: TrayHold) => call<{ items: TrayItem[] }>(c, '/tray', 'POST', { action: 'hold', item });
 export const dropFromTray = (c: Connection, key: string) => call<{ items: TrayItem[] }>(c, '/tray', 'POST', { action: 'drop', key });
 export const sendTrayNow = (c: Connection) => call<{ sent: number; failed: number; items: TrayItem[] }>(c, '/tray', 'POST', { action: 'send' });
+
+// ── Senth: the owner's notes vault, read-only ─────────────────────────────────────────
+
+export type BrainNote = {
+  id: string; path: string; title: string; date: string; folder: string;
+  kind: 'decision' | 'preference' | 'fact' | 'inbox' | 'note';
+  status: string; supersedes: string[]; supersededBy: string[]; tags: string[];
+  private: boolean; imported: boolean; links: string[]; excerpt: string; words: number;
+  area: string; pinned: boolean;
+};
+export type BrainArea = { id: string; name: string; count: number; private: boolean };
+export type Brain = { on: true; folder: string; name: string; notes: BrainNote[]; areas: BrainArea[]; from: string; to: string } | { on: false; why: string };
+export type BrainNoteText = BrainNote & { text: string; meta: Record<string, unknown> };
+/** The notes, without their text: what the Senth screen draws. Read-only; editing stays in the files. */
+export const getBrain = (c: Connection) => call<Brain>(c, '/brain');
+export const getBrainNote = (c: Connection, id: string) => call<BrainNoteText>(c, `/brain/note?id=${encodeURIComponent(id)}`);

@@ -1,6 +1,7 @@
 import './studio.css'
 import './plates.css'
 import './crew-map.css'
+import './brain-map.css'
 import './marks.js'
 import './marks-change.js'
 import './marks-page.js'
@@ -8,6 +9,7 @@ import './marks-record.js'
 import './tray.js'
 import './tracks.css'
 import { CrewMap } from './crew-map.js'
+import { BrainMap } from './brain-map.js'
 import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
@@ -254,7 +256,7 @@ const TEMPLATE = `
 <header class="studio-top panel">
   <strong class="mark">Botyard</strong>
   <p class="studio-state"></p>
-  <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button></div>
+  <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button><button type="button" data-home="brain" aria-pressed="false" title="Senth: your notes, decisions and preferences">Senth</button></div>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
   <div class="ld" data-part="load"></div>
   <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -428,8 +430,9 @@ export class Studio {
       // The owner's plate and the badge show one number: when the map's differs, the cards are read again.
       needsSeen: (n) => { if (this._needs && n !== waitingCount(this._needs) && Date.now() - (this._needsAt || 0) > 2000) this._loadNeeds() },
     })
+    this.brainMap = new BrainMap(this.root)
     let home = 'map'
-    try { home = localStorage.getItem('botyard.home') === 'yard' ? 'yard' : 'map' } catch { /* storage off */ }
+    try { home = ['yard', 'brain'].includes(localStorage.getItem('botyard.home')) ? localStorage.getItem('botyard.home') : 'map' } catch { /* storage off */ }
     this.setHome(home, { quiet: true })
   }
 
@@ -438,10 +441,12 @@ export class Studio {
    * the map is the home, so the page draws nothing while the owner only looks.
    */
   setHome(mode) {
-    this.home = mode === 'yard' ? 'yard' : 'map'
-    this.root.classList.toggle('map-home', this.home === 'map')
+    this.home = mode === 'yard' || mode === 'brain' ? mode : 'map'
+    // Senth stands where the map stands: the yard is not drawn behind either.
+    this.root.classList.toggle('map-home', this.home !== 'yard')
     for (const b of this.top.querySelectorAll('[data-home]')) b.setAttribute('aria-pressed', String(b.dataset.home === this.home))
     this.crewMap.show(this.home === 'map')
+    this.brainMap.show(this.home === 'brain')
     try { localStorage.setItem('botyard.home', this.home) } catch { /* storage off */ }
     this.actions.homeChanged?.(this.home)
   }

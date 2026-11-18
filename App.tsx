@@ -31,6 +31,7 @@ import { TracksScreen } from './src/screens/Tracks';
 import { TripScreen } from './src/screens/Trip';
 import { JobScreen, NewJobScreen } from './src/screens/Job';
 import { ImprovementsScreen } from './src/screens/Improvements';
+import { SenthNoteScreen, SenthScreen } from './src/screens/Senth';
 import { ModelsScreen } from './src/screens/Models';
 import { BotsScreen } from './src/screens/Crew';
 import { JobsScreen } from './src/screens/Jobs';
@@ -154,6 +155,8 @@ function Pushed({ route, connection, crew, nav }: { route: Route; connection: Co
       {route.name === 'connector' ? <ConnectorScreen id={route.id} connection={connection} nav={nav} /> : null}
       {route.name === 'models' ? <ModelsScreen connection={connection} nav={nav} /> : null}
       {route.name === 'improvements' ? <ImprovementsScreen connection={connection} nav={nav} /> : null}
+      {route.name === 'senth' ? <SenthScreen connection={connection} nav={nav} /> : null}
+      {route.name === 'senthNote' ? <SenthNoteScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
       {route.name === 'devices' ? <DevicesScreen connection={connection} nav={nav} /> : null}
       {route.name === 'new' ? <NewJobScreen connection={connection} crew={crew} nav={nav} /> : null}
       {route.name === 'bot' ? <BotScreen key={route.botId} botId={route.botId} connection={connection} crew={crew} nav={nav} /> : null}
