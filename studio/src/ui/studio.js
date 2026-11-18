@@ -1,6 +1,7 @@
 import './studio.css'
 import './plates.css'
 import './crew-map.css'
+import './marks.js'
 import { CrewMap } from './crew-map.js'
 import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
@@ -264,6 +265,7 @@ const TEMPLATE = `
     <span class="portrait"></span>
     <i class="light"></i>
     <div class="who"><strong></strong><span></span></div>
+    <button class="btn ghost" data-act="review" data-part="review" title="Mark exact places in what this bot said or made, and send every mark at once">Review</button>
     <button class="btn ghost" data-act="bot-page" title="Engine, runs, cost and instructions">Page</button>
     <button class="btn ghost" data-act="pause"></button>
     <button class="btn icon ghost" data-act="close" title="Close (Esc)">${CLOSE_ICON}</button>
@@ -2373,6 +2375,7 @@ setView(view) {
     if (!this.on) return
     if (this.chatBot !== botId) {
       this.chatBot = botId
+      this.chat.querySelector('[data-part="review"]').dataset.bot = botId
       this._last.talk = null
       this.talk.innerHTML = '<p class="none">Reading the conversation…</p>'
       this.input.value = ''

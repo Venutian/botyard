@@ -23,6 +23,7 @@ import { addTrigger, createRoutine, patchRoutine, patchTrigger, removeRoutine, r
 import { createCompany, isSetUp, patchCompany } from './studio.mjs'
 import { cancelRun, whoHolds } from './runner.mjs'
 import { TRACK_WRITES, readTracks } from './tracks.mjs'
+import { MARK_WRITES, readMarks } from './marks.mjs'
 import { Refused, addComment, createCard, createJob, openChat, patchJob, patchProject, putAgent, resetSessions, putDocument, restoreDocument, setPaused, settleCard, wake } from './write.mjs'
 import { runLogsDir } from './names.mjs'
 
@@ -88,6 +89,8 @@ const WRITES = [
   }),
   // Tracks: saved ways for work to move, requests on them and their trips (docs/tracks.md).
   ...TRACK_WRITES,
+  // Reviews: the owner's marks on a piece of work, sent as one message (marks.mjs).
+  ...MARK_WRITES,
 ]
 
 /** A run's log, a piece at a time, as `{ content, nextOffset }`. */
@@ -163,6 +166,8 @@ function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, 
       if (log) return { status: 200, body: runLog(store, log[1], at.searchParams, ctx) }
       const track = readTracks(store, where, Object.fromEntries(at.searchParams))
       if (track) return track
+      const marked = readMarks(store, where, Object.fromEntries(at.searchParams))
+      if (marked) return marked
       const extra = more(store, where, Object.fromEntries(at.searchParams), ctx)
       if (extra) return extra
       return handle(store, 'GET', url, { now })
