@@ -378,3 +378,32 @@ test('every review is kept, newest first, per job and per project, and shown rea
   assert.match(html, /<img src="\/api\/studio\/file\?id=/)
   assert.match(html, /Comment: Fine/)
 })
+
+test('a gate held in the tray is answered through the gate: a no needs its note and sends the work back with it', async () => {
+  const { holdItem, sendTray, waitingQuestions } = await import('../server/lib/tray.mjs')
+  const { store, dataDir } = yard()
+  const io = {
+    startKeeper(specFile) {
+      const spec = JSON.parse(fs.readFileSync(specFile, 'utf8'))
+      fs.writeFileSync(spec.env.BOTYARD_STEP_OUT, JSON.stringify({ leaves: { text: `draft(${spec.env.BOTYARD_IN_NOTE || ''})` } }))
+      fs.writeFileSync(spec.logFile, '')
+      fs.writeFileSync(spec.resultFile, JSON.stringify({ exitCode: 0, timedOut: false }))
+      return 1
+    },
+    alive: () => false,
+    inMain: async () => true,
+  }
+  saveTrack(store, 'co', { key: 'write', delivers: 'nothing', steps: [{ id: 'draft', kind: 'script', command: 'draft', leaves: ['text'] }, { id: 'look', kind: 'gate', needs: ['text'] }], lines: [{ from: 'draft', to: 'look', on: 'always' }] }, { actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'write', title: 'A page' }, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 })
+  const fetcher = engineFetch(store, dataDir)
+  const file = path.join(dataDir, 'tray.json')
+  const [q] = (await waitingQuestions({ job: request.jobId }, { fetcher })).questions
+  assert.ok(q.tripId)
+  assert.throws(() => holdItem({ kind: 'reject', jobId: request.jobId, cardId: q.id, tripId: q.tripId, title: q.title }, { file }), /Say what to change/)
+  holdItem({ kind: 'reject', jobId: request.jobId, cardId: q.id, tripId: q.tripId, title: q.title, reason: 'Shorter' }, { file })
+  const out = await sendTray({ file, fetcher })
+  assert.equal(out.sent, 1)
+  await tickTracks(store, { dataDir, io, now: T0 + 2 })
+  assert.match(store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /draft\(Shorter\)/)
+})

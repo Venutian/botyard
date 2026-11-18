@@ -52,7 +52,9 @@ export function cleanItem(raw = {}) {
   }
   const cardId = String(raw.cardId || '')
   if (!ID.test(cardId)) throw new EngineError(400, 'Say which question the answer is for')
-  const out = { key: `card:${jobId}:${cardId}`, kind, jobId, cardId, title, job, ...(ID.test(String(raw.botId || '')) ? { botId: String(raw.botId) } : {}) }
+  const out = { key: `card:${jobId}:${cardId}`, kind, jobId, cardId, title, job, ...(ID.test(String(raw.botId || '')) ? { botId: String(raw.botId) } : {}), ...(ID.test(String(raw.tripId || '')) ? { tripId: String(raw.tripId) } : {}) }
+  // A gate's "no" goes back with a note: the reason is that note, so it is needed.
+  if (out.tripId && kind === 'reject' && !String(raw.reason || '').trim()) throw new EngineError(400, 'Say what to change: the reason goes back with the work')
   if (kind === 'answer') {
     if (!Array.isArray(raw.answers) || !raw.answers.length || raw.answers.length > 20) throw new EngineError(400, 'Answer the question first')
     out.answers = raw.answers.map((a) => ({
@@ -85,6 +87,11 @@ export function dropItem(key, { file = trayFile() } = {}) {
 async function sendOne(item, { settle, ...options }) {
   if (item.kind === 'review') return sendMarks(item.review, options)
   if (item.kind === 'answer') return answerQuestion(item.jobId, item.cardId, item.answers, options)
+  // A trip's gate is answered through the gate itself (docs/tracks.md): approve, or back to the step before with the note.
+  if (item.tripId && (item.kind === 'accept' || item.kind === 'reject')) {
+    const body = item.kind === 'accept' ? { action: 'approve' } : { action: 'context', note: item.reason }
+    return call(`/trips/${item.tripId}/gate`, { ...options, method: 'POST', body })
+  }
   if (item.kind === 'accept') { const out = await acceptQuestion(item.jobId, item.cardId, options); await settle?.(item.cardId, 'accept', {}); return out }
   const out = await rejectQuestion(item.jobId, item.cardId, item.reason, options)
   await settle?.(item.cardId, 'reject', { reason: item.reason || '' })
@@ -127,6 +134,7 @@ export async function waitingQuestions({ job, bot } = {}, options) {
   return {
     jobId,
     job: `${issue.displayIdentifier || issue.identifier || ''} ${issue.title || ''}`.trim(),
-    questions: cards.filter((c) => c.status === 'pending').map((c) => ({ at: c.createdAt, ...questionView(c) })).filter((q) => q.kind),
+    // A gate card carries its trip: the tray answers it through the gate.
+    questions: cards.filter((c) => c.status === 'pending').map((c) => ({ at: c.createdAt, ...questionView(c), ...(ID.test(String(c.payload?.tripId || '')) ? { tripId: c.payload.tripId } : {}) })).filter((q) => q.kind),
   }
 }

@@ -687,11 +687,11 @@ export const getReviews = (c: Connection, which: { job?: string; project?: strin
 // ── the answer tray beside Needs you: answers held to send at once ───────────────
 
 export type TrayQuestion =
-  | { id: string; kind: 'choice'; title: string; at?: string; items: { id: string; prompt: string; multiple: boolean; required: boolean; options: { id: string; label: string; hint: string }[] }[] }
-  | { id: string; kind: 'confirm'; title: string; at?: string; prompt: string; accept: string; reject: string };
+  | { id: string; kind: 'choice'; title: string; at?: string; tripId?: string; items: { id: string; prompt: string; multiple: boolean; required: boolean; options: { id: string; label: string; hint: string }[] }[] }
+  | { id: string; kind: 'confirm'; title: string; at?: string; prompt: string; accept: string; reject: string; tripId?: string };
 export type TrayAnswer = { questionId: string; optionIds: string[]; otherText?: string };
 export type TrayItem = {
-  key: string; kind: 'answer' | 'accept' | 'reject' | 'review'; jobId: string; cardId?: string; botId?: string; title: string; job: string;
+  key: string; kind: 'answer' | 'accept' | 'reject' | 'review'; jobId: string; cardId?: string; botId?: string; tripId?: string; title: string; job: string;
   answers?: TrayAnswer[]; said?: string; reason?: string; review?: ReviewSend; heldAt: number; error?: string;
 };
 export type TrayHold = Omit<TrayItem, 'key' | 'heldAt' | 'error'>;
