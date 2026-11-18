@@ -335,10 +335,10 @@ def needs(bot, db, policy, env=None):
     skill = os.path.join(botyard_home.places(env)['crew'], 'codex-safe', 'skills', 'botyard')
     if bot['adapter'] == 'opencode_local':
         if os.path.isdir(skill):
-            out.append({'kind': 'read', 'path': skill, 'probe': os.path.join(skill, 'scripts', 'x'), 'why': "the job-closing skill's folder"})
+            out.append({'kind': 'read', 'path': skill, 'probe': os.path.join(skill, 'scripts', 'x'), 'why': "the job-closing skill's folder", 'fix': 'setup-bots.py (it opens this folder to every OpenCode bot)'})
         scratch = os.path.join(tempfile.gettempdir(), 'botyard-run-x')
-        out.append({'kind': 'write', 'path': scratch, 'probe': os.path.join(scratch, 'tmp', 'x'), 'why': "the run's own scratch folder, where its temporary files go", 'virtual': True})
-        out.append({'kind': 'read', 'path': scratch, 'probe': os.path.join(scratch, 'opencode', 'x'), 'why': "the run's own scratch folder, where OpenCode keeps its settings", 'virtual': True})
+        out.append({'kind': 'write', 'path': scratch, 'probe': os.path.join(scratch, 'tmp', 'x'), 'why': "the run's own scratch folder, where its temporary files go", 'virtual': True, 'fix': "setup-bots.py (it opens the run's scratch folder to every OpenCode bot)"})
+        out.append({'kind': 'read', 'path': scratch, 'probe': os.path.join(scratch, 'opencode', 'x'), 'why': "the run's own scratch folder, where OpenCode keeps its settings", 'virtual': True, 'fix': "setup-bots.py (it opens the run's scratch folder to every OpenCode bot)"})
     for path, who, why in writes(env):
         names = [base_name(n) for n in who] if who else None
         if (names and base_name(bot['name']) in names) or (not names and bot['adapter'] in SANDBOXED):
@@ -418,7 +418,7 @@ def faults(env=None, db=None, hours=6, logs=True):
             elif need.get('virtual') or os.path.exists(path):
                 ok = policy.write(need['probe']) if kind == 'write' else policy.read(need['probe'])
                 if ok is False:
-                    result.faults.append(f'{name}: cannot {kind} {path} ({why}); fix: {fix_for(bot, kind)}')
+                    result.faults.append(f"{name}: cannot {kind} {path} ({why}); fix: {need.get('fix') or fix_for(bot, kind)}")
         for root in policy.roots:
             if not os.path.exists(root):
                 result.faults.append(f'{name}: its sandbox names {root}, which does not exist: every shell command of the bot fails (sandbox-roots.py --fix takes it out)')
