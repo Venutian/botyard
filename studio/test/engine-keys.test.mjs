@@ -67,7 +67,7 @@ test('a foreign Host or a page elsewhere gets 403, whatever key it carries', asy
   const posted = await s.ask('POST', `/api/issues/${s.job.id}/comments`, { body: 'hi' }, { origin: 'https://evil.example', ...s.owner() })
   assert.equal(posted.status, 403)
   assert.match(posted.body.error, /page elsewhere/)
-  const tunnelled = await s.ask('GET', '/api/companies', undefined, { 'x-forwarded-for': '1.2.3.4', ...s.owner() })
+  const tunnelled = await s.ask('GET', '/api/companies', undefined, { 'x-forwarded-for': '192.0.2.4', ...s.owner() })
   assert.equal(tunnelled.status, 403)
   // This computer's own names, and a page on this computer, are fine.
   assert.equal((await s.ask('GET', '/api/companies', undefined, { host: `localhost:${s.port}`, origin: 'http://127.0.0.1:5274', ...s.owner() })).status, 200)
