@@ -35,6 +35,8 @@ export type Route =
   | { name: 'chat'; botId: string }
   | { name: 'job'; id: string }
   | { name: 'changes'; id: string }
+  /** Mark exact places in a job's work, or in what a bot said in its chat, and send every mark at once. */
+  | { name: 'review'; job?: string; bot?: string }
   | { name: 'routines' }
   | { name: 'models' }
   | { name: 'improvements' }

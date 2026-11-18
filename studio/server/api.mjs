@@ -25,6 +25,7 @@ import { fromOwnPage, ownHost, readBytes, readJson, sendJson } from './lib/page-
 import { savedStore } from './lib/saved.mjs'
 import { pageBuild } from './lib/built-page.mjs'
 import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
+import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -154,6 +155,9 @@ async function studioRoute(req, res, url) {
       res.writeHead(200, { 'Content-Type': face.type, 'Content-Length': face.data.length, 'Cache-Control': 'max-age=300' })
       return res.end(face.data)
     }
+    // Reviews: what can be marked on a job or in a chat, and the kept record (lib/marks.mjs).
+    if (url.pathname === '/api/studio/marks/sources' && read) return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }))
+    if (url.pathname === '/api/studio/marks' && read) return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }))
     if (read) return send(res, 404, { error: 'Unknown endpoint' })
     if (!fromThisMachine(req)) return send(res, 403, { ok: false, error: 'The crew only takes orders from the computer Botyard runs on' })
     // Every write below changes a job, a comment, a card or a bot: the kept flow and cards go with it.
@@ -171,7 +175,7 @@ async function studioRoute(req, res, url) {
       return send(res, 201, await uploadChatPicture(q('bot'), { name: q('name'), type, bytes }))
     }
     // Instructions, documents and skill files can run to a few hundred kilobytes; everything else is a line or two.
-    const big = ['/api/studio/instructions', '/api/studio/document', '/api/studio/skill', '/api/studio/job', '/api/studio/bot'].includes(url.pathname)
+    const big = ['/api/studio/marks', '/api/studio/instructions', '/api/studio/document', '/api/studio/skill', '/api/studio/job', '/api/studio/bot'].includes(url.pathname)
     const body = await readJsonBody(req, big ? 1024 * 1024 : 64 * 1024)
     // The owner's override of a finding: only the map's own page on this machine gets here (the guards above).
     const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
@@ -179,6 +183,8 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio/trip' && req.method === 'POST') return changed(res, 200, await tripAct(String(body.id || ''), { action: String(body.action || ''), step: String(body.step || ''), to: String(body.to || ''), note: String(body.note || '') }))
     if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID(), { pictures: body.pictures }))
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))
+    // The owner's marks on a piece of a bot's work, sent as one message (lib/marks.mjs).
+    if (url.pathname === '/api/studio/marks' && req.method === 'POST') return send(res, 201, await sendMarks(body))
     if (url.pathname === '/api/studio/routine' && req.method === 'POST') {
       // Removing one asks for a confirm on the page first.
       const act = { run: runRoutine, pause: pauseRoutine, resume: resumeRoutine, remove: removeRoutine }[body.action]

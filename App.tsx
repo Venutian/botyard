@@ -21,6 +21,7 @@ import { ChatScreen } from './src/screens/Chat';
 import { ConnectScreen } from './src/screens/Connect';
 import { CONNECTION_KEY, startNotifications, stopNotifications } from './src/notify';
 import { ChangesScreen } from './src/screens/Changes';
+import { ReviewScreen } from './src/screens/Review';
 import { HomeScreen } from './src/screens/Home';
 import { DevicesScreen } from './src/screens/Devices';
 import { RoutinesScreen } from './src/screens/Routines';
@@ -135,6 +136,7 @@ function Pushed({ route, connection, crew, nav }: { route: Route; connection: Co
       {route.name === 'chat' ? <ChatScreen key={route.botId} botId={route.botId} connection={connection} crew={crew} nav={nav} /> : null}
       {route.name === 'job' ? <JobScreen key={route.id} id={route.id} connection={connection} crew={crew} nav={nav} /> : null}
       {route.name === 'changes' ? <ChangesScreen id={route.id} connection={connection} nav={nav} /> : null}
+      {route.name === 'review' ? <ReviewScreen key={`${route.job ?? ''}${route.bot ?? ''}`} job={route.job} bot={route.bot} connection={connection} nav={nav} /> : null}
       {route.name === 'routines' ? <RoutinesScreen connection={connection} crew={crew} nav={nav} /> : null}
       {route.name === 'bots' ? <BotsScreen connection={connection} nav={nav} /> : null}
       {route.name === 'runs' ? <RunsScreen key={route.bot ?? ''} bot={route.bot} connection={connection} nav={nav} /> : null}

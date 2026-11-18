@@ -659,3 +659,27 @@ export const editRoutine = (c: Connection, id: string, change: { title?: string;
 export type DocRevision = { id: string; number: number; at: string | null; note: string; by: string };
 export const getDocRevisions = (c: Connection, job: string, key: string) => call<{ revisions: DocRevision[] }>(c, `/jobs/${job}/documents/${encodeURIComponent(key)}/revisions`);
 export const restoreDoc = (c: Connection, job: string, key: string, revision: string) => call(c, `/jobs/${job}/documents/${encodeURIComponent(key)}/restore`, 'POST', { revision });
+
+// ── reviews: the owner's marks on a bot's work ───────────────────────────────────
+
+export type ReviewPiece = { id: string; kind: 'message' | 'brief' | 'document' | 'picture' | 'change' | 'page'; ref: string; title: string; text?: string; src?: string; at?: string };
+export type ReviewGate = { tripId: string; stepId: string; title: string; before: { id: string; title: string; kind: string }[] };
+export type ReviewSources = { jobId: string; ref: string; title: string; chat: boolean; bot: string; projectId: string | null; gate: ReviewGate | null; pieces: ReviewPiece[] };
+export type DraftMark =
+  | { n: number; kind: 'text'; pieceId: string; quote: string; line: number; lineEnd: number; comment: string }
+  | { n: number; kind: 'picture'; pieceId: string; box: { x: number; y: number; w: number; h: number }; comment: string };
+export type SentReview = { id: string; text: string; verdict: string; marks: { n: number }[]; createdAt: string; piece: { kind: string; title: string }; jobRef: string | null; note: string; gate: { tripId: string } | null };
+export type ReviewSend = {
+  jobId: string; verdict: 'back' | 'approve'; note: string; piece: { kind: string; ref: string; title: string };
+  gate?: { tripId: string; to?: string };
+  marks: ({ kind: 'text'; comment: string; piece: { kind: string; ref: string }; quote: string; line: number; lineEnd: number } | { kind: 'picture'; comment: string; piece: { kind: string; ref: string }; attachmentId: string; box: { x: number; y: number; w: number; h: number } })[];
+};
+
+/** What can be marked on a job, or in the chat with a bot: the bot's last message first. */
+export const getReviewSources = (c: Connection, which: { job?: string; bot?: string }) =>
+  call<ReviewSources>(c, `/marks/sources?${which.bot ? `bot=${encodeURIComponent(which.bot)}` : `job=${encodeURIComponent(which.job || '')}`}`);
+/** Send every mark as one message to the bot (or as the gate's answer). Only the owner's door can. */
+export const sendReview = (c: Connection, review: ReviewSend) => call<SentReview>(c, '/marks', 'POST', review);
+/** The kept record: what was approved or sent back, for a job or a project. */
+export const getReviews = (c: Connection, which: { job?: string; project?: string }) =>
+  call<{ reviews: SentReview[] }>(c, `/marks?${which.job ? `job=${encodeURIComponent(which.job)}` : which.project ? `project=${encodeURIComponent(which.project)}` : ''}`);

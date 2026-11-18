@@ -45,6 +45,7 @@ import { PREVIEW_PORT, listPreviews, previewRoot, startPreviews } from './lib/pr
 import { artifactList, documentRevisions, jobList, jobPage, projectPage, restoreDocument, routinePage, saveGoal, setRoutineSchedule } from './lib/work.mjs'
 import { liveSessions as readLiveSessions } from './lib/sessions.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
+import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 
 const MIN_TOKEN = 32
 const MAX_BODY = 16 * 1024
@@ -548,6 +549,13 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
         if (device?.id === deviceRevoke[1]) return send(res, 409, { error: 'That is the device you are using' })
         revokeDevice(devices, deviceRevoke[1])
         return send(res, 200, { ok: true })
+      }
+      // Reviews: what can be marked on a job or in a chat, the send (the owner's only), and the kept record (lib/marks.mjs).
+      if (pathname === '/v1/marks/sources' && req.method === 'GET') return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }, { picture: (id) => `/v1/proof/${id}`, ...options }))
+      if (pathname === '/v1/marks' && req.method === 'GET') return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }, options))
+      if (pathname === '/v1/marks' && req.method === 'POST') {
+        if (process.env.BOTYARD_REFUSE_BOTS !== 'off' && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
+        return send(res, 201, await sendMarks(await readBody(req, MAX_LONG_BODY), options))
       }
       if (jobAction && req.method === 'POST') return send(res, 200, await JOB_ACTIONS[jobAction[2]](jobAction[1], options))
       if (botAction && req.method === 'POST') return send(res, 200, await BOT_ACTIONS[botAction[2]](botAction[1], options))

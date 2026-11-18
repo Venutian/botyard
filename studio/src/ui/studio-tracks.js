@@ -126,13 +126,14 @@ function stepHtml(s, n) {
 }
 
 /** The gate's three answers: approve, send back to a step with a note, or add context and run the step before again. */
-function gateHtml(gate) {
+function gateHtml(gate, workJob = '') {
   if (!gate) return ''
   const before = gate.backTo.at(-1)
   return `<section class="gate-card" data-part="gate">
     <h3>Waits for you: ${esc(gate.title)}</h3>
     <div class="gate-acts">
       <button class="btn primary" data-act="trip-gate" data-do="approve">Approve</button>
+      ${workJob ? `<button class="btn" data-act="review" data-job="${esc(workJob)}" title="Mark exact places in the work; your marks go back as the note">Mark exact places…</button>` : ''}
     </div>
     <form class="fields" data-part="gate-note">
       <label class="stack">Note for the work <textarea name="note" rows="3" maxlength="4000" placeholder="What to change, or what the step should know"></textarea></label>
@@ -167,7 +168,9 @@ export function tripScreen(t) {
     <button class="btn" type="button" data-act="trip" data-do="rerun">Run again from there</button>
     <p class="hint">What the steps before it left is kept, so they are not paid for again.</p>
   </form>`
-  return `${head}${gateHtml(t.gate)}
+  // The marks are made on the work itself: the newest job of a step before the gate, or the request's own job.
+  const workJob = t.gate ? [...t.steps.slice(0, t.steps.findIndex((s) => s.id === t.gate.step))].reverse().find((s) => s.jobId)?.jobId || r.jobId || '' : ''
+  return `${head}${gateHtml(t.gate, workJob)}
     <div class="trip-body">
       <div class="trip-drawing">${trackDiagram(t.steps, t.lines, { states, current: t.current, title: t.track.title })}</div>
       <ol class="trip-steps">${t.steps.map(stepHtml).join('')}</ol>

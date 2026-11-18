@@ -14,6 +14,7 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 import { DatabaseSync } from 'node:sqlite'
 import { TRACK_TABLES, TRACK_WHOLE_NUMBERS } from './track-tables.mjs'
+import { MARK_TABLES } from './mark-tables.mjs'
 
 export const SCHEMA_VERSION = 1
 
@@ -233,6 +234,8 @@ export const TABLES = {
   },
   // Tracks: saved ways for work to move, their requests, trips and steps (docs/tracks.md).
   ...TRACK_TABLES,
+  // Reviews: the owner's marks on a bot's work, each sent as one message (marks.mjs).
+  ...MARK_TABLES,
 }
 
 const WHOLE_NUMBERS = new Set(['issue_number', 'issue_counter', 'position', 'latest_revision_number', 'revision_number', 'byte_size', 'log_bytes', 'exit_code', 'input_tokens', 'cached_input_tokens', 'output_tokens', 'is_primary', 'enabled', ...TRACK_WHOLE_NUMBERS])
