@@ -4,6 +4,7 @@
     github-projects.py            dry run: list what would be added and dropped, with a reason each, change nothing
     github-projects.py --add      add the missing projects (and tell the lead)
     github-projects.py --json     the same list as JSON (the Projects page reads this)
+    github-projects.py --init-owner-file [--deny NAME]... [--allow NAME]...   create the owner's rules file, never overwriting
 
 Botyard's timetable runs it daily with --add. The repositories come from `gh api user/repos`, run here
 with the owner's sign-in, which is never read, kept or printed: only each repo's name, description,
@@ -58,9 +59,47 @@ def repos():
     return found
 
 
-def load_rules(path=RULES):
+def owner_file():
+    """The owner's own rules, outside the repo: ~/.botyard/config/github-projects.json (deny and allow lists)."""
+    return os.path.join(botyard_home.config_dir(), 'github-projects.json')
+
+
+def load_rules(path=RULES, owner=None):
+    """The repo's default rules with the owner's file merged over them: deny and allow lists add up, any other key replaces."""
     with open(path, encoding='utf8') as f:
-        return json.load(f)
+        rules = json.load(f)
+    try:
+        with open(owner or owner_file(), encoding='utf8') as f:
+            mine = json.load(f)
+    except (OSError, ValueError):
+        return rules
+    if isinstance(mine, dict):
+        for k, v in mine.items():
+            if k in ('deny', 'allow') and isinstance(v, list):
+                rules[k] = list(rules.get(k) or []) + v
+            elif k != 'about':
+                rules[k] = v
+    return rules
+
+
+def init_owner_file(deny=(), allow=(), reason='old coursework or experiment (2018-2024), no recent work', path=None):
+    """Write the owner file with the given names. Never overwrites an existing one. Returns True when written."""
+    path = path or owner_file()
+    if os.path.exists(path):
+        return False
+    body = {'about': 'Your GitHub project rules, merged over crew/github-project-rules.json. `deny` keeps a repo from becoming a project (with the reason shown in the dry run); `allow` makes one a project even without a README or when it is old. deny beats allow. Edit freely.',
+            'deny': [{'name': n, 'reason': reason} for n in deny], 'allow': [{'name': n, 'reason': 'owner says this is a project'} for n in allow]}
+    with open(path, 'w', encoding='utf8') as f:
+        json.dump(body, f, indent=2)
+        f.write('\n')
+    return True
+
+
+def listed_name(entry):
+    """(lower-case name, reason) of a deny or allow entry, which may be a bare string."""
+    if isinstance(entry, str):
+        return entry.lower(), None
+    return (entry.get('name') or '').lower(), entry.get('reason')
 
 
 def months_ago(stamp, now=None):
@@ -91,18 +130,25 @@ def verdict(repo, rules, now=None, files=root_files, commits=commit_count):
     if rules.get('excludeArchived', True) and repo.get('archived'):
         return False, 'archived on GitHub'
     for d in rules.get('deny', []):
-        if isinstance(d, str):
-            d = {'name': d, 'reason': 'on your deny list'}
-        if (d.get('name') or '').lower() == low:
-            return False, d.get('reason') or 'on your deny list'
+        n, why = listed_name(d)
+        if n == low:
+            return False, why or 'on your deny list'
+    for a in rules.get('allow', []):
+        n, why = listed_name(a)
+        if n == low:
+            return True, why or 'on your allow list'
     if low == f"{(repo.get('owner') or '').lower()}.github.io":
         return False, "the account's own pages repo"
     for e in rules.get('excludeNames', []):
-        if fnmatch.fnmatch(low, e['pattern'].lower()):
+        if fnmatch.fnmatch(low, e['pattern'].lower()) and months_ago(repo.get('pushed_at'), now) > e.get('olderThanMonths', -1):
             return False, e.get('reason') or f"name matches {e['pattern']}"
     if rules.get('needsReadmeOrDescription', True) and not (repo.get('description') or '').strip():
         # A README is found at the root listing below; a repo with neither is not a project.
-        if not any(f.lower().startswith('readme') for f in files(repo)):
+        listing = files(repo)
+        if not any(f.lower().startswith('readme') for f in listing):
+            manifests = (rules.get('orElse') or {}).get('manifestAtRoot', [])
+            if any(fnmatch.fnmatch(f, m) for f in listing for m in manifests) and months_ago(repo.get('pushed_at'), now) <= rules.get('manifestNoReadmeMonths', 12):
+                return True, 'no README: add one'
             return False, 'no README or description'
     if months_ago(repo.get('pushed_at'), now) <= rules.get('pushedWithinMonths', 24):
         return True, f"pushed within {rules.get('pushedWithinMonths', 24)} months"
@@ -299,7 +345,14 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--add', action='store_true')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--init-owner-file', action='store_true', help='create ~/.botyard/config/github-projects.json (never overwrites)')
+    ap.add_argument('--deny', action='append', default=[], metavar='NAME', help='with --init-owner-file: a repo to deny')
+    ap.add_argument('--allow', action='append', default=[], metavar='NAME', help='with --init-owner-file: a repo to allow')
+    ap.add_argument('--reason', default='old coursework or experiment (2018-2024), no recent work', help='with --init-owner-file: the deny reason')
     a = ap.parse_args(argv)
+    if a.init_owner_file:
+        print(('wrote ' if init_owner_file(a.deny, a.allow, a.reason) else 'kept the existing ') + owner_file())
+        return 0
     try:
         result = run(add=a.add)
     except (OSError, ValueError) as e:
