@@ -91,7 +91,9 @@ export function ReviewScreen({ job, bot, connection, nav }: { job?: string; bot?
   const next = useRef(1);
 
   useEffect(() => {
-    getReviewSources(connection, { job, bot }).then((s) => {
+    getReviewSources(connection, { job, bot }).then((all) => {
+      // The change in chapters and live pages are read on the PC page first.
+      const s = { ...all, pieces: all.pieces.filter((p) => p.kind !== 'change' && p.kind !== 'page') };
       setSrc(s);
       setCurrent(s.pieces[0]?.id || '');
       setGateTo(s.gate?.before.at(-1)?.id || '');

@@ -33,7 +33,7 @@ async function jobFor({ job, bot }, options) {
  * Everything on a job that can be marked, newest bot message first.
  * `picture` is the address the asking side shows a picture from (the page's file path or the phone's).
  */
-export async function reviewSources(which = {}, { picture = (id) => `/api/studio/file?id=${id}`, ...options } = {}) {
+export async function reviewSources(which = {}, { picture = (id) => `/api/studio/file?id=${id}`, livePages = false, ...options } = {}) {
   const job = await jobFor(which, options)
   const [comments, documents, files, agents, gate] = await Promise.all([
     call(`/issues/${job.id}/comments?order=asc`, options),
@@ -59,6 +59,8 @@ export async function reviewSources(which = {}, { picture = (id) => `/api/studio
     if (/^mark-\d+-/.test(f.originalFilename || '')) continue
     pieces.push({ id: `picture:${f.id}`, kind: 'picture', ref: f.id, title: f.originalFilename || 'Picture', src: picture(f.id), at: f.createdAt })
   }
+  // A page running on this computer, pointed at in place (lib/look.mjs): the PC page has it first.
+  if (livePages) pieces.push({ id: 'page', kind: 'page', ref: '', title: 'A live page on this computer' })
   return {
     jobId: job.id, ref: job.displayIdentifier || job.identifier || '', title: job.title || '', chat: Boolean(job.conversationAgentId),
     bot: nameOf.get(job.assigneeAgentId) || '', projectId: job.projectId || null, gate: gate?.gate || null, pieces,

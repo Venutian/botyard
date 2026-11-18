@@ -28,6 +28,7 @@ import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
 import { guidedChange } from './lib/chapters.mjs'
+import { openLook, pageShot } from './lib/look.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -158,7 +159,7 @@ async function studioRoute(req, res, url) {
       return res.end(face.data)
     }
     // Reviews: what can be marked on a job or in a chat, and the kept record (lib/marks.mjs).
-    if (url.pathname === '/api/studio/marks/sources' && read) return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }))
+    if (url.pathname === '/api/studio/marks/sources' && read) return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }, { livePages: true }))
     if (url.pathname === '/api/studio/marks' && read) return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }))
     // A job's change in chapters, the heart first; overviews in plain words when asked (lib/chapters.mjs).
     if (url.pathname === '/api/studio/marks/change' && read) {
@@ -195,6 +196,13 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))
     // The owner's marks on a piece of a bot's work, sent as one message (lib/marks.mjs).
     if (url.pathname === '/api/studio/marks' && req.method === 'POST') return send(res, 201, await sendMarks(body))
+    // A page on this computer, opened to point at, and its screenshot put on the job (lib/look.mjs).
+    if (url.pathname === '/api/studio/look' && req.method === 'POST') return send(res, 200, await openLook(body.url))
+    if (url.pathname === '/api/studio/look/shot' && req.method === 'POST') {
+      const bytes = await pageShot(body.url, { width: body.width, height: body.height, scrollX: body.scrollX, scrollY: body.scrollY })
+      const host = new URL(body.url).host.replace(/[^\w.-]+/g, '-')
+      return send(res, 201, await uploadAttachment(String(body.job || ''), { name: `page-${host}-${Date.now()}.png`, type: 'image/png', bytes }))
+    }
     if (url.pathname === '/api/studio/tray' && req.method === 'POST') {
       if (body.action === 'hold') return send(res, 200, holdItem(body.item || {}))
       if (body.action === 'drop') return send(res, 200, dropItem(String(body.key || '')))
