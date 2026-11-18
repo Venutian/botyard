@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { ADAPTER_TYPES } from './adapters.mjs'
+import { ownerOrScript } from './caller.mjs'
 import { HIDDEN, botSecretsFile, instructionsDir, isHidden, keysDir } from './names.mjs'
 import { cancelRun } from './runner.mjs'
 import { Refused, note } from './write.mjs'
@@ -25,9 +26,8 @@ export const MAX_INSTRUCTIONS = 400_000
 const SETTINGS = ['name', 'role', 'title', 'reportsTo', 'capabilities', 'adapterType', 'adapterConfig', 'runtimeConfig']
 const settingsOf = (agent) => Object.fromEntries(SETTINGS.map((key) => [key, agent[key] ?? null]))
 
-function ownerOnly(actor, what) {
-  if (actor?.agent) throw new Refused(403, `Only the owner ${what}`)
-}
+// The owner, or a crew script seeding from the crew's files (setup-bots); never a bot. See caller.mjs.
+const ownerOnly = ownerOrScript
 
 function botOr404(store, id) {
   const agent = agentOf(store, id)

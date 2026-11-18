@@ -324,6 +324,78 @@ def run_headers(env=None, json_body=True):
     return out
 
 
+
+# ── who a script is, to the engine ───────────────────────────────────────────────────
+#
+# The engine tells its callers apart (studio/server/engine/caller.mjs): a bot by its run's pass, the
+# owner's side of Botyard by the owner key, and a crew script by the scripts key and its own name, so
+# its comments and jobs show as `script:<name>` and never as the owner. A script needs nothing for
+# this: importing this module adds the scripts key to every urllib call it makes to the engine that
+# carries no pass of its own. The owner key is never read here.
+
+SCRIPTS_KEY_FILE = 'engine-scripts.key'
+KEY_HEADER = 'X-Botyard-Key'
+SCRIPT_HEADER = 'X-Botyard-Script'
+
+
+def script_name(argv0=None):
+    """This script's name as the engine shows it: the file's name without its extension."""
+    name = os.path.basename(argv0 if argv0 is not None else (sys.argv[0] if sys.argv and sys.argv[0] else 'python'))
+    name = re.sub(r'\.(py|sh|mjs|js)$', '', name.lower())
+    name = re.sub(r'[^a-z0-9._-]+', '-', name).strip('-.') or 'python'
+    return name[:64]
+
+
+def scripts_key(env=None):
+    """The key crew scripts call the engine with, or '' before Botyard has made it."""
+    try:
+        with open(os.path.join(places(env)['keys'], SCRIPTS_KEY_FILE), encoding='utf8') as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def script_headers(name=None, env=None):
+    """The headers a crew script's own call to the engine carries: {} before the key exists."""
+    found = scripts_key(env)
+    return {KEY_HEADER: found, SCRIPT_HEADER: name or script_name()} if found else {}
+
+
+def _to_engine(url, env=None):
+    url = str(url or '')
+    if url.startswith(base(env) + '/'):
+        return True
+    port = (os.environ if env is None else env).get('BOTYARD_ENGINE_PORT', '').strip() or str(DEFAULT_PORT)
+    return bool(re.match(rf'^https?://(127\.0\.0\.1|localhost|\[::1\]):{port}/', url))
+
+
+def _install_script_identity():
+    """Every urllib call this process makes to the engine without a pass carries the scripts key."""
+    import urllib.request
+
+    class ScriptIdentity(urllib.request.BaseHandler):
+        handler_order = 100
+
+        def _add(self, req):
+            try:
+                if _to_engine(req.full_url) and not req.has_header('Authorization') and not req.has_header(KEY_HEADER.capitalize()):
+                    for name, value in script_headers().items():
+                        req.add_unredirected_header(name, value)
+            except Exception:  # noqa: BLE001  the key is a help; a call never fails over it
+                pass
+            return req
+
+        http_request = _add
+        https_request = _add
+
+    opener = urllib.request.build_opener(ScriptIdentity())
+    urllib.request.install_opener(opener)
+
+
+if os.environ.get('BOTYARD_SCRIPT_IDENTITY', 'on') != 'off':
+    _install_script_identity()
+
+
 if __name__ == '__main__':
     answers = {**places(), 'repo': repo(), 'scripts': scripts(), 'projects': projects(), 'crew_dir': places()['crew'],
                'keys_dir': places()['keys'], 'data_dir': places()['data'], 'config_dir': places()['config'], 'bot_path': bot_path()}

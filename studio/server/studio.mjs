@@ -30,8 +30,10 @@ import { spawnSync } from 'node:child_process'
 import { Console } from 'node:console'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { builtPage } from './lib/built-page.mjs'
+import { ownerKeyHeaders } from './engine/caller.mjs'
+import { fromThisComputer } from './lib/local-call.mjs'
 import { devicesFile, readDevices } from './lib/devices.mjs'
-import { configDir, dataDir, studioRoot } from './lib/home.mjs'
+import { configDir, dataDir, keysDir, studioRoot } from './lib/home.mjs'
 import { DOOR_PORT, doorFile, localAddresses, pairPhone, readDoor } from './lib/pairing.mjs'
 import { setupAct, setupState } from './lib/setup.mjs'
 import { startTimetable, stopTimetable, timetableAct, timetableState } from './lib/timetable.mjs'
@@ -40,9 +42,6 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 /** Where `npm run build` leaves the page, and the answerer that hands it out. */
 const BUILT = path.join(studioRoot(), 'dist')
 const page = builtPage(BUILT)
-const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
-/** A request that was passed on by something else did not start on this computer, whatever its socket says. */
-const PASSED_ON = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip', 'cf-ray', 'x-real-ip', 'x-botyard-edge']
 /** The map's own paths outside /api/studio. A new one goes under /api/studio, which is always the map's. */
 const MAP_PATHS = new Set(['health', 'state'])
 /** A bot's call to a connector: /api/mcp/<connector>/<the bot's pass>. The gateway in api.mjs answers it. */
@@ -51,20 +50,8 @@ const MINE = new Set(['/api/studio/setup', '/api/studio/timetable', '/api/studio
 const MAX_BODY = 64 * 1024
 
 
-const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]'])
-const nameOf = (value) => { try { return new URL(/^[a-z]+:\/\//i.test(value) ? value : `http://${value}`).hostname } catch { return '' } }
-
-/**
- * Did this request start on this computer? Loopback, not handed on by a tunnel or a proxy, and
- * asked for by this computer's own name: a page on another site that points its name at 127.0.0.1
- * still says its own name in `Host`, and a page elsewhere that posts here says so in `Origin`.
- */
-export function fromThisComputer(req) {
-  if (!LOOPBACK.has(req.socket?.remoteAddress) || PASSED_ON.some((name) => req.headers[name] !== undefined)) return false
-  if (!LOCAL_NAMES.has(nameOf(req.headers.host || ''))) return false
-  const origin = req.headers.origin
-  return !origin || origin === 'null' || LOCAL_NAMES.has(nameOf(origin))
-}
+/** Did this request start on this computer? See lib/local-call.mjs: the engine's port asks the same. */
+export { fromThisComputer }
 
 /** Whose path is it: 'mine', 'map' or 'engine'. */
 export function whose(pathname) {
@@ -140,7 +127,7 @@ async function mine(req, res, url, door) {
 /** Hand a call on to the engine's own listener, bytes in and bytes out, so nothing is read twice. */
 function toEngine(req, res, engineUrl) {
   const target = new URL(engineUrl)
-  const onward = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: { ...req.headers, host: target.host } }, (answer) => {
+  const onward = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: { ...req.headers, host: target.host, ...ownerKeyHeaders(keysDir()) } }, (answer) => {
     res.writeHead(answer.statusCode || 502, answer.headers)
     answer.pipe(res)
   })
@@ -226,7 +213,7 @@ export async function createStudio({ env = process.env, demo = false, engine = t
       const data = dataDir(env)
       const why = env.BOTYARD_ENGINE_RUNS === 'off' ? 'BOTYARD_ENGINE_RUNS is off' : anotherEngine(data, enginePort)
       if (why) log(`[botyard] The engine answers calls but starts no bot: ${why}.`)
-      const started = await startEngine({ dataDir: data, port: enginePort, runs: !why, log })
+      const started = await startEngine({ dataDir: data, port: enginePort, runs: !why, log, keysDir: keysDir(env) })
       closers.push(async () => {
         await started.stop()
         if (!why) fs.rmSync(path.join(data, 'engine.lock'), { force: true })

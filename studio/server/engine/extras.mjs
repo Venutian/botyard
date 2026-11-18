@@ -5,6 +5,7 @@
  * instead of "no such path".
  */
 import { randomUUID } from 'node:crypto'
+import { ownerOnly } from './caller.mjs'
 import { compact } from './read.mjs'
 import { Refused, note, wake } from './write.mjs'
 
@@ -95,7 +96,7 @@ export const products = (store, ref) => store.objects('SELECT raw FROM products 
 export function declineCard(store, cardId, body = {}, { now = Date.now(), actor } = {}) {
   const card = store.object('SELECT raw FROM cards WHERE id = ?', cardId)
   if (!card) throw new Refused(404, 'That card is not there')
-  if (actor?.agent) throw new Refused(403, 'Only the owner answers a card')
+  ownerOnly(actor, 'answers a card')
   const job = jobOr404(store, card.issueId)
   if (card.status !== 'pending') throw new Refused(409, 'This card was already settled')
   const settled = { ...card, status: 'rejected', result: { outcome: 'declined', reason: text(body.reason, 4000) || null }, resolvedAt: iso(now), resolvedByUserId: actor?.user || 'local-board', updatedAt: iso(now) }
@@ -117,7 +118,7 @@ export function settings(store, which) {
 
 /** PATCH /instance/settings/:which: plain switches and values, kept as they are sent. */
 export function patchSettings(store, which, body = {}, { actor } = {}) {
-  if (actor?.agent) throw new Refused(403, 'Only the owner changes Botyard\'s settings')
+  ownerOnly(actor, 'changes Botyard\'s settings')
   const next = { ...settings(store, which) }
   for (const [key, value] of Object.entries(body || {})) {
     if (!/^[A-Za-z][A-Za-z0-9]{0,60}$/.test(key) || (value !== null && !['boolean', 'number', 'string'].includes(typeof value)) || String(value ?? '').length > 2000) throw new Refused(400, 'A setting is a name with a switch, a number or a short text')

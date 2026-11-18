@@ -96,9 +96,29 @@ def why_unreadable(path, whole=True, picture_ok=False):
     return None
 
 
+# The engine's owner key answers the owner's cards (studio/server/engine/caller.mjs). Only Botyard's own
+# server reads it; no run ever does, by any tool.
+OWNER_KEY_FILE = 'engine-owner.key'
+OWNER_KEY_TOLD = ('Refused: {file} is the owner\'s key to the engine, and a run never reads, copies or sends it. Call the engine '
+                  'with your run\'s pass, as your rules say; what only the owner decides goes to the owner on a card.')
+
+
+def touches_owner_key(given):
+    """True when a tool call's arguments name the owner's key file, in any field."""
+    try:
+        import json
+        text = json.dumps(given, ensure_ascii=False) if not isinstance(given, str) else given
+    except (TypeError, ValueError):
+        text = str(given)
+    return OWNER_KEY_FILE in text or 'engine-owner' in text
+
+
 def unreadable(tool, given, cwd=None):
     """The refusal text for a tool call that would read a binary or a huge file whole, or None.
-    Covers the Read tools of Claude Code and OpenCode and the shell commands that cat a file into the session."""
+    Covers the Read tools of Claude Code and OpenCode and the shell commands that cat a file into the session.
+    A call that names the owner's key to the engine is refused, whatever the tool."""
+    if given is not None and touches_owner_key(given):
+        return OWNER_KEY_TOLD.format(file=OWNER_KEY_FILE)
     if not isinstance(given, dict):
         return None
     name = (tool or '').lower()

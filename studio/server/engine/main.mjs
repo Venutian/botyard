@@ -15,7 +15,9 @@ import http from 'node:http'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { answer } from './api.mjs'
-import { DEFAULT_PORT, ENGINE_VARS, defaultDataDir, storeFile } from './names.mjs'
+import { callerOf, ensureKeys, keyMode as modeFromEnv, logUnkeyed, onWouldRefuse } from './caller.mjs'
+import { notFromHere } from '../lib/local-call.mjs'
+import { DEFAULT_PORT, ENGINE_VARS, defaultDataDir, keysDir as keysIn, storeFile } from './names.mjs'
 import { tickRoutines } from './routines.mjs'
 import { tick } from './runner.mjs'
 import { openStore } from './store.mjs'
@@ -23,7 +25,6 @@ import { ensureStudio } from './studio.mjs'
 
 const TICK_MS = 5000
 const MAX_BODY = 12 * 1024 * 1024
-const LOCAL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 /**
  * Start the engine.
@@ -34,9 +35,11 @@ const LOCAL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
  * @param {(line: string) => void} [options.log]
  * @param {string} [options.apiUrl]  the address a bot's run is told to call; needed when the engine has no port of its own
  * @param {number} [options.tickMs]
+ * @param {string} [options.keysDir]  where the owner's and the scripts' keys are kept (made when missing); `<dataDir>/keys` when left out
+ * @param {'log'|'enforce'} [options.keyMode]  a call with no pass and no key: still the owner and written down, or refused (caller.mjs)
  * @returns {Promise<{ store, server: http.Server|null, apiUrl: string, handle: (req) => Promise<object>, turn: () => Promise<void>, stop: () => Promise<void> }>}
  */
-export async function startEngine({ dataDir, port = null, runs = true, log = console.log, apiUrl = '', tickMs = TICK_MS } = {}) {
+export async function startEngine({ dataDir, port = null, runs = true, log = console.log, apiUrl = '', tickMs = TICK_MS, keysDir = '', keyMode = modeFromEnv() } = {}) {
   if (!dataDir) throw new Error('The engine needs its data folder')
   const dir = path.resolve(dataDir)
   const store = openStore(storeFile(dir))
@@ -47,10 +50,13 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
    * Answer one call in-process: `{ method, url, headers, body, raw }` → `{ status, body }`, or
    * `{ status, file }` for a file's own bytes. `headers` are lower-cased; `raw` is an upload's bytes.
    */
-  const handle = async (req = {}) => {
+  const keys = ensureKeys(keysDir || keysIn(dir))
+  const callersLog = path.join(dir, 'engine-callers.log')
+  onWouldRefuse((line) => log(`[engine] would refuse: ${line}`))
+  const handle = async (req = {}, caller = null) => {
     const call = { method: 'GET', url: '/', headers: {}, body: {}, ...req }
     try {
-      return call.notJson ? { status: 400, body: { error: 'That was not JSON' } } : answer(store, call, { dataDir: dir })
+      return call.notJson ? { status: 400, body: { error: 'That was not JSON' } } : answer(store, call, { dataDir: dir, caller, keyMode })
     } catch (err) {
       return { status: 500, body: { error: `The engine failed on this call: ${String(err?.message || err).slice(0, 160)}` } }
     }
@@ -65,8 +71,20 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
         res.end(text)
         if (status >= 400) log(`[engine] ${status} ${req.method} ${String(req.url).slice(0, 160)}: ${String(body?.error || '').slice(0, 200)}`)
       }
-      // Only this computer: the crew's scripts, the bots, and Botyard's own server.
-      if (!LOCAL.has(req.socket.remoteAddress)) return send(403, { error: 'The engine only answers this computer' })
+      // Only this computer, asked for by this computer's own name: the crew's scripts, the bots, and
+      // Botyard's own server. A page elsewhere, or one that points its name here, is refused.
+      const away = notFromHere(req)
+      if (away) return send(403, { error: `The engine only answers this computer: this call was ${away}` })
+      const caller = callerOf(req.headers, keys)
+      if (caller.kind === 'wrong') return send(401, { error: 'That key is not one of this engine\'s keys' })
+      const enginePort = server.address().port
+      if (caller.kind === 'none') {
+        if (keyMode === 'enforce') return send(401, { error: 'Say who is calling: a run\'s pass, or the owner\'s or a script\'s key' })
+        logUnkeyed(callersLog, { req, why: 'no key', enginePort })
+      }
+      const write = !['GET', 'HEAD', 'OPTIONS'].includes(String(req.method).toUpperCase())
+      const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase()
+      const plain = write && type !== 'application/json' && type !== 'multipart/form-data'
       const chunks = []
       let size = 0
       req.on('data', (chunk) => { size += chunk.length; if (size > MAX_BODY) req.destroy(); else chunks.push(chunk) })
@@ -76,7 +94,12 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
         const form = String(req.headers['content-type'] || '').startsWith('multipart/form-data')
         let notJson = false
         if (raw.length && !form) { try { body = JSON.parse(raw.toString('utf8')) } catch { notJson = true } }
-        const out = await handle({ method: req.method, url: req.url, headers: req.headers, body, raw: form ? raw : null, notJson })
+        // A write says it is JSON (or a file's form): a page elsewhere cannot send that without asking first.
+        if (plain && raw.length) {
+          if (keyMode === 'enforce') return send(415, { error: 'The engine takes JSON: send Content-Type: application/json' })
+          logUnkeyed(callersLog, { req, why: `not JSON (${type || 'no type'})`, enginePort })
+        }
+        const out = await handle({ method: req.method, url: req.url, headers: req.headers, body, raw: form ? raw : null, notJson }, caller)
         if (out.file) {
           res.writeHead(200, { 'Content-Type': out.file.type, 'Content-Length': fs.statSync(out.file.path).size, 'Content-Disposition': `${/[?&]download=1/.test(req.url) ? 'attachment' : 'inline'}; filename="${encodeURIComponent(out.file.name)}"`, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' })
           return fs.createReadStream(out.file.path).pipe(res)
@@ -127,7 +150,7 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
     store.close()
   }
 
-  return { store, server, apiUrl: address, dataDir: dir, handle, turn, stop, close: stop }
+  return { store, server, apiUrl: address, dataDir: dir, keyMode, handle, turn, stop, close: stop }
 }
 
 // Run by itself: the engine as its own service.
