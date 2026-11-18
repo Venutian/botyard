@@ -173,7 +173,8 @@ function startBox(e, stage, p) {
     const box = boxFrom(from, { x: ev.clientX, y: ev.clientY }, rect)
     state.pending = { kind: 'picture', pieceId: p.id, box, where: box.w || box.h ? 'a box on the picture' : 'a point on the picture' }
     drawPiece()
-    drawAsk(stage.getBoundingClientRect())
+    // The plate opens just under the spot, not at the picture's corner.
+    drawAsk({ left: rect.left + box.x * rect.width, top: rect.top + box.y * rect.height, bottom: rect.top + (box.y + box.h) * rect.height })
   }
   stage.addEventListener('pointermove', move)
   stage.addEventListener('pointerup', up)
