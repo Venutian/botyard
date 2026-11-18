@@ -17,6 +17,7 @@ import { crewFolder, readModels } from './lib/models.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions, tokenWindows } from './lib/crew.mjs'
 import { openrouterLeft, usageRows } from './lib/usage.mjs'
 import { readPlans } from './lib/plans.mjs'
+import { syncGithub } from './lib/github-sync.mjs'
 import { deviceView, devicesFile, readDevices, revokeDevice } from './lib/devices.mjs'
 import { companySettings, inviteMember, revokeInvite } from './lib/company.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
@@ -185,6 +186,8 @@ async function studioRoute(req, res, url) {
       if (body.action === 'move') return changed(res, 200, await moveProject(id, body.folder, { init: body.init === true }))
       if (body.action === 'archive' || body.action === 'restore') return changed(res, 200, await archiveProject(id, body.action === 'archive'))
     }
+    // Repos of the owner's GitHub that look like projects: a dry list first, then the add.
+    if (url.pathname === '/api/studio/github-sync' && req.method === 'POST') return changed(res, 200, await syncGithub({ add: body.action === 'add' }))
     if (url.pathname === '/api/studio/first-run' && req.method === 'POST') {
       if (body.action === 'name') { await nameStudio(body.name, { file: FIRST_RUN_FILE }); return changed(res, 200, await firstRun({ file: FIRST_RUN_FILE })) }
       return changed(res, 200, await firstRunMark(body, { file: FIRST_RUN_FILE }))

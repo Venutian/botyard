@@ -88,6 +88,20 @@
       "on": true
     },
     {
+      "name": "github-projects",
+      "kind": "timer",
+      "what": "Adds a Botyard project for each of your GitHub repos that looks like a real project (rules: github-project-rules.json). Read-only on GitHub, never clones. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/github-projects.py",
+        "--add"
+      ],
+      "at": "03:30",
+      "catchUp": true,
+      "limit": "5m",
+      "on": true
+    },
+    {
       "name": "edge",
       "kind": "keeper",
       "what": "Botyard's private link to Cloudflare, for the phone app away from home.",

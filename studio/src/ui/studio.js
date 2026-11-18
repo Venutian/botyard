@@ -515,6 +515,9 @@ export class Studio {
       if (el.dataset.act === 'open-bot') return this.openBot(el.dataset.id)
       if (el.dataset.act === 'all-jobs') return this.openJobs()
       if (el.dataset.act === 'project-new') return this.openProjectNew()
+      if (el.dataset.act === 'github-sync') return this.githubSync(false)
+      if (el.dataset.act === 'github-add') return this.githubSync(true)
+      if (el.dataset.act === 'github-close') { this._sync = null; this._last.panel = null; return this._putPanel() }
       if (el.dataset.act === 'project-jobs') return this.openJobs({ project: el.dataset.id, pile: '' })
       if (el.dataset.clear) return this._askClear(el.dataset.clear, el.dataset.answer)
       if (el.dataset.act === 'approve' || el.dataset.act === 'reject') return this._decide(el.dataset.id, el.dataset.act)
@@ -1055,6 +1058,8 @@ setView(view) {
       const order = this._rankedProjects()
       html = head('Projects', 'Ranked: a free bot takes the next job from the highest project with work for it')
         + `<button class="find add" data-act="project-new">${ICONS.plus}<span>Add a project</span></button>`
+        + `<button class="find add" data-act="github-sync" ${this._sync?.busy ? 'disabled' : ''}>${ICONS.search}<span>${this._sync?.busy ? 'Reading GitHub…' : 'Sync from GitHub'}</span></button>`
+        + this._syncHtml()
         + (order.length ? '' : '<p class="none">No projects yet. A project is a folder of code the crew works in.</p>')
         + order.map((p, i) => {
           const shelved = this._shelved.has(p.name)
@@ -1870,6 +1875,37 @@ setView(view) {
   _rankedProjects() {
     const all = this.view?.manager?.projects || []
     return rankProjects(all, this._ranked || [])
+  }
+
+  /** What a GitHub sync found: what it would add first, then why the rest was left out. */
+  _syncHtml() {
+    const s = this._sync
+    if (!s || s.busy) return ''
+    if (s.error) return `<p class="flag warn"><i></i><span>${esc(s.error)}</span></p>`
+    const row = (i) => `<li><b>${esc(i.name || i.repo)}</b>${i.private ? ' (private)' : ''}${i.description ? ` – ${esc(i.description)}` : ''}<br><small>${esc(i.folder ? 'in ' + i.folder : i.note || '')}</small></li>`
+    const left = (i) => `<li>${esc(i.repo)}${i.private ? ' (private)' : ''}: ${esc(i.reason)}</li>`
+    const hint = (s.suggest || []).map((x) => `<p class="flag good"><i></i><span>${esc(x.text)}</span></p>`).join('')
+    return `<div class="sync">${hint}
+      <h3>${s.added ? 'Added' : 'Would add'} (${s.add.length})</h3>
+      ${s.add.length ? `<ul>${s.add.map(row).join('')}</ul>` : '<p class="none">Nothing new.</p>'}
+      ${s.added || !s.add.length ? '' : `<div class="acts"><button class="btn" data-act="github-add">Add ${s.add.length} project${s.add.length === 1 ? '' : 's'}</button></div>`}
+      <details><summary>Left out (${s.drop.length})</summary><ul>${s.drop.map(left).join('')}</ul></details>
+      <div class="acts"><button class="btn ghost" data-act="github-close">Close</button></div></div>`
+  }
+
+  async githubSync(add) {
+    if (this._sync?.busy) return
+    this._sync = { busy: true }
+    this._last.panel = null
+    this._putPanel()
+    try {
+      this._sync = await call('/api/studio/github-sync', { action: add ? 'add' : 'dry' })
+      if (add) { this.actions.toast(`${this._sync.add.length} project${this._sync.add.length === 1 ? '' : 's'} added from GitHub`); this._refreshSoon() }
+    } catch (err) {
+      this._sync = { error: err.message || 'GitHub could not be read' }
+    }
+    this._last.panel = null
+    this._putPanel()
   }
 
   /** Move a project up (by -1) or down (by +1) the ranking, and save the whole order. */

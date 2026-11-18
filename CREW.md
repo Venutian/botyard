@@ -35,6 +35,9 @@ No bot can push, merge, publish, send mail or spend money: each of those comes t
 4. **A script sends the build to its check**, with no AI (`crew/pipeline.py`, every minute on the
    timetable as `review-guard`). A free build goes to Checker; a Claude build to Reviewer, or to Checker
    while Reviewer is off. A build that kept nothing in the project gets no check: its report goes to the Lead.
+   **Projects from GitHub:** `crew/github-projects.py` (daily on the timetable, and the Projects page's
+   "Sync from GitHub" button, which lists first and adds on your click) turns repos that look like projects
+   into backlog projects by the rules in `crew/github-project-rules.json`. It never writes to GitHub and never clones.
 5. **The check ends `VERDICT: PASS` or `VERDICT: FAIL`.** A pass goes to the Lead, who tells you what is
    ready and asks on a card whether to merge. A fail goes back to the same builder once, from its own
    commit, with the blocking items; a second fail goes to the Lead, who hands it to a stronger builder
