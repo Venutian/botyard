@@ -179,7 +179,8 @@ function startBox(e, stage, p) {
 
 function offerTextMark() {
   if (!state || sheet.hidden) return
-  const body = sheet.querySelector('.mk-text-body')
+  // A piece drawn by its own kind (the change) offers its own marks.
+  const body = sheet.querySelector('.mk-text-body[data-piece]')
   if (!body) return
   const found = selectionIn(body)
   if (!found) return

@@ -279,3 +279,42 @@ test('answers held in the tray go at one press, each to the job that asked; one 
   assert.equal(store.objects('SELECT raw FROM reviews WHERE job_id = ?', job.id).length, 1)
   assert.deepEqual(dropItem(out.items[0].key, { file }).items, [])
 })
+
+// ── guided reading of a change (lib/chapters.mjs) ─────────────────────────────────
+
+test('a change is read in chapters: the heart first, what it touches, how it is checked, the glue; overviews asked once and kept', async () => {
+  const { chaptersOf, guidedChange, kindOfFile, namesAdded } = await import('../server/lib/chapters.mjs')
+  const hunk = (n, from = 0) => `@@ -${from},0 +1,${n} @@\n${Array.from({ length: n }, (_, i) => `+line ${i}`).join('\n')}`
+  const files = [
+    { path: 'server/engine/marks.mjs', added: 300, removed: 0, patch: `@@ -0,0 +1,3 @@\n+export function sendReview() {}\n+function helper() {}\n+export const MARK_KINDS = ['text']` },
+    { path: 'src/ui/marks.css', added: 80, removed: 0, patch: hunk(80) },
+    { path: 'server/api.mjs', added: 4, removed: 0, patch: '@@ -10,0 +11,4 @@\n+import { sendReview } from "./engine/marks.mjs"\n+x\n+y\n+z' },
+    { path: 'server/lib/other.mjs', added: 40, removed: 5, patch: hunk(40, 3) },
+    { path: 'test/marks.test.mjs', added: 120, removed: 0, patch: hunk(120) },
+    { path: 'package.json', added: 1, removed: 1, patch: '@@ -3 +3 @@\n-"1.0"\n+"1.1"' },
+    { path: 'docs/marks.md', added: 20, removed: 0, patch: hunk(20) },
+    { path: 'src/ui/tiny.js', added: 2, removed: 0, patch: '@@ -1,0 +2,2 @@\n+a\n+b' },
+  ]
+  assert.deepEqual(['a/test/x.mjs', 'tools/marks-test.mjs', 'docs/a.md', 'app.json', 'a.css', 'a.mjs'].map(kindOfFile), ['test', 'test', 'doc', 'settings', 'style', 'source'])
+  assert.deepEqual(namesAdded(files[0]), ['sendReview', 'MARK_KINDS', 'helper'])
+  const chapters = chaptersOf(files)
+  assert.deepEqual(chapters.map((c) => [c.id, c.files.map((f) => f.path)]), [
+    ['heart', ['server/engine/marks.mjs', 'src/ui/marks.css']],
+    ['effects', ['server/api.mjs', 'server/lib/other.mjs']],
+    ['checks', ['test/marks.test.mjs']],
+    ['glue', ['package.json', 'docs/marks.md', 'src/ui/tiny.js']],
+  ])
+  assert.match(chapters[0].overview, /^2 files, \+380 −0; new: marks\.mjs, marks\.css\.\nAdds sendReview, MARK_KINDS, helper\.$/)
+  // A cheap model's words replace the script's, once; the next reading reads them from the folder.
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'overviews-'))
+  let asked = 0
+  const ask = async (command, prompt) => { asked += 1; assert.match(prompt, /## heart: The heart of it/); return { heart: 'It sends reviews.\nLook at the gate path.', glue: 'Version and notes.' } }
+  const one = await guidedChange({ files, commits: [], branch: 'b', base: 'main' }, { overview: true, folder, command: 'cheap', ask })
+  assert.deepEqual(one.chapters.map((c) => c.by), ['model', 'script', 'script', 'model'])
+  assert.equal(one.chapters[0].overview, 'It sends reviews.\nLook at the gate path.')
+  await guidedChange({ files, commits: [], branch: 'b', base: 'main' }, { overview: true, folder, command: 'cheap', ask })
+  assert.equal(asked, 1)
+  // No command, or one that answers nothing: the script's words stand.
+  assert.equal((await guidedChange({ files }, { overview: true, folder, command: '', ask })).chapters[0].by, 'script')
+  assert.equal((await guidedChange({ files: files.slice(1) }, { overview: true, folder, command: 'cheap', ask: async () => null })).chapters[0].by, 'script')
+})
