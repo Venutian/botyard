@@ -154,6 +154,11 @@ test('a review of a job waiting at a gate is the gate\'s answer: the marks are t
   await tickTracks(store, { dataDir, io, now: T0 })
   const gate = gateOf(store, request.jobId)
   assert.deepEqual(gate.before.map((s) => s.id), ['draft'])
+  // The job a step made (where the work is) finds the same gate.
+  const work = createJob(store, 'co', { title: 'Draft it', assigneeAgentId: 'b1' }, { now: T0, actor: OWNER })
+  const row = store.object("SELECT raw FROM trip_steps WHERE step_id = 'draft'")
+  store.put('trip_steps', { ...row, jobId: work.id })
+  assert.equal(gateOf(store, work.id).tripId, gate.tripId)
   const review = sendReview(store, request.jobId, { piece: { kind: 'brief' }, marks: [], note: 'Shorter, please', gate: { tripId: gate.tripId, to: 'draft' } }, { now: T0 + 1, actor: OWNER, dataDir })
   assert.equal(review.commentId, null)
   assert.equal(review.gate.tripId, gate.tripId)

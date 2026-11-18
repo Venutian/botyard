@@ -36,6 +36,8 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
   const target = to || before?.id || '';
   const rerunFrom = from || trip?.steps[0]?.id || '';
   const needNote = !note.trim();
+  // Marks are made on the work itself: the newest job of a step before the gate, or the request's own job; they go back as the note.
+  const workJob = gate && trip ? [...trip.steps.slice(0, trip.steps.findIndex((s) => s.id === gate.step))].reverse().find((s) => s.jobId)?.jobId || trip.request.jobId || '' : '';
   return (
     <Page title={trip?.request.title ?? 'Trip'} note={trip ? `${trip.request.job} · ${trip.track.key} v${trip.track.version} · ${trip.request.cost} for the request` : undefined} onBack={nav.back} onRefresh={load} error={error} loading={!trip}>
       {trip ? (
@@ -50,6 +52,7 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
             <View style={[styles.gate, { borderColor: t.warn, backgroundColor: t.card }]}>
               <Txt size={16} weight={700}>{`Waits for you: ${gate.title}`}</Txt>
               <Button label="Approve" busy={busy === 'approve'} disabled={Boolean(busy)} onPress={() => { act('approve'); }} />
+              {workJob ? <Button label="Mark exact places in the work" kind="quiet" icon="pin" disabled={Boolean(busy)} onPress={() => nav.push({ name: 'review', job: workJob })} /> : null}
               <Field label="Note for the work" value={note} onChangeText={setNote} multiline tall maxLength={4000} placeholder="What to change, or what the step should know" />
               {before ? <Button label={`Add this and run “${before.title}” again`} kind="quiet" busy={busy === 'context'} disabled={needNote || Boolean(busy)} onPress={() => { act('context', { note }); }} /> : null}
               {gate.backTo.length ? (
