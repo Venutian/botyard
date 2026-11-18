@@ -3,7 +3,7 @@
     "name": "Botyard",
     "slug": "botyard",
     "scheme": "botyard",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "versionCode": 9
+      "versionCode": 10
     },
     "plugins": [
       "expo-secure-store",
