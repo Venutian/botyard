@@ -481,3 +481,59 @@ test('a picture alone is a message; a message cannot take a file of another job,
   // A refused message ties nothing.
   assert.equal(s.store.objects('SELECT raw FROM attachments WHERE job_id = ?', chat.id).filter((a) => a.issueCommentId).length, 1)
 })
+
+test('a job moved to another project loses its workspace, and its next run works in the new repo', async () => {
+  const s = studio()
+  const repoB = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'engine-run-')), 'other')
+  fs.mkdirSync(repoB)
+  const gitB = (...args) => execFileSync('git', ['-C', repoB, ...args], { stdio: 'pipe' })
+  gitB('init', '-q', '-b', 'main')
+  fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
+  gitB('add', '.')
+  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
+
+  const job = createJob(s.store, COMPANY, { title: 'Move me to the other project', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
+  const first = (await tick(s.store, s.opts())).started[0]
+  await until(s, (r) => r.finished.find((f) => f.id === first.id))
+  assert.ok(s.store.object('SELECT raw FROM jobs WHERE id = ?', job.id).executionWorkspaceId, 'it was worked in p-game\'s worktree')
+  const oldCwd = first.contextSnapshot.cwd
+
+  // No run is on it: moving projects clears the workspace.
+  patchJob(s.store, job.id, { projectId: 'p-other' })
+  assert.equal(s.store.object('SELECT raw FROM jobs WHERE id = ?', job.id).executionWorkspaceId, null)
+
+  // Its next run cuts a fresh worktree in the new project's repo.
+  addComment(s.store, job.id, { body: 'Now in the other project.' }, { actor: { user: 'local-board' }, now: NOW + 1000 })
+  const second = (await tick(s.store, s.opts())).started[0]
+  await until(s, (r) => r.finished.find((f) => f.id === second.id))
+  const cwd = second.contextSnapshot.cwd
+  assert.ok(cwd.startsWith(repoB), 'a fresh worktree in the new repo: ' + cwd)
+  assert.notEqual(cwd, oldCwd)
+  assert.equal(execFileSync('git', ['-C', cwd, 'branch', '--show-current']).toString().trim(), 'LH-701-move-me-to-the-other-project')
+})
+
+test('a run going on a job keeps its workspace when the job moves projects', async () => {
+  const s = studio({ script: 'sleep 20' })
+  const repoB = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'engine-run-')), 'other')
+  fs.mkdirSync(repoB)
+  const gitB = (...args) => execFileSync('git', ['-C', repoB, ...args], { stdio: 'pipe' })
+  gitB('init', '-q', '-b', 'main')
+  fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
+  gitB('add', '.')
+  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
+
+  const job = createJob(s.store, COMPANY, { title: 'Keep working', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
+  const run = (await tick(s.store, s.opts())).started[0]
+  assert.ok(s.store.object('SELECT raw FROM jobs WHERE id = ?', job.id).executionWorkspaceId)
+
+  // A run is on it: the move changes the project but leaves the workspace alone.
+  patchJob(s.store, job.id, { projectId: 'p-other' })
+  const moved = s.store.object('SELECT raw FROM jobs WHERE id = ?', job.id)
+  assert.equal(moved.projectId, 'p-other')
+  assert.ok(moved.executionWorkspaceId, 'kept while a run is active')
+
+  const done = await until(s, (r) => r.finished.find((f) => f.id === run.id), 30000)
+  assert.equal(done.status, 'succeeded')
+})
