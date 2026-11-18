@@ -14,7 +14,8 @@ import { EDGE_KINDS, WINDOWS, authorOf, buildFlow, changeStamp, crewFlow, dropFl
 import { waitingCount as serverCount } from '../server/lib/cards.mjs'
 import { studioSummary } from '../server/lib/engine.mjs'
 import { waitingCount as pageCount } from '../src/ui/needs-count.js'
-import { edgeSentence, flowHtml, flowList, layoutFlow, legendHtml, nodeSentence, shapeOf } from '../src/ui/crew-map.js'
+import { bundleEdges, edgeSentence, flowHtml, flowList, layoutFlow, legendHtml, nodeSentence, shapeOf } from '../src/ui/crew-map.js'
+import { checkLayout } from '../src/ui/crew-map-check.js'
 
 const KINDS = new Set(EDGE_KINDS.map((k) => k.kind))
 
@@ -203,30 +204,52 @@ test('the Crew sheet takes each bot\'s week from the flow', () => {
   assert.deepEqual(out.bots[1], { id: 'b', name: 'B' })
 })
 
-test('the crew map draws every node and line as a button with words, in its box, with a list that says the same', async (t) => {
+test('the crew map draws one line per way between two nodes, never through a plate, each pill clear of plates and pills', async (t) => {
   const y = await yard()
   t.after(y.stop)
   dropFlow()
-  const flow = await flowOf(y, '7d')
-  for (const size of [{ width: 1336, height: 730 }, { width: 1100, height: 640 }]) {
-    const layout = layoutFlow(flow, size)
-    const boxes = [...layout.box.entries()]
-    for (const [id, b] of boxes) {
-      assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.w <= size.width && b.y + b.h <= size.height, `${id} inside the box`)
-      for (const [other, c] of boxes) if (other !== id) assert.ok(b.x + b.w <= c.x || c.x + c.w <= b.x || b.y + b.h <= c.y || c.y + c.h <= b.y, `${id} and ${other} do not overlap`)
+  for (const window of ['now', '24h', '7d']) {
+    const flow = await flowOf(y, window)
+    const lines = bundleEdges(flow.edges)
+    assert.equal(new Set(lines.map((l) => l.id)).size, lines.length, 'one line per way')
+    assert.equal(lines.reduce((s, l) => s + l.count, 0), flow.edges.reduce((s, e) => s + e.count, 0), 'every message is on a line')
+    for (const l of lines) assert.equal(l.kind, l.kinds[0].kind, 'a line is painted in its main kind')
+    for (const size of [{ width: 1332, height: 758 }, { width: 1180, height: 670 }, { width: 1700, height: 940 }]) {
+      const layout = layoutFlow(flow, size)
+      assert.deepEqual(checkLayout(layout), [], `${window} at ${size.width}x${size.height}`)
+      const boxes = [...layout.box.entries()]
+      for (const [id, b] of boxes) {
+        assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.w <= size.width && b.y + b.h <= size.height, `${id} inside the box`)
+        for (const [other, c] of boxes) if (other !== id) assert.ok(b.x + b.w <= c.x || c.x + c.w <= b.x || b.y + b.h <= c.y || c.y + c.h <= b.y, `${id} and ${other} do not overlap`)
+      }
+      assert.ok(layout.laneX >= layout.chartW, 'the lanes stand right of the chart')
+      const html = flowHtml(flow, layout, { window })
+      assert.equal((html.match(/class="cm-chip /g) || []).length, lines.length, 'a pill half for every line')
+      assert.equal((html.match(/class="cm-node /g) || []).length, flow.nodes.length, 'a plate for every node')
+      for (const button of html.match(/<button[^>]*>/g)) assert.match(button, /aria-label="[^"]{12,}"/, 'every button says what it is')
     }
-    for (const lane of layout.lanes) assert.ok(lane.x >= layout.chartW, 'the lanes are right of the chart')
-    const html = flowHtml(flow, layout, { window: '7d' })
-    assert.equal((html.match(/class="cm-chip /g) || []).length, flow.edges.length, 'a count on every line')
-    assert.equal((html.match(/class="cm-node /g) || []).length, flow.nodes.length, 'a plate for every node')
-    for (const button of html.match(/<button[^>]*>/g)) assert.match(button, /aria-label="[^"]{12,}"/, 'every button says what it is')
   }
+  const flow = await flowOf(y, '7d')
   const list = flowList(flow, { window: '7d' })
   for (const n of flow.nodes) assert.ok(list.includes(nodeSentence(n, flow.nodes).replace(/'/g, '&#39;')), `${n.name} in the list`)
   for (const e of flow.edges.filter((x) => x.from === 'owner' || x.to === 'owner')) assert.ok(list.includes(edgeSentence(e, flow.nodes, '7d').replace(/'/g, '&#39;')))
   assert.match(legendHtml(flow), /Last one failed/)
   // A change that keeps the shape is patched, not redrawn.
   const bumped = structuredClone(flow)
-  bumped.edges[0].count += 3
+  bumped.edges.find((e) => e.count === 1 && e.kind !== 'wait').count = 2
   assert.equal(shapeOf(bumped, '1x1'), shapeOf(flow, '1x1'))
+})
+
+test('"Now" holds only the work in hand: jobs a bot is on, what was said on them today, and the cards and waits', async (t) => {
+  const y = await yard()
+  t.after(y.stop)
+  dropFlow()
+  const now = await flowOf(y, 'now')
+  const jobs = new Map((await y.get(`/api/companies/${y.company.id}/issues?limit=1000`)).map((i) => [i.id, i]))
+  for (const e of now.edges) {
+    if (['card', 'wait'].includes(e.kind)) continue
+    // A chat is no job: its words count for their last hour.
+    for (const m of e.messages) if (m.job && jobs.has(m.job.id)) assert.equal(jobs.get(m.job.id).status, 'in_progress', `${e.id}: ${m.job.title} is in hand`)
+  }
+  assert.ok(now.edges.some((e) => e.kind === 'card'), 'the cards that wait are there')
 })

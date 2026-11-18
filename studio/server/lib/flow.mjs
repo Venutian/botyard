@@ -123,7 +123,10 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
   const liveJobs = new Set(live.map((r) => r.issueId || r.jobId).filter(Boolean))
   const inWindow = (at) => (span === 'now' ? at >= since : at >= since && at <= now + MIN)
   const openNow = (issue) => OPEN.has(issue.status)
-  const counted = (issue, at) => inWindow(at) || (span === 'now' && openNow(issue))
+  // "Now" is the work in hand: a job a bot is on or has a run going on, and what was said on it today. A chat
+  // counts for its last hour. The other windows count everything that happened in them.
+  const isLive = (issue) => issue.status === 'in_progress' || liveJobs.has(issue.id)
+  const counted = (issue, at) => (span !== 'now' ? inWindow(at) : isChat(issue) ? at >= since : isLive(issue) && at >= now - DAY)
 
   // ── the lines ───────────────────────────────────────────────────────────────────
   const edges = new Map()
@@ -189,7 +192,7 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
     if (!issue) continue
     for (const comment of list) {
       const at = stamp(comment.createdAt)
-      if (!counted(issue, at) || (span === 'now' && at < since)) continue
+      if (!counted(issue, at)) continue
       const author = authorOf(comment)
       const from = who(author)
       if (!from) continue
