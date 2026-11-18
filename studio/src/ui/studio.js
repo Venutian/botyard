@@ -17,7 +17,7 @@ import { botScreen, botsScreen, editSummary, improvementsScreen, labelTables, mo
 import { FeedView, feedFrameHtml } from './run-feed.js'
 import { usageHtml } from './usage.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
-import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, projectExtras, projectGoal, projectPlan, routineScreen, routinesScreen, skillScreen, skillsScreen } from './studio-work.js'
+import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, pileTabs, projectExtras, projectGoal, projectPlan, routineScreen, routinesScreen, skillScreen, skillsScreen } from './studio-work.js'
 import './lightbox.js'
 import './shape.css'
 import { shapeMethods } from './studio-shape-acts.js'
@@ -318,7 +318,7 @@ export class Studio {
     this.cur = this.cols.a
     this._runs = { view: 'runs', filter: { bot: '', status: '' }, page: 0 }
     /** The Jobs screen's filter and page; each project page's extras, by project id, with when they were read. */
-    this._jobs = { filter: { pile: 'active', project: '', bot: '', q: '' }, page: 0 }
+    this._jobs = { filter: { pile: 'inhand', project: '', bot: '', q: '' }, page: 0 }
     this._projectInfo = new Map()
     /** What the left panel shows: 'attention', 'work', 'projects', a project's name after 'project:', or nothing. */
     this.tab = null
@@ -563,7 +563,8 @@ export class Studio {
       if (opened && !opened.read && (el.dataset.line || el.dataset.bot)) this._markCards([opened], { read: true })
       if (el.dataset.routine) return this.openRoutine(el.dataset.routine)
       if (el.dataset.act === 'open-bot') return this.openBot(el.dataset.id)
-      if (el.dataset.act === 'all-jobs') return this.openJobs()
+      if (el.dataset.act === 'all-jobs') return this.openJobs({ pile: '' }, true)
+      if (el.dataset.act === 'pile') return this.openJobs({ pile: el.dataset.pile })
       if (el.dataset.act === 'project-new') return this.openProjectNew()
       if (el.dataset.act === 'github-sync') return this.githubSync(false)
       if (el.dataset.act === 'github-add') return this.githubSync(true)
@@ -1121,7 +1122,8 @@ setView(view) {
     } else if (this.tab === 'work') {
       const done = m.lines.filter((l) => !l.open).slice(0, 10)
       html = head('Work', 'What the crew has in hand, newest step first')
-        + `<button class="find" data-act="all-jobs">${ICONS.search}<span>Find any job: every pile, project and bot</span></button>`
+        + (m.piles?.length ? `<nav class="piles" aria-label="Every pile of jobs">${pileTabs(m.piles, undefined, 'pile')}</nav>` : '')
+        + `<button class="find" data-act="all-jobs">${ICONS.search}<span>Find one job by its words</span></button>`
         + this._lines(m.lines)
         + (done.length ? `<h3>Finished lately</h3>${done.map((l) => `<button class="line done" data-line="${esc(l.id)}"><span class="ref">${esc(l.ref)}</span><span class="title">${esc(l.title)}</span><span></span><span class="note">${esc(l.note || l.stage)}</span></button>`).join('')}` : '')
     } else if (this.tab === 'projects') {
@@ -1585,11 +1587,11 @@ setView(view) {
   }
 
   /** Every job: a pile, a project, a bot, words, a page at a time. */
-  openJobs(filter = null) {
-    if (filter) this._jobs = { filter: { pile: 'active', project: '', bot: '', q: '', ...filter }, page: 0 }
+  openJobs(filter = null, focus = !filter) {
+    if (filter) this._jobs = { filter: { pile: 'inhand', project: '', bot: '', q: '', ...filter }, page: 0 }
     this._openSheet('jobs', 'Jobs', 'Every job the crew has had, newest first', { wide: true })
     this._reopen = () => this.openJobs()
-    this._loadJobs(!filter)
+    this._loadJobs(focus)
   }
 
   _loadJobs(focus = false) {

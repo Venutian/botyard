@@ -9,6 +9,7 @@
 import { displayOf } from './codes.mjs'
 import { instructionsBundle, instructionsDiff, instructionsFile, instructionsHistory, instructionsPage } from './bots.mjs'
 import { blockers, inbox, jobContext, products, settings } from './extras.mjs'
+import { jobCounts } from './read.mjs'
 import { Refused } from './write.mjs'
 
 const HOUR = 3_600_000
@@ -206,6 +207,7 @@ const PATHS = [
   [`/companies/${one}/budgets/overview`, (s, p) => { company(s, p[0]); return { policies: [] } }],
   [`/companies/${one}/org`, (s, p) => org(s, p[0])],
   [`/companies/${one}/search`, (s, p, q) => search(s, p[0], q)],
+  [`/companies/${one}/job-counts`, (s, p, q) => { company(s, p[0]); return jobCounts(s, p[0], q) }],
   [`/companies/${one}/timeline`, (s, p, q, c) => timeline(s, p[0], c)],
   [`/companies/${one}/artifacts`, (s, p, q) => artifacts(s, p[0], q)],
   [`/companies/${one}/members`, (s, p) => members(s, p[0])],

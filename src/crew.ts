@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChatBot, Connection, getChats, NeedsYou } from './api';
+import { ChatBot, Connection, getChats, JobPile, NeedsYou } from './api';
 
 const REFRESH_MS = 20_000;
 
@@ -50,7 +50,7 @@ export type Route =
   | { name: 'bots' }
   | { name: 'runs'; bot?: string }
   | { name: 'run'; id: string }
-  | { name: 'jobs'; project?: string; bot?: string }
+  | { name: 'jobs'; project?: string; bot?: string; pile?: JobPile }
   | { name: 'projects' }
   | { name: 'project'; id: string }
   | { name: 'library' }

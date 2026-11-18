@@ -1150,6 +1150,30 @@
 
 /* ── jobs and projects in full, routines and timers, the library ─────────────────── */
 
+/* Every pile of jobs with its count, one tap from the Work panel and at the head of the Jobs sheet. */
+.studio-sheet .piles { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 10px; }
+.studio-sheet .piles .pile {
+  display: inline-flex;
+  flex: none;
+  width: auto;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--raise);
+  color: var(--muted);
+  font: 600 13px/1.2 var(--body);
+  cursor: pointer;
+}
+.studio-sheet .piles .pile b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.studio-sheet .piles .pile:hover { color: var(--text); border-color: var(--muted); }
+.studio-sheet .piles .pile.on { background: var(--text); border-color: var(--text); color: var(--panel-solid); }
+.studio-sheet .piles .pile.on b { color: inherit; }
+.studio-sheet .piles .pile:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.studio-sheet .filters .piles { flex: 1 1 100%; margin: 0; }
+
 /* The Work panel's door to every job: it reads as a search field. */
 .studio-body button.find {
   display: flex;

@@ -98,3 +98,19 @@ test('jobs are found by words in the code, the title, the brief or what was said
   assert.equal(patch({ description: 'GOAL: Part One to outside players' }).body.description, 'GOAL: Part One to outside players')
   assert.equal(store.object("SELECT raw FROM projects WHERE id = 'p1'").description, 'GOAL: Part One to outside players')
 })
+
+test('the job counts say how many jobs each state holds and how many settled since a time; the list can ask for those alone', () => {
+  const { store, get } = studio()
+  store.put('jobs', { id: 'j4', companyId: 'co', identifier: 'LH-4', title: 'Old', status: 'done', projectId: 'p1', completedAt: ago(60 * 30), createdAt: ago(9000), updatedAt: ago(60 * 30) })
+  store.put('jobs', { id: 'j5', companyId: 'co', identifier: 'LH-5', title: 'Dropped', status: 'cancelled', projectId: 'p1', cancelledAt: ago(20), createdAt: ago(900), updatedAt: ago(20) })
+  store.put('jobs', { id: 'chat', companyId: 'co', identifier: 'LH-6', title: 'A chat', status: 'in_progress', conversationAgentId: 'lead', createdAt: ago(900), updatedAt: ago(5) })
+  const since = ago(60 * 3)
+  const counts = get(`/api/companies/co/job-counts?since=${encodeURIComponent(since)}`).body
+  // The chat is not a job on any list.
+  assert.deepEqual(counts.statuses, { in_progress: 2, done: 2, cancelled: 1 })
+  assert.deepEqual(counts.settled, { done: 1, cancelled: 1 })
+  assert.equal(get('/api/companies/co/job-counts?assigneeAgentId=lead').body.statuses.in_progress, undefined)
+  const today = get(`/api/companies/co/issues?status=done&settledSince=${encodeURIComponent(since)}`).body
+  assert.deepEqual(today.map((j) => j.id), ['j3'])
+  assert.equal(get('/api/companies/co/issues?settledSince=yesterday').status, 400)
+})

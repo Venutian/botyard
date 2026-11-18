@@ -16,6 +16,7 @@ import { git } from './changes.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks, roleOf } from './looks.mjs'
 import { readRested } from './crew.mjs'
+import { pilesOf, startOfToday } from './piles.mjs'
 import { EngineError, call, cancelJob, companyId, crewRecords, jobComments, orElse, plainTitle, refOf, stopJob, withRefs } from './engine.mjs'
 
 const HOUR_MS = 60 * 60 * 1000
@@ -157,13 +158,20 @@ function checkStep(check, verdicts) {
 const usd = (n) => (n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? '<$0.01' : '$0')
 
 /**
- * A request on a track as one work line: where its trip stands and what it cost so far, across every step,
- * round and rerun. Its steps' own jobs are not lines of their own.
+ * A request on a track as one work line: where its trip stands, who is on its step now (the line wears that bot's
+ * colour, like any other), and what it cost so far, across every step, round and rerun. Its steps' own jobs are not
+ * lines of their own. A script or a gate names nobody: the line says the step instead.
  */
-export function requestLine(r, issue, projectNames, now) {
+export function requestLine(r, issue, projectNames, now, names = new Map()) {
   const trip = r.trip || {}
   const cost = Number(r.cost?.usd) || 0
   const step = trip.currentTitle || ''
+  const said = step ? step.charAt(0).toLowerCase() + step.slice(1) : 'its next step'
+  const working = !['done', 'not-in-main', 'stopped'].includes(r.status) && !['stopped', 'stuck', 'paused', 'not-in-main', 'done'].includes(trip.status)
+  const who = working && trip.currentKind === 'bot' ? names.get(trip.currentBotId) || '' : ''
+  const checks = trip.currentRuling || /check|test|review|rul/i.test(`${trip.current} ${step}`)
+  // The rounds back to this step so far, over every back-line that leads to it (keyed "from>to").
+  const fixes = Object.entries(trip.rounds || {}).filter(([key]) => key.endsWith(`>${trip.current}`)).reduce((a, [, n]) => a + (Number(n) || 0), 0)
   let stage = 'build'
   let pill = ''
   let note = ''
@@ -171,16 +179,20 @@ export function requestLine(r, issue, projectNames, now) {
   else if (r.status === 'not-in-main' || trip.status === 'not-in-main') { stage = 'passed'; note = 'Done, not in main yet' }
   else if (r.status === 'stopped' || trip.status === 'stopped') { stage = 'stopped'; note = 'Stopped' }
   else if (trip.status === 'stuck') { stage = 'blocked'; note = `Stuck: ${trip.reason || 'see its trip'}` }
-  else if (trip.status === 'paused') { stage = 'queued'; note = `Paused at ${step}` }
-  else if (trip.currentKind === 'gate') { stage = 'queued'; pill = 'waits'; note = `Waits for you: ${step}` }
-  else if (/check|test|rul/i.test(`${trip.current} ${step}`)) { stage = 'check'; note = `${step} on its track` }
-  else { stage = 'build'; note = `${step || 'Starting'} on its track` }
+  else if (trip.status === 'paused') { stage = 'queued'; note = `Paused at ${said}` }
+  else if (trip.currentKind === 'gate') { stage = 'queued'; pill = 'waits'; note = `Waiting for you: ${said}` }
+  else if (trip.currentKind === 'bot' && !who) { stage = checks ? 'check' : 'build'; note = `Waiting for a bot to take ${said}, on its track` }
+  else if (trip.currentRuling) { stage = 'ruling'; note = `${who} is ruling on it, on its track` }
+  else if (checks && who) { stage = 'check'; note = `${who} is checking it, on its track` }
+  else if (who && /build|fix|code/i.test(`${trip.current} ${step}`)) { stage = 'build'; note = `${who} is ${fixes ? `on fix ${fixes}` : 'building it'}, on its track` }
+  else if (who) { stage = 'build'; note = `${who} is on ${said}, on its track` }
+  else { stage = checks ? 'check' : 'build'; note = `${step || 'Starting'}, on its track` }
   const rounds = Object.values(trip.rounds || {}).reduce((a, b) => a + b, 0)
   const at = Date.parse(r.updatedAt) || now
   const state = (name) => ({ build: stage === 'build' ? 'now' : 'done', check: stage === 'check' ? 'now' : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
   return {
     id: issue?.id || r.jobId, ref: issue ? refOf(issue, projectNames) : r.jobCode, title: short(plainTitle(withRefs(r.title))), project: projectNames.get(r.projectId) || '', projectId: r.projectId || '',
-    bot: '', stage, pill: pill || stage, note: `${note}${cost > 0 ? `, ${usd(cost)} so far` : ''}`, steps: STEPS.map(state), fixes: rounds, since: at, late: false,
+    bot: who, stage, pill: pill || stage, note: `${note}${cost > 0 ? `, ${usd(cost)} so far` : ''}`, steps: STEPS.map(state), fixes: rounds, since: at, late: false,
     open: !['merged', 'stopped'].includes(stage), at, track: { tripId: trip.id || '', cost, costText: usd(cost), status: r.status },
   }
 }
@@ -293,7 +305,7 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
   for (const r of requests) {
     const at = Date.parse(r.updatedAt) || 0
     if (['done', 'stopped'].includes(r.status) && now - at > DAY_MS) continue
-    lines.push(requestLine(r, byId.get(r.jobId), projectNames, now))
+    lines.push(requestLine(r, byId.get(r.jobId), projectNames, now, names))
   }
   const rank = { build: 0, check: 0, ruling: 0, fix: 1, blocked: 1, queued: 2, passed: 3, built: 3, merged: 4, kept: 6, replaced: 6, stopped: 6, pushed: 6 }
   return lines.sort((a, b) => rank[a.stage] - rank[b.stage] || b.at - a.at).slice(0, SHOWN_LINES)
@@ -517,7 +529,7 @@ function stateLine({ working, trouble, lines }) {
 }
 
 /** The whole view from records already in hand. Pure, so the tests can feed it a studio. */
-export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], now = Date.now() }) {
+export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
   const names = new Map(agents.map((a) => [a.id, a.name]))
   const projectNames = new Map(projects.map((p) => [p.id, p.name]))
   const byRef = new Map(issues.map((i) => [i.identifier, i]))
@@ -541,6 +553,8 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     bots,
     projects: projectRows({ projects, issues, bots, repos, now }),
     feed: dayFeed({ issues, names, projectNames, byRef, files, verdicts, now }),
+    // Every pile of jobs with its count: the Work sheet's tabs, each one tap from the list.
+    piles: pilesOf(counts),
     at: now,
   }
 }
@@ -596,13 +610,15 @@ async function repoState(project, now) {
 export async function managerWithRecords({ folder = crewFolder(), now = Date.now(), ...options } = {}) {
   const records = await crewRecords(options)
   const files = readCrewFiles(folder)
-  const [verdicts, repos, requests] = await Promise.all([
+  const [verdicts, repos, requests, counts] = await Promise.all([
     readVerdicts(records.issues, options, now),
     Promise.all(records.projects.map(async (p) => [p.id, await repoState(p, now)])),
     // Requests on tracks: an engine without tracks has none.
     companyId(options).then((co) => orElse(call(`/companies/${co}/requests?limit=200`, options), [])),
+    // How many jobs each pile holds: the Work sheet's tabs. An engine without counts has none, and no tabs show.
+    companyId(options).then((co) => orElse(call(`/companies/${co}/job-counts?since=${encodeURIComponent(startOfToday(now))}`, options), null)),
   ])
-  return { manager: buildManager({ ...records, files, verdicts, repos: new Map(repos), requests, now }), records }
+  return { manager: buildManager({ ...records, files, verdicts, repos: new Map(repos), requests, counts, now }), records }
 }
 
 export const managerSummary = async (options) => (await managerWithRecords(options)).manager

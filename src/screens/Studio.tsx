@@ -164,7 +164,7 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
 
 /** Every section of the studio the PC map has, one line each: what it answers. */
 const SECTIONS: { title: string; detail: string; route: Route }[] = [
-  { title: 'Jobs', detail: 'Any job: active, backlog or done, by project or bot, or searched', route: { name: 'jobs' } },
+  { title: 'Jobs', detail: 'Any job: in hand, waiting, backlog, blocked, done today or cancelled, by project or bot, or searched', route: { name: 'jobs' } },
   { title: 'Projects', detail: 'Your ranking, the shelf, each project in full; add one', route: { name: 'projects' } },
   { title: 'Bots', detail: 'Who is working, resting or stuck and why; add a bot or change one', route: { name: 'bots' } },
   { title: 'Runs and activity', detail: 'Every run and why one failed; who did what', route: { name: 'runs' } },

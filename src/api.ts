@@ -132,6 +132,8 @@ export type Manager = {
   state: string;
   trouble: { level: 'bad' | 'warn'; text: string }[];
   lines: WorkLine[];
+  /** Every pile of jobs with its count; an older door sends none. */
+  piles?: Pile[];
   bots: ManagerBot[];
   projects: ManagerProject[];
   feed: FeedItem[];
@@ -480,9 +482,12 @@ export type SpendView = {
   pace: { week: number; cap: number | null; perHourNow: number; perHourAllowed: number; resets: number | null; at: number | null } | null;
   priced: boolean; at: number;
 };
-export type JobPile = 'active' | 'backlog' | 'done';
+/** The piles jobs are sorted into; 'all' is every one. 'active' and 'done' are the older piles. */
+export type JobPile = 'inhand' | 'waiting' | 'backlog' | 'blocked' | 'today' | 'cancelled' | 'all' | 'active' | 'done';
+/** A pile with how many jobs it holds now. */
+export type Pile = { id: JobPile; name: string; count: number };
 export type JobListRow = { id: string; ref: string; title: string; status: string; state: string; priority: string; bot: string; project: string; at: number | null; snippet?: string };
-export type JobListPage = { jobs: JobListRow[]; page: number; more: boolean; bots: { id: string; name: string }[]; projects: { id: string; name: string }[] };
+export type JobListPage = { jobs: JobListRow[]; page: number; more: boolean; piles?: Pile[]; bots: { id: string; name: string }[]; projects: { id: string; name: string }[] };
 export type LinkedJob = JobLink & { status: string; state: string };
 export type JobMore = {
   parent: LinkedJob | null; children: LinkedJob[]; blockedBy: LinkedJob[]; blocks: LinkedJob[];

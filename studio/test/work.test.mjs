@@ -62,6 +62,7 @@ function engine({ calls = [], triggers = [{ id: TRIGGER, kind: 'schedule', cronE
     if (p === `/issues/${JOB}/runs`) return json([{ runId: 'r1', agentId: FRED, status: 'failed', error: 'Too Many Requests', usageJson: { inputTokens: 10, outputTokens: 5 }, startedAt: '2026-11-11T10:00:00Z', finishedAt: '2026-11-11T10:01:00Z' }])
     if (p === `/issues/${JOB}/cost-summary`) return json({ inputTokens: 100, outputTokens: 50, cachedInputTokens: 900, costCents: 0, runCount: 2, runtimeMs: 60000, includeDescendants: true })
     if (p === `/projects/${PROJECT}`) return json({ id: PROJECT, companyId: 'co', name: 'Lighthouse', env: { KEY: 'secret-value' }, workspaces: [{ name: 'lighthouse', cwd: path.join(os.homedir(), 'Acme/lighthouse'), repoUrl: 'file:///x', isPrimary: true }] })
+    if (p === '/companies/co/job-counts') return json({ statuses: { in_progress: 2, in_review: 1, todo: 4, backlog: 7, blocked: 1, done: 30, cancelled: 5 }, since: u.searchParams.get('since'), settled: { done: 3, cancelled: 1 } })
     if (p === '/companies/co/budgets/overview') return json({ policies: [{ scopeType: 'company', scopeId: 'co', amount: 5 }] })
     if (p === '/companies/co/routines') return json([{ id: ROUTINE, title: 'Nightly', status: 'active', projectId: PROJECT, assigneeAgentId: LEAD, triggers }, { id: 'old', title: 'Gone', status: 'archived', projectId: PROJECT }])
     if (p === '/companies/co/costs/by-project') return json([{ projectId: PROJECT, inputTokens: 10, outputTokens: 5, eventCount: 2 }, { projectId: null, inputTokens: 999 }])
@@ -86,8 +87,19 @@ test('the work list asks the engine for one pile, project and bot a page at a ti
   assert.deepEqual(list.jobs.map((j) => [j.ref, j.title, j.state, j.bot, j.project]), [['LH-7', 'Fix the map', 'Working', 'Freelancer', 'Lighthouse']])
   assert.equal(list.more, false)
   assert.deepEqual(list.bots.map((b) => b.name), ['Freelancer', 'Lead'])
-  await assert.rejects(jobList({ pile: 'everything', ...fake }), /active, backlog or done/)
+  await assert.rejects(jobList({ pile: 'everything', ...fake }), /Choose a pile: inhand, waiting, backlog, blocked, today, cancelled/)
   await assert.rejects(jobList({ bot: '../x', ...fake }), /not a bot id/)
+})
+
+test('every pile comes with its count, for the same project and bot, and "done today" asks for what settled since midnight', async () => {
+  const fake = engine()
+  const now = new Date(2026, 10, 18, 15, 30).getTime()
+  const list = await jobList({ pile: 'today', project: PROJECT, bot: FRED, now, ...fake })
+  const midnight = new Date(2026, 10, 18).toISOString()
+  assert.equal(fake.calls.find((c) => c.path === '/companies/co/issues').query.settledSince, midnight)
+  assert.equal(fake.calls.find((c) => c.path === '/companies/co/issues').query.status, 'done')
+  assert.deepEqual(fake.calls.find((c) => c.path === '/companies/co/job-counts').query, { since: midnight, projectId: PROJECT, assigneeAgentId: FRED })
+  assert.deepEqual(list.piles.map((p) => [p.id, p.name, p.count]), [['inhand', 'In hand', 3], ['waiting', 'Waiting to start', 4], ['backlog', 'Backlog', 7], ['blocked', 'Blocked', 1], ['today', 'Done today', 3], ['cancelled', 'Cancelled', 5]])
 })
 
 test('words search through the engine search, and show where they were found', async () => {

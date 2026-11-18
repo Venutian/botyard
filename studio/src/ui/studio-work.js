@@ -17,13 +17,20 @@ const md = (text) => markdown(text, { jobs: true })
 
 // ── Jobs ────────────────────────────────────────────────────────────────────────
 
-export const PILES = [['active', 'Active'], ['backlog', 'Backlog'], ['done', 'Done'], ['', 'All']]
+/** The piles, in the order the server sends them with their counts; these when it sends none. */
+export const PILES = [['inhand', 'In hand'], ['waiting', 'Waiting to start'], ['backlog', 'Backlog'], ['blocked', 'Blocked'], ['today', 'Done today'], ['cancelled', 'Cancelled']]
+
+/** The piles as tabs, each with its count when it is known: one tap shows that pile. */
+export function pileTabs(piles, on, act) {
+  const list = piles?.length ? piles : PILES.map(([id, name]) => ({ id, name, count: null }))
+  return list.map((p) => `<button type="button" class="pile ${on === p.id ? 'on' : ''}" ${on !== undefined ? `aria-pressed="${on === p.id}"` : ''} data-act="${act}" data-pile="${esc(p.id)}"><span>${esc(p.name)}</span>${p.count === null || p.count === undefined ? '' : `<b>${esc(String(p.count))}</b>`}</button>`).join('')
+}
 
 /** "Where is that job?" A pile, a project, a bot and words; one table; a pager. */
 export function jobsScreen({ filter, data }) {
   const pick = (name, label, all, list) => `<label>${label} <select data-jobs="${name}"><option value="">${all}</option>${list.map((x) => `<option value="${esc(x.id)}" ${filter[name] === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`
   const head = `<form class="filters" data-part="jobs-filter">
-    <div class="seg" role="tablist">${PILES.map(([id, name]) => `<button type="button" role="tab" aria-selected="${filter.pile === id}" class="${filter.pile === id ? 'on' : ''}" data-act="jobs-pile" data-pile="${id}">${name}</button>`).join('')}</div>
+    <div class="piles" role="group" aria-label="Piles">${pileTabs(data.piles, filter.pile, 'jobs-pile')}<button type="button" class="pile ${filter.pile === '' ? 'on' : ''}" aria-pressed="${filter.pile === ''}" data-act="jobs-pile" data-pile=""><span>All</span></button></div>
     ${pick('project', 'Project', 'Every one', data.projects || [])}
     ${pick('bot', 'Bot', 'Everyone', data.bots || [])}
     <input class="search" type="search" name="q" value="${esc(filter.q)}" placeholder="Search titles, details and comments" maxlength="120" aria-label="Search jobs">

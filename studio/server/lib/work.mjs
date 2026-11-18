@@ -21,6 +21,7 @@ import { leadOf } from './looks.mjs'
 import { PREVIEW_PORT, listPreviews, previewRoot } from './previews.mjs'
 import { pcSkill, pcSkillFile, pcSkillRow, pcSkills } from './pc-skills.mjs'
 import { crewFolder } from './models.mjs'
+import { PILES as PILE_KINDS, PILE_ORDER, pilesOf, startOfToday } from './piles.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** The engine's own job number, LH-580: what links in the crew's messages carry. */
@@ -42,12 +43,8 @@ const ARTIFACTS_PAGE = 60
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const PRIORITIES = ['critical', 'high', 'medium', 'low']
 
-/** The Work list's three piles, and the words each state is shown in. */
-export const PILES = {
-  active: ['in_progress', 'in_review', 'blocked', 'todo'],
-  backlog: ['backlog'],
-  done: ['done', 'cancelled'],
-}
+/** The Work list's piles by the states they hold (see piles.mjs), and the words each state is shown in. */
+export const PILES = Object.fromEntries(Object.entries(PILE_KINDS).map(([id, pile]) => [id, pile.statuses]))
 export const STATE_WORDS = { in_progress: 'Working', in_review: 'To review', blocked: 'Blocked', todo: 'Waiting', backlog: 'Backlog', done: 'Done', cancelled: 'Cancelled' }
 
 const home = os.homedir()
@@ -102,8 +99,8 @@ const jobRow = (issue, n, snippet = '') => ({
  * one bot, and a search through the engine's own search when there are words. Conversations with a
  * bot are jobs to the engine and are left out; they live in Chats.
  */
-export async function jobList({ pile = 'active', project = '', bot = '', q = '', page = 0, ...options } = {}) {
-  if (pile && !Object.hasOwn(PILES, pile)) throw new EngineError(400, 'Choose active, backlog or done')
+export async function jobList({ pile = 'active', project = '', bot = '', q = '', page = 0, now = Date.now(), ...options } = {}) {
+  if (pile && !Object.hasOwn(PILES, pile)) throw new EngineError(400, `Choose a pile: ${PILE_ORDER.join(', ')}`)
   if (project && !ID.test(project)) throw new EngineError(400, 'That is not a project id')
   if (bot && !ID.test(bot)) throw new EngineError(400, 'That is not a bot id')
   const words = String(q || '').trim().slice(0, MAX_QUERY)
@@ -114,12 +111,19 @@ export async function jobList({ pile = 'active', project = '', bot = '', q = '',
   if (pile) filters.set('status', PILES[pile].join(','))
   if (project) filters.set('projectId', project)
   if (bot) filters.set('assigneeAgentId', bot)
+  const today = startOfToday(now)
+  if (PILE_KINDS[pile]?.today) filters.set('settledSince', today)
+  // How many each pile holds, for the same project and bot: the tabs say it.
+  const counted = new URLSearchParams({ since: today })
+  if (project) counted.set('projectId', project)
+  if (bot) counted.set('assigneeAgentId', bot)
+  const counts = cached(`counts:${id}:${counted}`, READ_TTL_MS, options, () => orElse(call(`/companies/${id}/job-counts?${counted}`, options), null))
   let rows
   if (words) {
     filters.set('q', words)
     filters.set('scope', 'issues')
     const found = await cached(`search:${id}:${filters}`, READ_TTL_MS, options, () => call(`/companies/${id}/search?${filters}`, options))
-    rows = (found?.results || []).filter((r) => r.type === 'issue' && r.issue).map((r) => jobRow(r.issue, n, r.snippet && r.snippet !== r.issue.title ? r.snippet : ''))
+    rows = (found?.results || []).filter((r) => r.type === 'issue' && r.issue && (!PILE_KINDS[pile]?.today || (r.issue.completedAt || r.issue.updatedAt || '') >= today)).map((r) => jobRow(r.issue, n, r.snippet && r.snippet !== r.issue.title ? r.snippet : ''))
   } else {
     filters.set('view', 'compact')
     const issues = await cached(`list:${id}:${filters}`, READ_TTL_MS, options, () => call(`/companies/${id}/issues?${filters}`, options))
@@ -130,6 +134,7 @@ export async function jobList({ pile = 'active', project = '', bot = '', q = '',
     jobs: rows.slice(0, JOBS_PAGE),
     page: at,
     more: rows.length > JOBS_PAGE,
+    piles: pilesOf(await counts),
     bots: [...n.bots].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
     projects: [...n.projects].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
   }
