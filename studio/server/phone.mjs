@@ -28,6 +28,7 @@ import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
+import { crewFlow } from './lib/flow.mjs'
 import { managerSummary } from './lib/manager.mjs'
 import { crewFolder, readModels } from './lib/models.mjs'
 import { readPlans } from './lib/plans.mjs'
@@ -460,6 +461,9 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (docPart && docPart[3] === 'revisions' && get) return send(res, 200, { revisions: await documentRevisions(docPart[1], decodeURIComponent(docPart[2]), options) })
       if (docPart && docPart[3] === 'restore' && post) return send(res, 200, await restoreDocument(docPart[1], decodeURIComponent(docPart[2]), String((await readBody(req)).revision || ''), options))
       if (pathname === '/v1/summary' && req.method === 'GET') return send(res, 200, sorted(await summarySoon(options)))
+      // The crew map's tree for the phone: who leads, who answers to whom, and the lines between them. The same
+      // Needs-you list as the summary, so the owner node's number is the badge's.
+      if (pathname === '/v1/flow' && req.method === 'GET') return send(res, 200, await crewFlow({ window: ['now', '24h', '7d'].includes(q('window')) ? q('window') : '24h', needs: async () => sorted({ needsYou: (await summarySoon(options)).needsYou }).needsYou, ...options }))
       if (pathname === '/v1/manager' && req.method === 'GET') return send(res, 200, sorted(await managerSoon(options)))
       // The owner's goal for a project, from the phone: written where the lead reads it, and said to him.
       const goal = /^\/v1\/projects\/([^/]+)\/goal$/.exec(pathname)
