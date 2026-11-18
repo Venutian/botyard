@@ -64,7 +64,9 @@ export function readShow(text) {
   const rows = Array.isArray(j.paused) ? j.paused : []
   const paused = rows.filter((r) => r && typeof r === 'object' && (r.state === undefined || r.state === 'ok')).length
   const heldGb = Math.round((count(j.heldMB) / 1024) * 10) / 10
-  return { day: level(j.day) || now, night: level(j.night) || now, now, paused, heldGb }
+  // A tool may say in one line what the level lets run (and anything else the owner should see): shown under the button.
+  const note = typeof j.note === 'string' ? j.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200) : ''
+  return { day: level(j.day) || now, night: level(j.night) || now, now, paused, heldGb, note }
 }
 
 const NAMES = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
@@ -77,7 +79,7 @@ export function stateLine(s) {
     return `Full: ${s.paused} job${s.paused === 1 ? '' : 's'} paused${held}`
   }
   const split = s.day && s.night && s.day !== s.night ? ` (day ${NAMES[s.day]}, night ${NAMES[s.night]})` : ''
-  return `${NAMES[s.now]}${split}`
+  return s.note ? `${s.note}${split}` : `${NAMES[s.now]}${split}`
 }
 
 /** What the control shows. `{ configured: false }` when this yard has no throttle tool. */
