@@ -6,7 +6,7 @@
  */
 
 .hud.studio .brainmap {
-  --bm-void: #eef2f7;
+  --bm-void: #b9c2ce;
   --bm-board: #e4e7eb;
   --bm-dot: #c3c9d1;
   --bm-quiet: #93a0b5;
@@ -63,7 +63,7 @@
   background: var(--bm-void);
   /* The window is set into the plate: its rim catches light at the top, its depth shades the inside edge. */
   /* The window is set into the plate: the inside edge is shaded where the plate's thickness falls. */
-  box-shadow: inset 0 14px 30px -18px rgba(20, 30, 50, 0.45), var(--thick);
+  box-shadow: inset 0 14px 30px -18px rgba(20, 30, 50, 0.55), var(--thick);
 }
 .hud.studio[data-plates='night'] .brainmap .bm-stage {
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px #0c1222, inset 0 18px 40px -18px rgba(0, 0, 0, 0.9), var(--thick);
@@ -112,7 +112,7 @@
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 }
 .brainmap .bm-tip span { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); }
-.brainmap .bm-hint { position: absolute; left: 14px; bottom: 10px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; opacity: 0.8; }
+.brainmap .bm-hint { position: absolute; left: 14px; bottom: 10px; margin: 0; font-size: 12px; color: #1c232c; pointer-events: none; opacity: 0.8; }
 
 /* ── the list ────────────────────────────────────────────────────────────────── */
 
@@ -237,3 +237,5 @@
 .brainmap .bm-newform label { display: grid; gap: 6px; font: 600 13px/1 var(--body); }
 .brainmap .bm-newform .bm-acts { margin: 0; }
 .brainmap .bm-edit-said { margin: 8px 18px 0; min-height: 1em; font-size: 13px; color: var(--muted); }
+
+.hud.studio[data-plates='night'] .brainmap .bm-hint { color: var(--muted); }
