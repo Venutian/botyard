@@ -332,6 +332,18 @@ export const getJob = (c: Connection, id: string) => call<JobDetail>(c, `/jobs/$
 export const getRoutines = (c: Connection) => call<{ routines: Routine[] }>(c, '/routines');
 export const getModels = (c: Connection) => call<Models>(c, '/models');
 
+// ── launch: every product on every channel, read from the channels (docs/launch.md) ──
+export type LaunchCell = { state: string; tone: 'ok' | 'go' | 'look' | 'bad' | 'wait'; how: 'read' | 'told' | 'none'; version: string; detail: string; waits: string; next: string; checkedAt?: number; by?: string };
+export type LaunchRow = {
+  name: string; project: string; kind: string; note: string; first: boolean; cells: Record<string, LaunchCell | null>;
+  next: { channel: string; text: string; waits: string } | null;
+  readiness: { group: string; text: string; state: 'pass' | 'fail' | 'unknown' | 'yours'; detail: string }[];
+  history: { at: number; channel: string; from: string; to: string; how: string; by?: string }[];
+};
+export type LaunchBoard = { channels: { id: string; name: string }[]; rows: LaunchRow[]; checkedAt: number; stale: boolean; planFound: boolean; planFile: string };
+export const getLaunch = (c: Connection) => call<LaunchBoard>(c, '/launch');
+export const launchAction = (c: Connection, body: { action: 'check' } | { action: 'tell'; product: string; channel: string; state: string }) => call<LaunchBoard>(c, '/launch', 'POST', body);
+
 // ── tracks: how each request moves, and the owner's hand on a trip (docs/tracks.md) ──
 export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
 export type TrackLine = { from: string; to: string; on: 'pass' | 'fail' | 'always'; rounds?: number; then?: string };

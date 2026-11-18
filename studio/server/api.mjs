@@ -30,6 +30,7 @@ import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/
 import { guidedChange } from './lib/chapters.mjs'
 import { openLook, pageShot } from './lib/look.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
+import { launchView, tellState } from './lib/launch.mjs'
 import { brainRoute } from './lib/brain.mjs'
 import { botBehind } from './engine/caller.mjs'
 
@@ -90,6 +91,8 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio/chat' && read) return send(res, 200, await chatThread(url.searchParams.get('bot') || ''))
     if (url.pathname === '/api/studio/routines' && read) return send(res, 200, { routines: await routineList() })
     if (url.pathname === '/api/studio/tracks' && read) return send(res, 200, await tracksPage())
+    // Launch (docs/launch.md): every product on every channel, read from the channels themselves.
+    if (url.pathname === '/api/studio/launch' && read) return send(res, 200, await launchView())
     if (url.pathname === '/api/studio/trip' && read) return send(res, 200, await tripPage(url.searchParams.get('id') || ''))
     if (url.pathname === '/api/studio/job' && read) return send(res, 200, await jobPage(url.searchParams.get('id') || ''))
     if (url.pathname === '/api/studio/chats' && read) return send(res, 200, { chats: await chatList() })
@@ -195,6 +198,10 @@ async function studioRoute(req, res, url) {
     // The owner's override of a finding: only the map's own page on this machine gets here (the guards above).
     const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
     if (finding && req.method === 'POST') return send(res, 200, await decideImprovement(finding[1], { action: String(body.action || ''), reason: body.reason }))
+    if (url.pathname === '/api/studio/launch' && req.method === 'POST') {
+      if (body.action === 'tell') tellState({ product: String(body.product || ''), channel: String(body.channel || ''), state: String(body.state || ''), tone: String(body.tone || ''), next: String(body.next || ''), waits: String(body.waits || '') })
+      return send(res, 200, await launchView({ force: body.action === 'check' }))
+    }
     if (url.pathname === '/api/studio/trip' && req.method === 'POST') return changed(res, 200, await tripAct(String(body.id || ''), { action: String(body.action || ''), step: String(body.step || ''), to: String(body.to || ''), note: String(body.note || '') }))
     if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID(), { pictures: body.pictures }))
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))

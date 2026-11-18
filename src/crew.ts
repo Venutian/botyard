@@ -72,6 +72,7 @@ export type Route =
   | { name: 'projectEdit'; id: string }
   | { name: 'routine'; id: string }
   | { name: 'tracks' }
+  | { name: 'launch'; product?: string }
   | { name: 'trip'; id: string };
 export type Tab = 'home' | 'studio' | 'style';
 /**

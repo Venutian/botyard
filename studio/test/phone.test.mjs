@@ -1050,3 +1050,26 @@ test('the phone gets the crew map\'s tree on /v1/flow, with the summary\'s Needs
     assert.equal(body.needs, waitingCount(summary.needsYou))
   })
 })
+
+test('the launch board is the same on the phone: read it, and say where a channel with no API stands', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-launch-'))
+  const plan = path.join(dir, 'plan.json')
+  fs.writeFileSync(plan, JSON.stringify({ products: [{ name: 'Quest', kind: 'game', channels: { crazygames: { told: true } } }] }))
+  const before = { plan: process.env.BOTYARD_LAUNCH_PLAN, state: process.env.BOTYARD_LAUNCH_STATE }
+  process.env.BOTYARD_LAUNCH_PLAN = plan
+  process.env.BOTYARD_LAUNCH_STATE = path.join(dir, 'state.json')
+  try {
+    await withDoor(async (ask) => {
+      const board = await ask('/v1/launch')
+      assert.equal(board.status, 200)
+      assert.deepEqual(board.body.channels.map((c) => c.id), ['crazygames'])
+      assert.equal(board.body.rows[0].cells.crazygames.state, 'Not told yet')
+      const told = await ask('/v1/launch', { method: 'POST', body: { action: 'tell', product: 'Quest', channel: 'crazygames', state: 'In QA' } })
+      assert.equal(told.body.rows[0].cells.crazygames.state, 'In QA')
+      assert.equal(told.body.rows[0].cells.crazygames.how, 'told')
+      assert.equal((await ask('/v1/launch', { method: 'POST', body: { action: 'tell', product: 'Quest', channel: 'steam', state: 'x' } })).status, 400)
+    })
+  } finally {
+    for (const [k, v] of [['BOTYARD_LAUNCH_PLAN', before.plan], ['BOTYARD_LAUNCH_STATE', before.state]]) if (v === undefined) delete process.env[k]; else process.env[k] = v
+  }
+})

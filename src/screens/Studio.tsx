@@ -174,6 +174,7 @@ const SECTIONS: { title: string; detail: string; route: Route }[] = [
   { title: 'Improvements', detail: 'What the audits found worth improving, its status, and the job that carries it', route: { name: 'improvements' } },
   { title: 'Routines and helpers', detail: 'Work that starts by itself, and the scripts that keep the crew moving', route: { name: 'routines' } },
   { title: 'Tracks', detail: 'How each request moves step by step, what waits for you, and what it cost', route: { name: 'tracks' } },
+  { title: 'Launch', detail: 'Every product on every store and channel: where it stands, and what it waits on', route: { name: 'launch' } },
   { title: 'Library', detail: 'Pictures, documents and files the crew made', route: { name: 'library' } },
   { title: 'Connectors', detail: 'Services the crew may use, who may use each, and the sign-ins', route: { name: 'connectors' } },
   { title: 'Company', detail: 'Members and open invites', route: { name: 'company' } },

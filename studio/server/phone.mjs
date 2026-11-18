@@ -28,6 +28,7 @@ import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { throttleAct, throttleState } from './lib/throttle.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
+import { launchView, tellState } from './lib/launch.mjs'
 import { botBehind } from './engine/caller.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -526,6 +527,13 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (pathname === '/v1/routines' && req.method === 'GET') return send(res, 200, { routines: await routineList(options) })
       // Tracks: the requests and their trips; the owner answers a gate or sends work back from the phone as from the page.
       if (pathname === '/v1/tracks' && req.method === 'GET') return send(res, 200, await tracksPage(options))
+      // Launch: the same board as the page; the owner may ask for a fresh check or say where an unreadable channel stands.
+      if (pathname === '/v1/launch' && req.method === 'GET') return send(res, 200, await launchView())
+      if (pathname === '/v1/launch' && req.method === 'POST') {
+        const b = await readBody(req)
+        if (b.action === 'tell') tellState({ product: String(b.product || ''), channel: String(b.channel || ''), state: String(b.state || ''), tone: String(b.tone || ''), next: String(b.next || '') })
+        return send(res, 200, await launchView({ force: b.action === 'check' }))
+      }
       if (trip && req.method === 'GET') return send(res, 200, await tripPage(decodeURIComponent(trip[1]), options))
       if (tripDo && req.method === 'POST') { const b = await readBody(req); return send(res, 200, await tripAct(decodeURIComponent(tripDo[1]), { action: tripDo[2], step: String(b.step || ''), to: String(b.to || ''), note: String(b.note || '') }, options)) }
       if (pathname === '/v1/routines' && req.method === 'POST') return send(res, 201, await addRoutine(await readBody(req), options))
