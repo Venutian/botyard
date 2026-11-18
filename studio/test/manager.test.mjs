@@ -30,7 +30,7 @@ const job = (title, status, bot, extra = {}) => {
     createdAt: ago(600), startedAt: ago(500), completedAt: status === 'done' ? ago(60) : null, lastActivityAt: ago(60), ...extra,
   }
 }
-const noFiles = () => ({ merges: [], stopped: [], switches: [], pace: {}, thinker: {}, freeOut: {}, freeOk: {}, notInMain: {}, rested: {} })
+const noFiles = () => ({ merges: [], stopped: [], switches: [], pace: {}, thinker: {}, freeOut: {}, freeOk: {}, notInMain: {}, ownerNotes: [], rested: {} })
 const view = (issues, extra = {}) => buildManager({ agents: AGENTS, issues, projects: PROJECTS, files: noFiles(), now: NOW, ...extra })
 const lineOf = (manager, ref) => manager.lines.find((l) => l.ref === ref)
 
@@ -262,4 +262,18 @@ test('a request on a track is one work line with its cost so far, and its steps\
   const done = view(issues, { requests: [{ ...request, status: 'done' }] }).lines[0]
   assert.equal(done.stage, 'merged')
   assert.equal(done.open, false)
+})
+
+test('a line a crew script leaves for the owner shows under Also going on for two days, never as a card', () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-notes-'))
+  const now = Date.now()
+  fs.writeFileSync(path.join(folder, 'owner-notes.jsonl'), [
+    JSON.stringify({ at: new Date(now - 3 * 86_400_000).toISOString(), text: 'Old news' }),
+    'not json',
+    JSON.stringify({ at: new Date(now - 3600_000).toISOString(), text: 'Gideon ruled on Retainer: not approved' }),
+  ].join('\n'))
+  const files = readCrewFiles(folder)
+  assert.deepEqual(files.ownerNotes.map((n) => n.text), ['Gideon ruled on Retainer: not approved'])
+  const manager = view([], { files: { ...noFiles(), ownerNotes: files.ownerNotes } })
+  assert.ok(manager.trouble.some((t) => t.level === 'info' && t.text === 'Gideon ruled on Retainer: not approved'))
 })
