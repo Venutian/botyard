@@ -20,7 +20,9 @@ Who answers a path under `/api` on the people port:
 2. `/api/studio`, `/api/studio/...` and the map's two own paths (`health`, `state`): the map's API.
 3. Anything else: the engine, and only when the call started on this computer. That means a loopback
    socket, no header a tunnel or proxy adds, and this computer's own name in `Host` and `Origin`.
-   Everyone else is told nothing is there.
+   Everyone else is told nothing is there. The engine's own port asks the same (`lib/local-call.mjs`),
+   and then who is calling: a run's pass, the owner key (the map's server, the phone's door) or the
+   scripts key with the script's name (`engine/caller.mjs`). Only the owner answers a card.
 
 The phone's door passes nothing on raw. Each thing a phone may ask is written out in `phone.mjs`.
 

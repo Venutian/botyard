@@ -22,15 +22,22 @@ tool talks to its own provider with your own sign-in.
 | The phone's door | port 5288, on the address in the door's settings | Paired phones | A key per phone; closed until a first phone is paired |
 | Playable builds | port 5290 | A browser holding a build's link | The link's key; a build may load only its own files |
 
-**The engine answers this computer only.** On its own port it refuses any socket that is not
-loopback. Under `/api` on the map's port a call must come over loopback, carry no header that a
-tunnel or proxy adds, and name this computer in `Host` and in `Origin`; anyone else is told nothing
-is there. That last part is what stops a web page you happen to visit from reaching it through
+**The engine answers this computer only.** On its own port and under `/api` on the map's port a
+call must come over loopback, carry no header that a tunnel or proxy adds, and name this computer in
+`Host` and in `Origin`; anything else is refused. That last part is what stops a web page you happen to visit from reaching it through
 your browser. Nothing passes a call on to the engine raw: the phone's door has a written-out list
 of what a phone may ask, and reduces every answer to the fields the app shows.
 
-A bot's run is given a pass that works only while that run is going, and only lets it act as that
-bot. Only the owner changes a bot's settings or instructions.
+**Every caller says who it is.** A bot's run is given a pass that works only while that run is
+going, and only lets it act as that bot. The map's own server and the phone's door call with the
+owner key, `keys/engine-owner.key` in the home folder (made on the first start, readable by you
+alone; a bot's run is refused reading it). The crew's scripts call with the scripts key,
+`keys/engine-scripts.key`, and their own name, and what they write shows as `script:<name>`, never
+as you. Only the owner key answers a card or changes Botyard's settings; a bot never changes a bot,
+and a script may only seed one from the crew's files. While `BOTYARD_ENGINE_KEYS` is `log` a call
+with no pass and no key is still answered as the owner and written to `engine-callers.log` with the
+process that made it; set it to `enforce` and such a call is refused, as is a write that does not
+say it is JSON.
 
 ## What a bot can do
 

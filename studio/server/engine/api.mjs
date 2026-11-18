@@ -15,6 +15,7 @@ import { addProduct, checkout, declineCard, noInvites, noSuch, patchSettings, re
 import { engineBody, engineCode, withDisplay } from './codes.mjs'
 import { attach, fileOf, fileOfForm } from './files.mjs'
 import { handle } from './http.mjs'
+import { actorOf } from './caller.mjs'
 import { more } from './read-more.mjs'
 import { instructionsFile, restoreInstructions, rollbackAgent, saveInstructions, terminateAgent } from './bots.mjs'
 import { addWorkspace, archiveProject, createProject, patchWorkspace, removeWorkspace } from './projects.mjs'
@@ -130,7 +131,7 @@ export function answer(store, request = {}, options = {}) {
   return out
 }
 
-function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, raw = null } = {}, { dataDir, now = Date.now(), actor: known = null } = {}) {
+function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, raw = null } = {}, { dataDir, now = Date.now(), actor: known = null, caller = null, keyMode = 'log' } = {}) {
   const verb = String(method).toUpperCase()
   let at
   try { at = new URL(url, 'http://engine.local') } catch { return { status: 400, body: { error: 'Not a path' } } }
@@ -138,7 +139,9 @@ function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, 
   const pass = known ? '' : /^Bearer\s+(\S+)$/i.exec(headers.authorization || '')?.[1] || ''
   const bot = known?.agent ? { agentId: known.agent, runId: known.run || null } : pass ? whoHolds(store, pass) : null
   if (pass && !bot) return { status: 401, body: { error: 'This pass is not a live run\'s. A run\'s pass stops working when the run ends' } }
-  const actor = known || (bot ? { agent: bot.agentId, run: bot.runId } : { user: 'local-board' })
+  // No pass: the owner's key, a script's key, or (while the keys roll out) nothing. See caller.mjs.
+  const actor = known || (bot ? { agent: bot.agentId, run: bot.runId } : actorOf(caller, keyMode))
+  if (!actor) return { status: 401, body: { error: caller?.kind === 'wrong' ? 'That key is not one of this engine\'s keys' : 'Say who is calling: a run\'s pass, or the owner\'s or a script\'s key' } }
   const ctx = { now, actor, dataDir }
   try {
     // "me" is the bot whose run is calling.

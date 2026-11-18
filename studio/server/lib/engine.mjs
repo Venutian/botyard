@@ -23,7 +23,9 @@ const COMPANY = process.env.BOTYARD_ID || ''
 export const ALL_JOBS = 'limit=100000'
 const TIME_LIMIT_MS = 10_000
 
+import { ownerKeyHeaders } from '../engine/caller.mjs'
 import { guardFolder, readGuard } from './guard.mjs'
+import { keysDir } from './home.mjs'
 import { crewLooks, roleOf } from './looks.mjs'
 import { OLD_CHOICES, PlanError, cronOf, planOf, wordsOf } from './timeplan.mjs'
 
@@ -52,6 +54,9 @@ const TIMEZONE = /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/
 export const PROOF_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const MAX_PROOF_BYTES = 12 * 1024 * 1024
 
+/** The owner's side of Botyard calls the engine with the owner's key (engine/caller.mjs). */
+const ownerKey = () => { try { return ownerKeyHeaders(keysDir()) } catch { return {} } }
+
 export class EngineError extends Error {
   constructor(status, message) {
     super(message)
@@ -73,7 +78,7 @@ export async function call(path, { method = 'GET', body, fetcher = fetch } = {})
   let res
   const ask = (base) => fetcher(`${base}/api${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...ownerKey() },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(TIME_LIMIT_MS),
   })
@@ -650,7 +655,7 @@ export async function proofImage(attachmentId, { fetcher = fetch } = {}) {
   if (!ID.test(attachmentId)) throw new EngineError(400, 'That is not an image id')
   let res
   try {
-    res = await fetcher(`${engineBase()}/api/attachments/${attachmentId}/content`, { method: 'GET', signal: AbortSignal.timeout(TIME_LIMIT_MS) })
+    res = await fetcher(`${engineBase()}/api/attachments/${attachmentId}/content`, { method: 'GET', headers: ownerKey(), signal: AbortSignal.timeout(TIME_LIMIT_MS) })
   } catch {
     throw new EngineError(503, 'The crew\'s engine is not running on this computer')
   }
@@ -672,7 +677,7 @@ export async function attachmentFile(attachmentId, { fetcher = fetch } = {}) {
   if (!ID.test(attachmentId)) throw new EngineError(400, 'That is not a file id')
   let res
   try {
-    res = await fetcher(`${engineBase()}/api/attachments/${attachmentId}/content`, { method: 'GET', signal: AbortSignal.timeout(TIME_LIMIT_MS) })
+    res = await fetcher(`${engineBase()}/api/attachments/${attachmentId}/content`, { method: 'GET', headers: ownerKey(), signal: AbortSignal.timeout(TIME_LIMIT_MS) })
   } catch {
     throw new EngineError(503, 'The crew\'s engine is not running on this computer')
   }
@@ -706,7 +711,7 @@ async function postFile(jobId, { name, type, bytes } = {}, { fetcher = fetch, ..
   form.append('file', new Blob([bytes], { type }), file)
   let res
   try {
-    res = await fetcher(`${engineBase()}/api/companies/${id}/issues/${jobId}/attachments`, { method: 'POST', body: form, signal: AbortSignal.timeout(TIME_LIMIT_MS * 3) })
+    res = await fetcher(`${engineBase()}/api/companies/${id}/issues/${jobId}/attachments`, { method: 'POST', headers: ownerKey(), body: form, signal: AbortSignal.timeout(TIME_LIMIT_MS * 3) })
   } catch {
     throw new EngineError(503, 'The crew\'s engine is not running on this computer')
   }

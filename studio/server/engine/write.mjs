@@ -6,6 +6,7 @@
  * asking: the owner or a script (`{ user: 'local-board' }`), or a bot in a run (`{ agent, run }`).
  */
 import { randomUUID } from 'node:crypto'
+import { ownerOnly } from './caller.mjs'
 
 export class Refused extends Error {
   constructor(status, message) {
@@ -295,7 +296,7 @@ export function settleCard(store, jobId, cardId, verb, body = {}, { now = Date.n
   if (!SETTLED[verb]) throw new Refused(404, 'API route not found')
   if (card.status !== 'pending') throw new Refused(409, 'This card was already settled')
   const takenBack = verb === 'withdraw' || verb === 'cancel'
-  if (!takenBack && actor?.agent) throw new Refused(403, 'Only the owner answers a card')
+  if (!takenBack) ownerOnly(actor, 'answers a card')
   if (verb === 'respond' && !(Array.isArray(body.answers) && body.answers.length)) throw new Refused(400, 'Answer the question first')
   if (verb === 'accept' && card.kind !== 'request_confirmation') throw new Refused(400, 'This card is a question: answer it')
   const position = store.row('SELECT position FROM cards WHERE id = ?', card.id).position
