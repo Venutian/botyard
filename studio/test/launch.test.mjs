@@ -21,6 +21,8 @@ test('Google Play\'s tracks read as one state: a draft waits for the owner, a ro
   assert.equal(rolling.state, 'Rolling out 2.0.1 to 20%')
   assert.match(rolling.detail, /Google does not say whether a release is in review/)
   assert.equal(playState([{ track: 'production', releases: [{ name: '2.0.0', status: 'completed' }] }]).state, 'Live 2.0.0')
+  // A release named with its code says the code once.
+  assert.equal(playState([{ track: 'production', releases: [{ name: '44 (1.0.0)', versionCodes: ['44'], status: 'completed' }] }]).state, 'Live 44 (1.0.0)')
   assert.equal(playState([{ track: 'production', releases: [{ name: '2.0.1', status: 'halted' }] }]).tone, 'bad')
 })
 
@@ -108,4 +110,17 @@ test('the board draws a column per channel and a row per product; an unread cell
   // A channel that cannot be read can be told where it stands.
   assert.match(page, /data-part="launch-tell"/)
   assert.match(launchScreen({ planFound: false, planFile: '~/x.json' }), /No launch plan yet/)
+})
+
+test('a store that refuses the key for one app says which step fixes it, and waits on the owner', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-'))
+  const plan = { found: true, products: [{ name: 'Lamp', kind: 'app', channels: { play: { package: 'com.example.lamp' } } }] }
+  const fetcher = async (url) => (String(url).includes('oauth2') ? json({ access_token: 't', expires_in: 3600 }) : json({ error: { message: 'The caller does not have permission' } }, 403))
+  const key = { secret: { account: { client_email: 'bot@example.iam', private_key: (await import('node:crypto')).generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }) }, packageName: '' } }
+  const state = await checkAll({ fetcher, useGh: false, now: NOW, plan, file: path.join(dir, 's.json'), keys: { play: key } })
+  const c = state.cells['Lamp|play']
+  assert.equal(c.state, 'Not known: the key may not see this app')
+  assert.equal(c.waits, 'owner')
+  assert.match(c.next, /give the key's service account access to com\.example\.lamp/)
+  assert.match(c.detail, /403/)
 })

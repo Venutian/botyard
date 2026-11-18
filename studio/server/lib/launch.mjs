@@ -72,7 +72,12 @@ const PLAY_NAMES = { production: 'Production', beta: 'Open testing', alpha: 'Clo
 export function playState(tracks = []) {
   const byName = new Map(tracks.map((t) => [t.track, t.releases || []]))
   const prod = byName.get('production') || []
-  const named = (r) => `${r.name || ''}${r.versionCodes?.length ? ` (${r.versionCodes.join(', ')})` : ''}`.trim()
+  // A release's name often holds its version code already ("44 (1.0.0)"); the code is said once.
+  const named = (r) => {
+    const name = String(r.name || '')
+    const codes = (r.versionCodes || []).filter((c) => !new RegExp(`(^|\\D)${c}(\\D|$)`).test(name))
+    return `${name}${codes.length ? ` (${codes.join(', ')})` : ''}`.trim()
+  }
   const draft = prod.find((r) => r.status === 'draft')
   if (draft) return cell(`Production draft ${named(draft)}`, { tone: 'look', version: draft.name || '', waits: 'owner', next: 'Your yes to release it' })
   const halted = prod.find((r) => r.status === 'halted')
@@ -168,6 +173,15 @@ async function checkItch(ids, { fetcher }) {
   return cell(`Pushed ${latest.latest} on ${channel}`, { tone: 'ok', version: String(latest.latest), detail: 'Whether the page is public is not readable; the owner says so.' })
 }
 
+/** A store that refuses the key for one app says so plainly, with the one step that fixes it. */
+function refusedCell(channel, ids, err) {
+  const said = String(err?.message || err)
+  if (!/\b(401|403)\b/.test(said)) return null
+  if (channel === 'play') return cell('Not known: the key may not see this app', { how: 'none', tone: 'bad', waits: 'owner', detail: `Google said: ${said.slice(0, 160)}`, next: `In Play Console, Users and permissions: give the key's service account access to ${ids.package || 'this app'}` })
+  if (channel === 'appstore') return cell('Not known: the key was refused', { how: 'none', tone: 'bad', waits: 'owner', detail: `Apple said: ${said.slice(0, 160)}`, next: 'Check the App Store Connect key on its row in Connectors (its role, or a key that was revoked)' })
+  return null
+}
+
 const CHECKS = { play: checkPlay, appstore: checkApple, web: checkWeb, github: checkGithub, itch: checkItch }
 
 /** A channel with no API: what a person last said, with its age; old news turns amber. */
@@ -192,7 +206,7 @@ export async function checkAll({ fetcher = fetch, useGh = true, now = Date.now()
       try {
         found = CHECKS[channel] && !ids?.told ? await CHECKS[channel](ids || {}, { fetcher, useGh, key: keys[channel] }) : toldCell(state.told[key], ids || {}, now)
       } catch (err) {
-        found = cell('Not known: the read failed', { how: 'none', tone: 'bad', detail: String(err?.message || err).slice(0, 200), waits: 'crew', next: 'Look at why the channel could not be read' })
+        found = refusedCell(channel, ids || {}, err) || cell('Not known: the read failed', { how: 'none', tone: 'bad', detail: String(err?.message || err).slice(0, 200), waits: 'crew', next: 'Look at why the channel could not be read' })
       }
       found.checkedAt = now
       cells[key] = found
