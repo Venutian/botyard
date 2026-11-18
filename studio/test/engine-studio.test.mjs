@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { ownerKeyHeaders } from '../server/engine/caller.mjs'
 import { startEngine } from '../server/engine/main.mjs'
 import { RUN_VARS, botSecretsFile, runVars, storeFile, worktreeDir } from '../server/engine/names.mjs'
 import { prefixFrom } from '../server/engine/studio.mjs'
@@ -165,13 +166,16 @@ test('the engine listens on a port of this computer when given one, and answers 
   const dataDir = path.join(tmp('port'), 'data')
   const engine = await startEngine({ dataDir, port: 0, runs: false, log: quiet })
   assert.match(engine.apiUrl, /^http:\/\/127\.0\.0\.1:\d+$/)
-  const health = await (await fetch(`${engine.apiUrl}/api/health`)).json()
+  // The owner's side calls the port with the owner key (caller.mjs); a call with no key is refused.
+  const owner = ownerKeyHeaders(path.join(dataDir, 'keys'))
+  assert.equal((await fetch(`${engine.apiUrl}/api/companies`)).status, 401)
+  const health = await (await fetch(`${engine.apiUrl}/api/health`, { headers: owner })).json()
   assert.equal(health.engine, 'studio')
-  const id = (await (await fetch(`${engine.apiUrl}/api/companies`)).json())[0].id
-  const made = await fetch(`${engine.apiUrl}/api/companies/${id}/issues`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Over the port' }) })
+  const id = (await (await fetch(`${engine.apiUrl}/api/companies`, { headers: owner })).json())[0].id
+  const made = await fetch(`${engine.apiUrl}/api/companies/${id}/issues`, { method: 'POST', headers: { 'content-type': 'application/json', ...owner }, body: JSON.stringify({ title: 'Over the port' }) })
   assert.equal(made.status, 201)
   assert.equal((await engine.handle({ url: `/api/companies/${id}/issues` })).body[0].title, 'Over the port', 'the port and the in-process door are one engine')
-  assert.equal((await fetch(`${engine.apiUrl}/api/nothing-here`)).status, 404)
+  assert.equal((await fetch(`${engine.apiUrl}/api/nothing-here`, { headers: owner })).status, 404)
   await engine.stop()
   await assert.rejects(fetch(`${engine.apiUrl}/api/health`), 'stopped means the port is closed')
 })

@@ -34,10 +34,10 @@ owner key, `keys/engine-owner.key` in the home folder (made on the first start, 
 alone; a bot's run is refused reading it). The crew's scripts call with the scripts key,
 `keys/engine-scripts.key`, and their own name, and what they write shows as `script:<name>`, never
 as you. Only the owner key answers a card or changes Botyard's settings; a bot never changes a bot,
-and a script may only seed one from the crew's files. While `BOTYARD_ENGINE_KEYS` is `log` a call
-with no pass and no key is still answered as the owner and written to `engine-callers.log` with the
-process that made it; set it to `enforce` and such a call is refused, as is a write that does not
-say it is JSON.
+and a script may only seed one from the crew's files. A call with no pass and no key is refused, as
+is a write that does not say it is JSON. A studio whose own scripts do not send the scripts key yet
+can set `BOTYARD_ENGINE_KEYS=log` for a while: such a call is then answered as the owner and written
+to `engine-callers.log` with the process that made it.
 
 ## What a bot can do
 
