@@ -36,7 +36,7 @@ class Reads(unittest.TestCase):
 
     def test_the_bots_own_folder_inside_a_read_folder_stays_editable(self):
         d = tempfile.mkdtemp()
-        own = os.path.join(d, 'crew', 'hustle')
+        own = os.path.join(d, 'crew', 'helper')
         edit = skill_sets.read_only({'edit': {'*': 'allow'}}, [d], own)['edit']
         keys = list(edit)
         self.assertEqual(edit[f'{own}/*'], 'allow')

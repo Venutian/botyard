@@ -117,6 +117,20 @@
       "on": true
     },
     {
+      "name": "folder-check",
+      "kind": "timer",
+      "what": "Checks that every bot runs in a folder that exists, with access to exactly the folders its jobs need, and that no refused call goes unseen. Reports; never changes a config. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/folder-check.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "4m",
+      "limit": "2m",
+      "on": true
+    },
+    {
       "name": "github-projects",
       "kind": "timer",
       "what": "Adds a Botyard project for each of your GitHub repos that looks like a real project (rules: github-project-rules.json). Read-only on GitHub, never clones. Uses no AI.",

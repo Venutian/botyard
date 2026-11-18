@@ -35,7 +35,7 @@ export function instructionsOf(agent) {
  * @param {{ agent, company, job, wake, branch, comments, cards, resumed, inline }} input
  *   `comments` and `cards` are only what is new since the bot's last run on this job.
  */
-export function wakePrompt({ agent, company = {}, job, wake = {}, branch = '', startFrom = '', startMissing = '', comments = [], cards = [], files = [], resumed = false, inline = false, names = new Map() }) {
+export function wakePrompt({ agent, company = {}, job, wake = {}, branch = '', startFrom = '', startMissing = '', comments = [], cards = [], files = [], resumed = false, sessionFolderGone = '', inline = false, names = new Map() }) {
   const rules = instructionsOf(agent)
   const head = []
   if (inline) {
@@ -54,6 +54,7 @@ export function wakePrompt({ agent, company = {}, job, wake = {}, branch = '', s
     ...(startFrom && !startMissing ? [`- start: this job's branch was cut from ${startFrom}, as its brief asks. Build on that; do not go back to the main line.`] : []),
     ...(startMissing ? [`- start: the brief says to start from ${startMissing}, but this repository has no such commit, so the branch was cut from the project's main line. Find the commit (git fetch, or the branch its brief names) before you build, and say in your report where you started from.`] : []),
     '- the engine has already taken this job for this run: do not check it out again.',
+    ...(sessionFolderGone ? [`- session: your last session on this job was in ${sessionFolderGone}, which is gone, so this run starts a fresh session in the folder you are in. Read the job's comments and its branch for what was done before; do not assume you remember it.`] : []),
     ...(resumed ? ['- this is the same session as your last run on this job: carry on from where you stopped.'] : []),
   ]
   if (comments.length) {

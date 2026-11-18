@@ -186,6 +186,66 @@ def read_only(perm, reads, own=None):
     return {**perm, 'external_directory': outside, 'edit': edit}
 
 
+def job_skill_folder():
+    """The folder of the job-closing skill, which every bot's rules send it to (crew/codex-safe/skills/botyard): read, never edited."""
+    folder = os.path.join(botyard_home.places()['crew'], 'codex-safe', 'skills', 'botyard')
+    return [folder] if os.path.isdir(folder) else []
+
+
+def protected_denials(env=None):
+    """OpenCode permission rules for what no bot may have (folders.protected: the keys, the owner's token, the guards' own files, the studio's
+    "never" list): no edit of any of them, no read, search or list of those nobody may read. The owner's notes are brain_denials'."""
+    import folders
+    items = [i for i in folders.protected(env) if i['kind'] != 'notes' and os.path.exists(i['path'])]
+    if not items:
+        return {}
+    edit = {p: 'deny' for i in items for p in (i['path'], f"{i['path']}/*")}
+    read = {p: 'deny' for i in items if i['read'] is False for p in (i['path'], f"{i['path']}/*")}
+    out = {'edit': {'*': 'allow', **edit}}
+    if read:
+        out.update({tool: {'*': 'allow', **read} for tool in ('read', 'glob', 'grep', 'list')})
+        out['external_directory'] = {'*': 'ask', **read}
+    return out
+
+
+def merged(*perms):
+    """OpenCode permission sets laid one over the next: each tool's rules keep their order, and a later set's rules come after, so they win."""
+    out = {}
+    for perm in perms:
+        for tool, rules in perm.items():
+            if isinstance(out.get(tool), dict) and isinstance(rules, dict):
+                out[tool] = {**out[tool], **{k: v for k, v in rules.items() if k != '*'}}
+            else:
+                out[tool] = dict(rules) if isinstance(rules, dict) else rules
+    return out
+
+
+def scratch_open(perm):
+    """The run's own scratch folder (the engine's botyard-run-* folder under the temporary folder, where TMPDIR points and OpenCode keeps its
+    settings) opened outside the run's folder: a refusal there stopped runs (18 Nov: 68 free-model runs were refused in it or in /tmp)."""
+    import tempfile
+    mine = perm.get('external_directory') if isinstance(perm.get('external_directory'), dict) else {'*': 'ask'}
+    scratch = {p: 'allow' for t in sorted({'/tmp', tempfile.gettempdir()}) for p in (f'{t}/botyard-run-*', f'{t}/botyard-run-*/*')}
+    closed = {k: v for k, v in mine.items() if v == 'deny'}
+    opened = {k: v for k, v in mine.items() if v == 'allow'}
+    return {**perm, 'external_directory': {'*': mine.get('*', 'ask'), **opened, **scratch, **closed}}
+
+
+def claude_denials(env=None):
+    """permissions.deny rules for a Claude bot's settings file: no edit of what no bot may have (as protected_denials), no read of
+    what nobody may read, and no edit of the owner's notes (a Claude run may read them, never write)."""
+    import folders
+    deny = []
+    for item in folders.protected(env):
+        if not os.path.exists(item['path']):
+            continue
+        spec = '/' + item['path'] + ('/**' if os.path.isdir(item['path']) else '')
+        deny.append(f'Edit({spec})')
+        if item['read'] is False:
+            deny.append(f'Read({spec})')
+    return sorted(set(deny))
+
+
 def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
     """Writes the bot's skill file and returns the env entries that point its runs at it. `want` is the
     bot's own list of skill names, from its settings file; with none it is asked from the files. {} for
@@ -209,12 +269,15 @@ def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
                 plugins[s['plugin']] = plugins.get(s['plugin'], False) or s['name'] in want
         path = f'{OUT}/{_slug(bot)}.claude.json'
         with open(path, 'w') as f:
-            json.dump({**base, 'skillOverrides': dict(sorted(off.items())), 'enabledPlugins': plugins}, f, indent=1)
+            deny = claude_denials()
+            permissions = {**(base.get('permissions') or {}), 'deny': sorted(set((base.get('permissions') or {}).get('deny', []) + deny))} if deny else base.get('permissions')
+            json.dump({**base, **({'permissions': permissions} if permissions else {}), 'skillOverrides': dict(sorted(off.items())), 'enabledPlugins': plugins}, f, indent=1)
         return {'BOTYARD_BOT_SETTINGS': plain(path)}
     # OpenCode: hide every skill but the set; add the folders of the plugin skills it needs.
     folders = sorted({os.path.dirname(s['dir']) for s in skills if s['kind'] == 'plugin' and s['name'] in want})
     config = {'$schema': 'https://opencode.ai/config.json',
-              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}, **read_only(brain_denials(), reads, own)}}
+              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}},
+                             **scratch_open(read_only(merged(brain_denials(), protected_denials()), [*(reads or []), *job_skill_folder()], own))}}
     if folders:
         config['skills'] = {'paths': folders}
     path = f'{OUT}/{_slug(bot)}.opencode.json'
