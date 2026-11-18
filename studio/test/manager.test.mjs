@@ -30,7 +30,7 @@ const job = (title, status, bot, extra = {}) => {
     createdAt: ago(600), startedAt: ago(500), completedAt: status === 'done' ? ago(60) : null, lastActivityAt: ago(60), ...extra,
   }
 }
-const noFiles = () => ({ merges: [], stopped: [], switches: [], pace: {}, thinker: {}, freeOut: {}, freeOk: {}, rested: {} })
+const noFiles = () => ({ merges: [], stopped: [], switches: [], pace: {}, thinker: {}, freeOut: {}, freeOk: {}, notInMain: {}, rested: {} })
 const view = (issues, extra = {}) => buildManager({ agents: AGENTS, issues, projects: PROJECTS, files: noFiles(), now: NOW, ...extra })
 const lineOf = (manager, ref) => manager.lines.find((l) => l.ref === ref)
 
@@ -233,4 +233,13 @@ test('the map asks one address: the one the service names, else this computer on
   assert.equal(engineBase({ BOTYARD_ENGINE_PORT: '4321' }), 'http://127.0.0.1:4321')
   assert.equal(engineBase({ BOTYARD_API_URL: 'http://127.0.0.1:5000/' }), 'http://127.0.0.1:5000')
   assert.equal(engineBase({ BOTYARD_API_URL: 'http://127.0.0.1:5000/api' }), 'http://127.0.0.1:5000', 'with its /api or without')
+})
+
+test('a job marked done whose code is not in main is named in the trouble list, worst first', () => {
+  const files = { ...noFiles(), notInMain: { at: new Date(NOW).toISOString(), jobs: [{ job: 'LH-7', branch: 'LH-7-x', commits: 2 }, { job: 'LH-7', branch: 'LH-7-y', commits: 1 }, { job: 'LH-9', branch: 'LH-9-z', commits: 1 }] } }
+  const manager = view([], { files })
+  const line = manager.trouble.find((t) => /not in main/.test(t.text))
+  assert.equal(line.level, 'bad')
+  assert.equal(line.text, '2 jobs are marked done but their code is not in main: LH-7, LH-9')
+  assert.equal(view([]).trouble.some((t) => /not in main/.test(t.text)), false)
 })

@@ -88,6 +88,7 @@ export function readCrewFiles(folder = crewFolder()) {
     thinker: readJson(at('thinker.json'), {}),
     freeOut: readJson(at('free-out.json'), {}),
     freeOk: readJson(at('free-ok.json'), {}),
+    notInMain: readJson(at('not-in-main.json'), {}),
     rested: readRested(folder),
   }
 }
@@ -430,6 +431,12 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
   const answering = Object.keys(freeOk).filter((model) => !aside.includes(model))
   if (aside.length && !answering.length) out.push({ level: 'bad', text: 'Every free model is out, so the bots on free models cannot work' })
   else if (aside.length) out.push({ level: 'info', text: `${plural(aside.length, 'free model is', 'free models are')} set aside; ${answering.length} still answer` })
+  // Done jobs whose code never reached main (crew/not-in-main.py): a job is not done while its work is not in main.
+  const left = (files.notInMain?.jobs || []).filter((j) => j && j.job)
+  if (left.length) {
+    const named = [...new Set(left.map((j) => j.job))]
+    out.push({ level: 'bad', text: `${plural(named.length, 'job is', 'jobs are')} marked done but ${named.length === 1 ? 'its' : 'their'} code is not in main: ${named.slice(0, 4).join(', ')}${named.length > 4 ? ' and more' : ''}` })
+  }
   const unpushed = lines.filter((l) => l.stage === 'merged').length
   if (unpushed) out.push({ level: 'info', text: `${plural(unpushed, 'finished piece', 'finished pieces')} of work ${unpushed === 1 ? 'is' : 'are'} merged but not pushed` })
   const rank = { bad: 0, warn: 1, info: 2 }

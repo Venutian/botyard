@@ -88,6 +88,20 @@
       "on": true
     },
     {
+      "name": "not-in-main",
+      "kind": "timer",
+      "what": "Lists every job marked done whose code is still not in main (a merge that failed, a second repo nobody merged, a hold never ruled on), so the page shows it as Done, not in main. Read-only on the repos. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/not-in-main.py"
+      ],
+      "every": "2h",
+      "after": "finish",
+      "first": "10m",
+      "limit": "10m",
+      "on": true
+    },
+    {
       "name": "github-projects",
       "kind": "timer",
       "what": "Adds a Botyard project for each of your GitHub repos that looks like a real project (rules: github-project-rules.json). Read-only on GitHub, never clones. Uses no AI.",
