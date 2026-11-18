@@ -39,6 +39,10 @@
   --edge: #15181d;
   /* The edge of a field, a checkbox or a quiet button: 3:1 or more on every plate it sits on (WCAG 1.4.11). */
   --field-edge: #15181d;
+  /* A step that waits for the owner (Launch): yellow paint thinned, its rules and its ink. */
+  --yours: #fff4cc;
+  --yours-line: #e0a800;
+  --yours-ink: #15181d;
   --text: #15181d;
   --muted: #454d58;
   --dim: #66707c;
@@ -69,6 +73,9 @@
   --edge: #05070a;
   /* A night plate's edge is near-black, so a field there takes a lit edge instead: 4.1:1 on the plate, 3.5:1 on a raised one. */
   --field-edge: #768090;
+  --yours: #2e2810;
+  --yours-line: #ffc61a;
+  --yours-ink: #fff3c4;
   --text: #f2f4f6;
   --muted: #b1b9c4;
   --dim: #8c96a3;

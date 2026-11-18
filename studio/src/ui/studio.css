@@ -170,6 +170,7 @@
 .deck-col.col-a { flex: 0 0 360px; transition: flex-basis 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .deck-col.col-a.page { flex: 0 1 1040px; }
 .deck-col.col-a.page:not(.wide) { flex-basis: 620px; }
+.deck-col.col-a.page.fill { flex: 1 1 auto; }
 .studio-deck.two .deck-col.col-a.page { flex: 0 0 460px; }
 .deck-col.col-b { flex: 0 1 700px; }
 .deck-col.col-b.wide { flex-basis: 940px; }
