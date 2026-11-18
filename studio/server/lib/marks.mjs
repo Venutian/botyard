@@ -6,7 +6,8 @@
  * chat), then its earlier messages, the job's brief, its documents and its pictures. The send goes to
  * the engine's own review path with the owner's key; the engine refuses it from anyone else.
  */
-import { EngineError, call, companyId } from './engine.mjs'
+import { EngineError, call, companyId, jobWorkspace } from './engine.mjs'
+import { changeCounts } from './changes.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const PICTURE = /^image\/(png|jpeg|webp|gif)$/
@@ -51,6 +52,9 @@ export async function reviewSources(which = {}, { picture = (id) => `/api/studio
   }))
   if (String(job.description || '').trim()) pieces.push({ id: 'brief', kind: 'brief', ref: '', title: 'The brief', text: job.description })
   for (const d of documents) pieces.push({ id: `document:${d.key}`, kind: 'document', ref: d.key, title: d.title || d.key, text: d.body || '', at: d.updatedAt })
+  // A job with a branch of its own: its change, read in chapters (lib/chapters.mjs).
+  const counts = await jobWorkspace(job.id, options).then((w) => (w ? changeCounts(w) : null)).catch(() => null)
+  if (counts?.files) pieces.push({ id: 'change', kind: 'change', ref: '', title: `The change: ${counts.files} file${counts.files === 1 ? '' : 's'}, +${counts.added} −${counts.removed}` })
   for (const f of files.filter((f) => PICTURE.test(f.contentType || '')).reverse()) {
     if (/^mark-\d+-/.test(f.originalFilename || '')) continue
     pieces.push({ id: `picture:${f.id}`, kind: 'picture', ref: f.id, title: f.originalFilename || 'Picture', src: picture(f.id), at: f.createdAt })

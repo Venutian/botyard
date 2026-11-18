@@ -27,6 +27,7 @@ import { pageBuild } from './lib/built-page.mjs'
 import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
+import { guidedChange } from './lib/chapters.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -159,6 +160,11 @@ async function studioRoute(req, res, url) {
     // Reviews: what can be marked on a job or in a chat, and the kept record (lib/marks.mjs).
     if (url.pathname === '/api/studio/marks/sources' && read) return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }))
     if (url.pathname === '/api/studio/marks' && read) return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }))
+    // A job's change in chapters, the heart first; overviews in plain words when asked (lib/chapters.mjs).
+    if (url.pathname === '/api/studio/marks/change' && read) {
+      const detail = await changeDetail((await jobWorkspace(await jobIdOf(q('job')))) ?? undefined)
+      return detail ? send(res, 200, await guidedChange(detail, { overview: q('overview') === '1', folder: path.join(DATA_DIR, 'overviews') })) : send(res, 404, { error: 'This job has no branch to read' })
+    }
     // The answer tray beside Needs you: answers held to send at once (lib/tray.mjs).
     if (url.pathname === '/api/studio/tray' && read) return send(res, 200, { items: readTray() })
     if (url.pathname === '/api/studio/tray/questions' && read) return send(res, 200, await waitingQuestions({ job: q('job'), bot: q('bot') }))
