@@ -107,6 +107,7 @@ const STAGE = {
   ruling: ['Checking', 'look'], ruled: ['Ruling', 'look'], blocked: ['Blocked', 'bad'], failed: ['Failed', 'bad'], merge: ['To merge', 'ok'],
   push: ['To push', 'ok'], done: ['Done', 'ok'], stopped: ['Stopped', 'bad'], replaced: ['Replaced', 'wait'],
   passed: ['Passed', 'ok'], built: ['Built', 'ok'], merged: ['Merged', 'ok'], pushed: ['Pushed', 'ok'], kept: ['Kept here', 'ok'],
+  waits: ['Waits for you', 'look'],
 }
 const CHAT_MS = 4000
 const SHOWN_LINES = 12

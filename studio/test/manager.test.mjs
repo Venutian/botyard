@@ -243,3 +243,23 @@ test('a job marked done whose code is not in main is named in the trouble list, 
   assert.equal(line.text, '2 jobs are marked done but their code is not in main: LH-7, LH-9')
   assert.equal(view([]).trouble.some((t) => /not in main/.test(t.text)), false)
 })
+
+test('a request on a track is one work line with its cost so far, and its steps\' jobs are not lines of their own', () => {
+  const request = { id: 'r1', jobId: 'req', jobCode: 'LH-40', title: 'Add a lamp', projectId: PROJECTS[0].id, status: 'working', updatedAt: new Date(NOW - 60_000).toISOString(), cost: { usd: 0.42 }, trip: { id: 't1', status: 'running', current: 'check', currentTitle: 'Check', currentKind: 'bot', rounds: { 'check>build': 1 } } }
+  const issues = [
+    { id: 'req', identifier: 'LH-40', issueNumber: 40, title: 'Add a lamp', status: 'in_progress', projectId: PROJECTS[0].id, createdAt: new Date(NOW - 3_600_000).toISOString(), updatedAt: new Date(NOW - 60_000).toISOString() },
+    { id: 'step', identifier: 'LH-41', issueNumber: 41, title: 'Add a lamp · Build', parentId: 'req', status: 'done', projectId: PROJECTS[0].id, assigneeAgentId: AGENTS[0].id, createdAt: new Date(NOW - 3_000_000).toISOString(), updatedAt: new Date(NOW - 120_000).toISOString() },
+  ]
+  const lines = view(issues, { requests: [request] }).lines
+  assert.equal(lines.length, 1)
+  assert.equal(lines[0].id, 'req')
+  assert.equal(lines[0].stage, 'check')
+  assert.equal(lines[0].fixes, 1)
+  assert.match(lines[0].note, /Check on its track, \$0\.42 so far/)
+  const waiting = view(issues, { requests: [{ ...request, trip: { ...request.trip, current: 'owner', currentTitle: 'The owner decides', currentKind: 'gate' } }] }).lines[0]
+  assert.equal(waiting.pill, 'waits')
+  assert.match(waiting.note, /^Waits for you: The owner decides/)
+  const done = view(issues, { requests: [{ ...request, status: 'done' }] }).lines[0]
+  assert.equal(done.stage, 'merged')
+  assert.equal(done.open, false)
+})

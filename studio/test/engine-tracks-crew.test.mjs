@@ -77,6 +77,8 @@ test('landing merges a clean commit after the tests pass on the merged tree, and
   git(dir, 'checkout', '-q', 'build-1')
   assert.match(tool('land.mjs', { ...base, BOTYARD_IN_COMMIT: other }).findings, /is on build-1, not main/)
   assert.match(tool('land.mjs', { ...base, BOTYARD_IN_COMMIT: 'not-a-sha' }).findings, /No commit to land/)
+  git(dir, 'checkout', '-q', 'main')
+  assert.equal(tool('land.mjs', { ...base, BOTYARD_IN_COMMIT: `${good} on build-1` }).verdict, 'pass', 'a commit named with its branch')
 })
 
 test('a bot\'s report lines are read as what it left', () => {
@@ -127,7 +129,8 @@ test('the built-in crew track runs end to end on a real repo: bots by role, a fa
   assert.equal(buildJob.assigneeAgentId, 'b1')
   assert.match(buildJob.description, new RegExp(`${TRACK_MARK} ${trip.id}/build/1`))
   const first = branchCommit(dir, 'b-1', 'notes.txt', 'first try\n')
-  finish('build', `Built it.\nCOMMIT: ${first}\nOUTCOME: MET`, first)
+  // The report names its branch after the commit, as a builder did on the first live run: the commit is still read.
+  finish('build', `Built it.\nCOMMIT: ${first} LH-2-build-branch\nOUTCOME: MET`, first)
   trip = await tick()
   // The tests ran (no mul.mjs on the first try): back to the builder with the findings, continuing its commit.
   assert.equal(trip.steps.find((s) => s.id === 'tests').tries[0].status, 'stale')

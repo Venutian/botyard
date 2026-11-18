@@ -378,6 +378,9 @@ export function botJobText(step, inputs) {
   return parts.join('\n\n')
 }
 
+/** The commit id in a value that may say more around it, or '' when there is none. */
+export const commitIn = (value) => /\b[0-9a-f]{7,40}\b/i.exec(String(value || ''))?.[0] || ''
+
 /** PASS / FAIL in the words the crew uses, or null when the text says neither. */
 export function verdictOf(text) {
   const t = String(text || '').trim()
@@ -525,6 +528,8 @@ async function pollStep(store, step, row, { io, now }) {
     const verdict = said ? verdictOf(said) || 'fail' : step.ruling || step.leaves.includes('verdict') ? 'fail' : 'pass'
     const leaves = {}
     for (const name of step.leaves) { const value = left(name); if (value !== undefined && value !== '') leaves[name] = words(value, VALUE_CHARS) }
+    // A report line often says more than the commit (`COMMIT: 1f7431e on its-branch`): the commit is its id.
+    if (leaves.commit !== undefined) leaves.commit = commitIn(leaves.commit) || leaves.commit
     if (said) leaves.verdict = words(said, VALUE_CHARS)
     if (last?.body && step.leaves.includes('report') && !leaves.report) leaves.report = words(last.body, VALUE_CHARS)
     const place = store.object('SELECT raw FROM workspaces WHERE id = ? OR job_id = ? ORDER BY updated_at DESC LIMIT 1', job.executionWorkspaceId || '', job.id)
