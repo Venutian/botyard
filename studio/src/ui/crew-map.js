@@ -36,14 +36,14 @@ const markSvg = (kind) => `<svg class="mk" viewBox="0 0 12 12" aria-hidden="true
 export const kindWords = (kind, n) => (n === 1 ? KIND[kind]?.one : KIND[kind]?.many) || kind
 
 const STATUS = { working: 'Working', waiting: 'Waiting', free: 'Free', resting: 'Resting', paused: 'Paused', error: 'Stopped on an error' }
-const WINDOW_WORDS = { now: 'open now and the last hour', '24h': 'the last 24 hours', '7d': 'the last 7 days' }
+const WINDOW_WORDS = { now: 'the work in hand now', '24h': 'the last 24 hours', '7d': 'the last 7 days' }
 
 /** Which row of the chart a node stands in. */
 const ROW_OF = { owner: 0, lead: 1, ruler: 1, researcher: 1, builder: 2, general: 2, checker: 3, reviewer: 3, script: 4 }
 const ROLE_ORDER = { lead: 0, ruler: 1, researcher: 2, builder: 0, general: 1, checker: 0, reviewer: 1 }
 
 const NODE_W = 236
-const NODE_H = 106
+const NODE_H = 122
 const OWNER_W = 268
 const OWNER_H = 62
 const SCRIPT_W = 156
@@ -73,119 +73,277 @@ export function edgeSentence(edge, nodes, window = '24h') {
 }
 
 /**
+ * Every message between two nodes in one direction is one line: its total, its kinds (most first), whether
+ * the last one failed, and its newest messages with their kind. The line is painted in its main kind.
+ */
+export function bundleEdges(edges = []) {
+  const order = new Map(Object.keys(KIND).map((k, i) => [k, i]))
+  const out = new Map()
+  for (const e of edges) {
+    const id = `${e.from}>${e.to}`
+    const b = out.get(id) || { id, from: e.from, to: e.to, count: 0, failed: 0, last: 0, lastFailed: false, kinds: [], messages: [] }
+    b.count += e.count
+    b.failed += e.failed || 0
+    if ((e.last || 0) >= b.last) { b.last = e.last || 0; b.lastFailed = Boolean(e.lastFailed) }
+    b.kinds.push({ kind: e.kind, count: e.count, failed: e.failed || 0, lastFailed: Boolean(e.lastFailed) })
+    for (const m of e.messages || []) b.messages.push({ ...m, kind: e.kind })
+    out.set(id, b)
+  }
+  return [...out.values()].map((b) => {
+    b.kinds.sort((x, y) => y.count - x.count || order.get(x.kind) - order.get(y.kind))
+    b.messages.sort((x, y) => y.at - x.at)
+    return { ...b, kind: b.kinds[0].kind, messages: b.messages.slice(0, 8) }
+  })
+}
+
+/** A line's pill: how wide it is, for a total and the kind dots it carries. */
+const pillW = (l) => 22 + 7 * String(l.count).length + 7 * Math.min(2, l.kinds.length)
+const PILL_H = 24
+
+/** Whether a point lies on the straight piece from p to q. */
+const onSegment = (c, p, q) => Math.abs((q.x - p.x) * (c.y - p.y) - (q.y - p.y) * (c.x - p.x)) < 0.5 && c.x >= Math.min(p.x, q.x) - 0.5 && c.x <= Math.max(p.x, q.x) + 0.5 && c.y >= Math.min(p.y, q.y) - 0.5 && c.y <= Math.max(p.y, q.y) + 0.5
+
+/** A route through points, its corners rounded. */
+function roundPath(pts, r = 7) {
+  const f = (n) => Math.round(n * 10) / 10
+  let d = `M${f(pts[0].x)} ${f(pts[0].y)}`
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1]; const b = pts[i]; const c = pts[i + 1]
+    const in1 = Math.min(r, Math.hypot(b.x - a.x, b.y - a.y) / 2); const out1 = Math.min(r, Math.hypot(c.x - b.x, c.y - b.y) / 2)
+    const p = { x: b.x - Math.sign(b.x - a.x) * in1, y: b.y - Math.sign(b.y - a.y) * in1 }
+    const q = { x: b.x + Math.sign(c.x - b.x) * out1, y: b.y + Math.sign(c.y - b.y) * out1 }
+    d += `L${f(p.x)} ${f(p.y)}Q${f(b.x)} ${f(b.y)} ${f(q.x)} ${f(q.y)}`
+  }
+  const z = pts[pts.length - 1]
+  return `${d}L${f(z.x)} ${f(z.y)}`
+}
+
+/**
  * Where everything stands, for a box of this size. Pure: the same flow and size give the same picture.
- * Returns the nodes with their boxes, the lanes with theirs, and each line's path and the place of its count.
+ *
+ * The plates stand in rows by role. A line never crosses a plate: it leaves a plate's top or bottom, runs
+ * along the gap between two rows on a track of its own, passes a row in between through a free corridor
+ * beside the plates, and comes into the other plate. Its pill sits on its own line where it touches no
+ * plate and no other pill.
  */
 export function layoutFlow(flow, { width, height }) {
   const narrow = width < 1020
-  const laneW = narrow ? 0 : Math.round(Math.min(340, Math.max(264, width * 0.24)))
+  const laneW = narrow ? 0 : Math.round(Math.min(330, Math.max(260, width * 0.23)))
   const chartW = width - laneW - (laneW ? GAP * 2 : 0)
-  const top = 18
+  const top = 16
   const scripts = flow.nodes.filter((n) => n.kind === 'script')
   const bandH = scripts.length ? SCRIPT_H + 26 : 0
   const bandY = height - bandH
-  const bottom = bandY - (scripts.length ? 20 : 12)
+  const bottom = bandY - (scripts.length ? 46 : 12)
   const rows = [[], [], [], []]
   for (const n of flow.nodes) if (n.kind !== 'script') rows[ROW_OF[n.role] ?? 2].push(n)
   for (const row of rows.slice(1)) row.sort((a, b) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9) || a.name.localeCompare(b.name))
   const widest = Math.max(1, ...rows.slice(1).map((r) => r.length))
-  const w = Math.max(150, Math.min(NODE_W, Math.floor((chartW - GAP * 1.6 * (widest + 1)) / widest)))
+  const space = GAP * 2.4
+  const w = Math.max(150, Math.min(NODE_W, Math.floor((chartW - space * (widest + 1)) / widest)))
   const h = NODE_H
-  // The rows share the height: each its own height, the room left over spread evenly between them.
   const used = rows.map((row, i) => (row.length ? (i === 0 ? OWNER_H : h) : 0)).map((rh, i) => ({ i, rh })).filter((r) => r.rh)
-  const gap = Math.max(36, (bottom - top - used.reduce((sum, r) => sum + r.rh, 0)) / Math.max(1, used.length - 1))
+  const gap = Math.max(40, (bottom - top - used.reduce((sum, r) => sum + r.rh, 0)) / Math.max(1, used.length - 1))
   const rowY = new Map()
   let y = top
   for (const r of used) { rowY.set(r.i, Math.round(y)); y += r.rh + gap }
   const box = new Map()
+  const rowOf = new Map()
   rows.forEach((row, i) => {
     if (!row.length || i === 0) return
-    const total = row.length * w + (row.length - 1) * GAP * 1.6
+    const total = row.length * w + (row.length - 1) * space
     let x = Math.round((chartW - total) / 2)
-    for (const n of row) { box.set(n.id, { x, y: rowY.get(i), w, h }); x += Math.round(w + GAP * 1.6) }
+    for (const n of row) { box.set(n.id, { x, y: rowY.get(i), w, h }); rowOf.set(n.id, i); x += Math.round(w + space) }
   })
-  // The owner stands over the lead.
   const owner = rows[0][0]
   if (owner) {
     const lead = rows[1].find((n) => n.role === 'lead') || rows[1][0]
     const cx = lead ? box.get(lead.id).x + w / 2 : chartW / 2
     box.set(owner.id, { x: Math.round(Math.max(0, Math.min(chartW - OWNER_W, cx - OWNER_W / 2))), y: rowY.get(0), w: OWNER_W, h: OWNER_H })
+    rowOf.set(owner.id, 0)
   }
-  // The machine room along the bottom.
+  const per = Math.max(1, Math.floor((chartW - 170) / (SCRIPT_W + 14)))
   scripts.forEach((n, i) => {
-    const per = Math.max(1, Math.floor((chartW - 170) / (SCRIPT_W + 14)))
     box.set(n.id, { x: 170 + (i % per) * (SCRIPT_W + 14), y: bandY + 13, w: SCRIPT_W, h: SCRIPT_H })
+    rowOf.set(n.id, 4)
   })
 
-  // The lanes on the right, in the work order.
-  const lanes = laneW ? flow.lanes.map((lane, i) => ({ ...lane, x: chartW + GAP * 2, y: top + 34 + i * (LANE_H + 10), w: laneW, h: LANE_H })) : []
+  // The rows that hold something, top to bottom, and the gap under each: a channel the lines run along.
+  const bands = [0, 1, 2, 3, 4].filter((i) => [...rowOf.values()].includes(i)).map((i) => {
+    const boxes = [...rowOf].filter(([, r]) => r === i).map(([id]) => box.get(id))
+    return { i, top: Math.min(...boxes.map((b) => b.y)), bottom: Math.max(...boxes.map((b) => b.y + b.h)), boxes }
+  })
+  const at = new Map(bands.map((b, k) => [b.i, k]))
+  const channel = (k) => ({ top: bands[k].bottom, bottom: bands[k + 1].top })
 
-  // ── the lines ───────────────────────────────────────────────────────────────────
-  const pairs = new Map()
-  for (const e of flow.edges) {
-    const key = [e.from, e.to].sort().join('|')
-    pairs.set(key, [...(pairs.get(key) || []), e])
+  // Free corridors beside the plates of a row, where a line may pass it.
+  const corridors = (k) => {
+    const taken = bands[k].boxes.map((b) => [b.x - 10, b.x + b.w + 10]).sort((a, b) => a[0] - b[0])
+    const free = []
+    let from = 6
+    for (const [a, b] of taken) { if (a - from > 8) free.push([from, a]); from = Math.max(from, b) }
+    if (chartW - 6 - from > 8) free.push([from, chartW - 6])
+    return free
   }
-  const lines = []
-  const inside = (p) => [...box.values()].some((b) => p.x > b.x - 18 && p.x < b.x + b.w + 18 && p.y > b.y - 14 && p.y < b.y + b.h + 14)
-  const chips = []
-  const crowded = (p) => chips.some((c) => Math.abs(c.x - p.x) < 40 && Math.abs(c.y - p.y) < 28)
-  for (const group of pairs.values()) {
-    group.forEach((e, i) => {
-      const a = box.get(e.from)
-      const b = box.get(e.to)
-      if (!a || !b) return
-      const shift = (i - (group.length - 1) / 2) * 11
-      const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 }
-      const cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 }
-      let p0, p3, c1, c2
-      if (Math.abs(ca.y - cb.y) < 4) {
-        // Side by side: out of one side and into the other; past a neighbour, over the top.
-        const right = cb.x > ca.x
-        const next = Math.abs(cb.x - ca.x) < a.w + b.w / 2 + GAP * 2
-        if (next) {
-          p0 = { x: right ? a.x + a.w : a.x, y: ca.y + shift }
-          p3 = { x: right ? b.x : b.x + b.w, y: cb.y + shift }
-          c1 = { x: (p0.x + p3.x) / 2, y: p0.y }
-          c2 = { x: (p0.x + p3.x) / 2, y: p3.y }
-        } else {
-          p0 = { x: ca.x + shift, y: a.y }
-          p3 = { x: cb.x + shift, y: b.y }
-          c1 = { x: p0.x, y: a.y - 46 }
-          c2 = { x: p3.x, y: b.y - 46 }
-        }
-      } else {
-        const down = cb.y > ca.y
-        const aim = (from, to, bx) => Math.max(bx.x + 14, Math.min(bx.x + bx.w - 14, from.x + (to.x - from.x) * 0.3 + shift))
-        p0 = { x: aim(ca, cb, a), y: down ? a.y + a.h : a.y }
-        p3 = { x: aim(cb, ca, b), y: down ? b.y : b.y + b.h }
-        const dy = (p3.y - p0.y) * 0.5
-        c1 = { x: p0.x, y: p0.y + dy }
-        c2 = { x: p3.x, y: p3.y - dy }
-      }
-      const at = (t) => {
-        const u = 1 - t
-        return { x: u * u * u * p0.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p3.x, y: u * u * u * p0.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p3.y }
-      }
-      const tries = [0.5 + (i - (group.length - 1) / 2) * 0.16, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82].map(at)
-      const chip = tries.find((p) => !inside(p) && !crowded(p)) || tries.find((p) => !inside(p)) || tries[0]
-      chips.push(chip)
-      const f = (n) => Math.round(n * 10) / 10
-      lines.push({ ...e, d: `M${f(p0.x)} ${f(p0.y)}C${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(p3.x)} ${f(p3.y)}`, chip: { x: Math.round(chip.x), y: Math.round(chip.y) }, width: Math.round((1.6 + Math.min(4, Math.log2(e.count + 1) * 1.1)) * 10) / 10 })
-    })
-  }
-  // Each working bot to its job's lane: a thin line, so who does what reads without a click.
-  const toLanes = []
-  for (const lane of lanes) {
-    for (const id of lane.bots) {
-      const b = box.get(id)
-      if (!b) continue
-      const p0 = { x: b.x + b.w, y: b.y + b.h - 18 }
-      const p3 = { x: lane.x, y: lane.y + lane.h / 2 }
-      toLanes.push({ bot: id, lane: lane.id, d: `M${p0.x} ${p0.y}C${p0.x + 80} ${p0.y} ${p3.x - 80} ${p3.y} ${p3.x} ${p3.y}` })
+  const meet = (a, b) => a.flatMap(([x1, x2]) => b.map(([y1, y2]) => [Math.max(x1, y1), Math.min(x2, y2)])).filter(([p, q]) => q - p > 8)
+
+  const lines = bundleEdges(flow.edges).filter((e) => box.has(e.from) && box.has(e.to))
+  const centre = (id) => box.get(id).x + box.get(id).w / 2
+  // Each line's plan: which side it leaves and enters, the channels it runs in, the corridor it passes through.
+  for (const l of lines) {
+    const ka = at.get(rowOf.get(l.from)); const kb = at.get(rowOf.get(l.to))
+    if (ka === kb) {
+      const k = ka > 0 ? ka - 1 : ka
+      l.plan = { out: ka > 0 ? 'top' : 'bottom', in: ka > 0 ? 'top' : 'bottom', ch: [k], pass: [] }
+    } else if (ka < kb) {
+      l.plan = { out: 'bottom', in: 'top', ch: kb - ka > 1 ? [ka, kb - 1] : [ka], pass: Array.from({ length: kb - ka - 1 }, (_, n) => ka + 1 + n) }
+    } else {
+      l.plan = { out: 'top', in: 'bottom', ch: ka - kb > 1 ? [ka - 1, kb] : [ka - 1], pass: Array.from({ length: ka - kb - 1 }, (_, n) => kb + 1 + n) }
+    }
+    if (l.plan.pass.length) {
+      const free = l.plan.pass.map(corridors).reduce(meet)
+      const want = (centre(l.from) + centre(l.to)) / 2
+      const pick = free.map((iv) => ({ iv, d: Math.abs(Math.max(iv[0], Math.min(iv[1], want)) - want) })).sort((a, b) => a.d - b.d)[0]
+      l.plan.iv = pick ? pick.iv : [want - 4, want + 4]
     }
   }
-  return { width, height, chartW, laneW, bandY: scripts.length ? bandY : null, bandH, box, lanes, lines, toLanes }
+  // Lines through one corridor share it, side by side, in the order of where they are going.
+  const byCorridor = new Map()
+  for (const l of lines.filter((x) => x.plan.iv)) {
+    const key = `${l.plan.pass.join(',')}:${l.plan.iv.join(',')}`
+    byCorridor.set(key, [...(byCorridor.get(key) || []), l])
+  }
+  for (const group of byCorridor.values()) {
+    const [a, b] = group[0].plan.iv
+    const want = (l) => (centre(l.from) + centre(l.to)) / 2
+    group.sort((p, q) => want(p) - want(q))
+    const step = Math.min(9, (b - a - 8) / Math.max(1, group.length))
+    const mid = Math.max(a + 4 + step * group.length / 2, Math.min(b - 4 - step * group.length / 2, (a + b) / 2))
+    group.forEach((l, n) => { l.plan.cx = mid + (n - (group.length - 1) / 2) * step })
+  }
+  // Where each line touches its plates: spread along the side, in the order of where it heads next.
+  const sides = new Map()
+  const touch = (id, side, l, end) => { const key = `${id}|${side}`; sides.set(key, [...(sides.get(key) || []), { l, end }]) }
+  for (const l of lines) { touch(l.from, l.plan.out, l, 'from'); touch(l.to, l.plan.in, l, 'to') }
+  for (const [key, list] of sides) {
+    const [id] = key.split('|')
+    const b = box.get(id)
+    const heads = ({ l, end }) => (l.plan.cx ?? centre(end === 'from' ? l.to : l.from))
+    list.sort((p, q) => heads(p) - heads(q) || (p.end === 'from' ? -1 : 1))
+    const room = b.w - 28
+    list.forEach((t, n) => { t.l[t.end === 'from' ? 'xa' : 'xb'] = b.x + 14 + room * (list.length === 1 ? 0.5 : n / (list.length - 1)) })
+  }
+  // The horizontal runs, each on a track of its own in its channel.
+  const runs = new Map()
+  for (const l of lines) {
+    const cs = l.plan.ch
+    // One channel: from the first plate straight along to the second. Two: to the corridor, then on from it.
+    const ends = cs.length === 1 ? [[l.xa, l.xb]] : [[l.xa, l.plan.cx], [l.plan.cx, l.xb]]
+    l.runs = cs.map((k, n) => ({ k, a: Math.min(...ends[n]), b: Math.max(...ends[n]), l }))
+    for (const r of l.runs) runs.set(r.k, [...(runs.get(r.k) || []), r])
+  }
+  for (const [k, list] of runs) {
+    // Fewest tracks: runs in the order they start, each on the track that came free first.
+    const tracks = []
+    list.sort((p, q) => p.a - q.a || p.b - q.b)
+    for (const r of list) {
+      let t = -1
+      let best = Infinity
+      tracks.forEach((end, n) => { if (end + 14 < r.a && end < best) { best = end; t = n } })
+      if (t < 0) { tracks.push(0); t = tracks.length - 1 }
+      tracks[t] = r.b
+      r.t = t
+    }
+    const c = channel(k)
+    const pad = 9
+    const stepY = Math.min(16, (c.bottom - c.top - pad * 2) / Math.max(1, tracks.length))
+    const mid = (c.top + c.bottom) / 2
+    for (const r of list) r.y = mid + (r.t - (tracks.length - 1) / 2) * stepY
+  }
+  // The routes.
+  for (const l of lines) {
+    const a = box.get(l.from); const b = box.get(l.to)
+    const ya = l.plan.out === 'bottom' ? a.y + a.h : a.y
+    const yb = l.plan.in === 'top' ? b.y : b.y + b.h
+    const pts = [{ x: l.xa, y: ya }]
+    if (l.runs.length === 1) {
+      pts.push({ x: l.xa, y: l.runs[0].y }, { x: l.xb, y: l.runs[0].y })
+    } else {
+      pts.push({ x: l.xa, y: l.runs[0].y }, { x: l.plan.cx, y: l.runs[0].y }, { x: l.plan.cx, y: l.runs[1].y }, { x: l.xb, y: l.runs[1].y })
+    }
+    pts.push({ x: l.xb, y: yb })
+    l.points = pts
+    const [p, q] = pts.slice(-2)
+    l.dir = q.y > p.y ? 'down' : q.y < p.y ? 'up' : q.x > p.x ? 'right' : 'left'
+    l.d = roundPath(pts)
+    l.width = Math.round((1.4 + Math.min(1.6, Math.log2(l.count + 1) * 0.4)) * 10) / 10
+  }
+  // One pill for the two lines between a pair (a half for each way, each its own button), on one of its
+  // lines, clear of every plate and every other pill.
+  const cards = [...box.values()].map((b) => ({ x: b.x - 4, y: b.y - 4, w: b.w + 8, h: b.h + 8 }))
+  const placed = []
+  const hits = (r, q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h
+  const fits = (r) => r.x >= 2 && r.x + r.w <= chartW && r.y >= 2 && r.y + r.h <= height - 2 && !cards.some((c) => hits(r, c))
+  const free = (r) => fits(r) && !placed.some((p) => hits(r, p))
+  const pairs = new Map()
+  for (const l of lines) { const key = [l.from, l.to].sort().join('|'); pairs.set(key, [...(pairs.get(key) || []), l]) }
+  const pills = [...pairs.values()].map((group) => ({ group, w: group.reduce((sum, l) => sum + pillW(l), 0), count: group.reduce((sum, l) => sum + l.count, 0) }))
+  // Where each pill could go: along its lines, lying on a run first, near the middle.
+  for (const pill of pills) {
+    const tries = []
+    for (const l of pill.group) {
+      for (let i = 0; i < l.points.length - 1; i++) {
+        const p = l.points[i]; const q = l.points[i + 1]
+        const len = Math.hypot(q.x - p.x, q.y - p.y)
+        const n = Math.max(1, Math.floor(len / 7))
+        for (let s = 0; s <= n; s++) {
+          const t = 0.5 + (s % 2 ? 1 : -1) * Math.ceil(s / 2) / n
+          if (t >= 0 && t <= 1) tries.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t, flat: p.y === q.y, mid: Math.abs(t - 0.5) })
+        }
+      }
+    }
+    tries.sort((p, q) => Number(q.flat) - Number(p.flat) || p.mid - q.mid)
+    // Each place once as a box, and only those clear of the plates.
+    pill.tries = tries.map((c) => ({ ...c, r: { x: c.x - pill.w / 2, y: c.y - PILL_H / 2, w: pill.w, h: PILL_H } })).filter((c) => fits(c.r))
+    if (!pill.tries.length) pill.tries = tries.slice(0, 1).map((c) => ({ ...c, r: { x: c.x - pill.w / 2, y: c.y - PILL_H / 2, w: pill.w, h: PILL_H } }))
+    pill.tries.raw = tries
+  }
+  // The most hemmed-in pill is placed first: the one with the fewest free places left.
+  const left = [...pills]
+  while (left.length) {
+    // Counted against what was placed last only: a place a pill lost earlier stays lost.
+    const last = placed[placed.length - 1]
+    for (const pill of left) {
+      if (!pill.open) pill.open = pill.tries.filter((c) => !placed.some((q) => hits(c.r, q)))
+      else if (last) pill.open = pill.open.filter((c) => !hits(c.r, last))
+    }
+    left.sort((p, q) => (p.open.length || Infinity) - (q.open.length || Infinity) || q.count - p.count)
+    const pill = left.shift()
+    const tries = pill.open.length ? pill.open : pill.tries
+    const rect = (c, w = pill.w) => ({ x: c.x - w / 2, y: c.y - PILL_H / 2, w, h: PILL_H })
+    const keep = (r) => placed.push({ x: r.x - 3, y: r.y - 2, w: r.w + 6, h: r.h + 4 })
+    const spot = pill.open[0]
+    if (spot || pill.group.length === 1) {
+      const at = spot || tries.find((c) => fits(rect(c))) || tries[0]
+      let x = Math.round(at.x - pill.w / 2)
+      for (const l of pill.group) { const pw = pillW(l); l.chip = { x: x + pw / 2, y: Math.round(at.y), w: pw, part: pill.group.length === 1 ? 'solo' : x === Math.round(at.x - pill.w / 2) ? 'pa' : 'pb' }; x += pw }
+      keep(rect(at))
+      continue
+    }
+    // No room for the pair's pill: each way gets a small pill of its own, on its own line.
+    for (const l of pill.group) {
+      const pw = pillW(l)
+      const own = pill.tries.raw.filter((c) => l.points.some((p, i) => i < l.points.length - 1 && onSegment(c, p, l.points[i + 1])))
+      const at = own.find((c) => free(rect(c, pw))) || own.find((c) => fits(rect(c, pw))) || own[0] || tries[0]
+      l.chip = { x: Math.round(at.x), y: Math.round(at.y), w: pw, part: 'solo' }
+      keep(rect(at, pw))
+    }
+  }
+
+  // The lanes on the right, in the work order, in a column of their own that scrolls when they are many.
+  const laneH = Math.max(46, Math.min(LANE_H, Math.floor((height - top - 40) / Math.max(1, flow.lanes.length)) - 8))
+  const lanes = laneW ? flow.lanes.map((lane, i) => ({ ...lane, x: 0, y: i * (laneH + 8), w: laneW - 8, h: laneH })) : []
+  return { width, height, chartW, laneW, laneX: chartW + GAP * 2, laneTop: top + 30, laneH, bandY: scripts.length ? bandY : null, bandH, box, lanes, lines }
 }
 
 const face = (node, faces) => {
@@ -218,46 +376,59 @@ function plateHtml(node, b, nodes, faces) {
   const stats = [
     `${plural(node.runsToday, 'run')} today`,
     node.week?.share === null || node.week?.share === undefined ? '' : `<span title="Its share of all the Claude tokens the crew used this week, cached reads included">${pct(node.week.share)} of Claude</span>`,
-    node.met || node.notMet ? `<span class="${node.notMet > node.met ? 'cm-bad' : ''}" title="This week's results: met and not met">${node.met} met, ${node.notMet} not</span>` : '',
   ].filter(Boolean).map((s) => `<span>${s}</span>`).join('')
   return `<button type="button" class="cm-node cm-bot st-${esc(node.status)}" data-node="${esc(node.id)}" style="${style};--paint:${esc(paint)}" aria-label="${label} Open its page.">
-    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role">${esc(node.roleName)}, ${esc(node.model)}</span></span><span class="cm-lamp"><i></i>${esc(STATUS[node.status] || node.status)}</span></span>
+    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role"><span class="cm-lamp"><i></i>${esc(STATUS[node.status] || node.status)}</span><span class="cm-what">${esc(node.roleName)}, ${esc(node.model)}</span></span></span>${node.met || node.notMet ? `<span class="cm-met${node.notMet > node.met ? ' cm-bad' : ''}" title="This week's results: met and not met"><span>${node.met} met</span><span>${node.notMet} not</span></span>` : ''}</span>
     ${job}
     <span class="cm-stats">${stats}</span>
   </button>`
 }
 
-/** A line's count on the line: a button that opens its last messages. */
-const chipHtml = (l, nodes, window) => `<button type="button" class="cm-chip k-${l.kind}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" style="left:${l.chip.x}px;top:${l.chip.y}px" aria-label="${esc(edgeSentence(l, nodes, window))} Show the last messages.">${markSvg(l.kind)}<b>${l.count}</b></button>`
+const ARROW = { down: '↓', up: '↑', right: '→', left: '←' }
+const NAME_OF = (nodes, id) => { const n = nodes.find((x) => x.id === id); return n ? (n.kind === 'owner' ? 'you' : n.name) : 'someone' }
+
+/** A bundled line, said in one sentence: its total, then each kind. */
+export function lineSentence(line, nodes, window = '24h') {
+  const kinds = line.kinds.map((k) => (k.kind === 'wait' ? 'waits on' : `${k.count} ${kindWords(k.kind, k.count)}`)).join(', ')
+  const failed = line.failed ? `, ${line.failed} failed` : ''
+  return `${plural(line.count, 'message')} from ${NAME_OF(nodes, line.from)} to ${NAME_OF(nodes, line.to)} in ${WINDOW_WORDS[window] || window}: ${kinds}${failed}.`
+}
+
+/** A line's half of its pair's pill: the way it goes, its total and dots for its main kinds; it opens the breakdown. */
+const chipHtml = (l, nodes, window, part = '') => `<button type="button" class="cm-chip ${part} k-${l.kind}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" style="left:${l.chip.x}px;top:${l.chip.y}px;width:${l.chip.w}px" aria-label="${esc(lineSentence(l, nodes, window))} Show the breakdown and the last messages."><span class="cm-arrow" aria-hidden="true">${ARROW[l.dir] || ''}</span><b>${l.count}</b>${l.kinds.slice(0, 2).map((k) => `<i class="cm-dot k-${k.kind}" aria-hidden="true"></i>`).join('')}</button>`
 
 /**
  * What decides where everything stands: the size, the window, which plates, which lines, the lanes. While it
  * stays the same, a change (a new message, a bot starting work) only patches the plates and lines it touched.
  */
-export const shapeOf = (flow, size) => JSON.stringify([size, flow.window, flow.nodes.map((n) => [n.id, n.kind, n.role]), flow.edges.map((e) => e.id), flow.lanes])
+export const shapeOf = (flow, size) => JSON.stringify([size, flow.window, flow.nodes.map((n) => [n.id, n.kind, n.role]), bundleEdges(flow.edges).map((l) => [l.id, pillW(l)]), flow.lanes])
 
-/** The picture: lines under the plates, the counts on the lines, the lanes, the machine room. */
+/** The picture: lines under the plates, the pills on the lines, the lanes and the legend, the machine room. */
 export function flowHtml(flow, layout, { faces = {}, window = '24h' } = {}) {
   const nodes = flow.nodes
   const svg = [
     `<svg class="cm-lines" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true"><defs>`,
-    ...Object.keys(KIND).flatMap((k) => [`<marker id="cm-a-${k}" class="k-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>`]),
-    '<marker id="cm-a-bad" class="k-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>',
+    ...Object.keys(KIND).map((k) => `<marker id="cm-a-${k}" class="k-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>`),
+    '<marker id="cm-a-bad" class="k-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>',
     '</defs>',
-    ...layout.toLanes.map((l) => `<path class="cm-lane-line" data-from="${esc(l.bot)}" d="${l.d}"/>`),
-    ...layout.lines.map((l) => `<path class="cm-edge k-${l.kind}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" d="${l.d}" stroke-width="${l.width}" marker-end="url(#cm-a-${l.lastFailed ? 'bad' : l.kind})"/>`),
+    ...layout.lines.map((l) => `<path class="cm-edge k-${l.kind}${l.kinds.every((k) => k.kind === 'wait') ? ' dashed' : ''}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" d="${l.d}" stroke-width="${l.width}" marker-end="url(#cm-a-${l.lastFailed ? 'bad' : l.kind})"/>`),
     '</svg>',
   ].join('')
   const band = layout.bandY === null ? '' : `<div class="cm-band" style="top:${layout.bandY}px;height:${layout.bandH}px;width:${layout.chartW + GAP}px"><span>Machine room<small>Scripts, no AI</small></span></div>`
   const plates = nodes.map((n) => (layout.box.has(n.id) ? plateHtml(n, layout.box.get(n.id), nodes, faces) : '')).join('')
-  const chips = layout.lines.map((l) => chipHtml(l, nodes, window)).join('')
-  const lanes = layout.lanes.length ? `<h2 class="cm-lanes-head" style="left:${layout.lanes[0].x}px;width:${layout.laneW}px">Projects, in work order</h2>` + layout.lanes.map((lane) => {
+  // A pair's pill is two halves side by side (one per way); a pill that had no room is split into two.
+  const chips = layout.lines.map((l) => chipHtml(l, nodes, window, l.chip.part || 'solo')).join('')
+  const lanes = layout.laneW ? `<div class="cm-lanes" style="left:${layout.laneX}px;width:${layout.laneW}px">
+      <h2 class="cm-lanes-head">Projects, in work order</h2>
+      <div class="cm-lane-list">${layout.lanes.map((lane) => {
     const who = lane.bots.map((id) => nodes.find((n) => n.id === id)).filter(Boolean)
-    return `<button type="button" class="cm-lane" data-lane="${esc(lane.name)}" style="left:${lane.x}px;top:${lane.y}px;width:${lane.w}px;height:${lane.h}px" aria-label="${esc(`${lane.rank}. ${lane.name}: ${plural(lane.open, 'open job')}, ${who.length ? `${who.map((n) => n.name).join(', ')} working` : 'nobody working'}. Open the project.`)}">
+    return `<button type="button" class="cm-lane" data-lane="${esc(lane.name)}" data-bots="${esc(lane.bots.join(' '))}" style="min-height:${lane.h}px" aria-label="${esc(`${lane.rank}. ${lane.name}: ${plural(lane.open, 'open job')}, ${who.length ? `${who.map((n) => n.name).join(', ')} working` : 'nobody working'}. Open the project.`)}">
       <span class="cm-rank">${lane.rank}</span><span class="cm-lane-text"><span class="cm-name">${esc(lane.name)}</span><span class="cm-lane-sub">${plural(lane.open, 'open job')}${who.length ? '' : ', nobody on it'}</span></span>
       <span class="cm-lane-who">${who.slice(0, 4).map((n) => face(n, faces)).join('')}${who.length > 4 ? `<i class="cm-more">+${who.length - 4}</i>` : ''}</span>
     </button>`
-  }).join('') : ''
+  }).join('')}</div>
+      <div class="cm-legend-side" aria-label="What the lines mean">${legendHtml(flow)}</div>
+    </div>` : ''
   return svg + band + lanes + plates + chips
 }
 
@@ -287,12 +458,13 @@ export function legendHtml(flow) {
     + '<span class="cm-key cm-key-bad"><i></i>Last one failed or not met</span>'
 }
 
-/** The last messages on one line, for the box a click opens. */
-export function edgeDetail(edge, nodes, window) {
+/** One line's breakdown by kind and its last messages, for the box a click opens. */
+export function edgeDetail(line, nodes, window) {
   const when = (at) => new Date(at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })
-  return `<header><span class="k-${edge.kind}">${markSvg(edge.kind)}</span><h3>${esc(edgeSentence(edge, nodes, window))}</h3>
+  return `<header><span class="k-${line.kind}">${markSvg(line.kind)}</span><h3>${esc(`${plural(line.count, 'message')} from ${NAME_OF(nodes, line.from)} to ${NAME_OF(nodes, line.to)}, ${WINDOW_WORDS[window] || window}`)}</h3>
     <button type="button" class="cm-x" data-act="cm-close" aria-label="Close">×</button></header>
-    <ol>${edge.messages.map((m) => `<li class="${m.failed ? 'bad' : ''}"><time>${esc(when(m.at))}</time><p>${esc(m.text || '(no words)')}</p>${m.job ? `<button type="button" class="cm-job-link" data-job="${esc(m.job.id)}">${esc(m.job.title)} <span class="cm-ref">${esc(m.job.ref)}</span></button>` : ''}</li>`).join('')}</ol>`
+    <ul class="cm-kinds">${line.kinds.map((k) => `<li class="k-${k.kind}${k.lastFailed ? ' bad' : ''}">${markSvg(k.kind)}<span>${k.kind === 'wait' ? 'Waits on' : `${k.count} ${esc(kindWords(k.kind, k.count))}`}${k.failed ? `, ${k.failed} failed` : ''}</span></li>`).join('')}</ul>
+    <ol>${line.messages.map((m) => `<li class="k-${m.kind}${m.failed ? ' bad' : ''}"><time>${markSvg(m.kind)}${esc(when(m.at))}</time><p>${esc(m.text || '(no words)')}</p>${m.job ? `<button type="button" class="cm-job-link" data-job="${esc(m.job.id)}">${esc(m.job.title)} <span class="cm-ref">${esc(m.job.ref)}</span></button>` : ''}</li>`).join('')}</ol>`
 }
 
 /** What the picture is drawn from: two flows that give the same key give the same picture. */
@@ -397,9 +569,13 @@ export class CrewMap {
     const listed = this.mode === 'list' || (width > 0 && width < 640)
     this.stage.hidden = listed
     this.list.hidden = !listed
-    if (listed) this.list.innerHTML = flowList(flow, { window: this.window })
+    this._lines = bundleEdges(flow.edges)
+    if (listed) { this.list.innerHTML = flowList(flow, { window: this.window }); this.legend.hidden = true }
     else if (width > 0 && height > 0) {
       const layout = layoutFlow(flow, { width, height })
+      this._lines = layout.lines
+      // With lanes beside the chart the legend stands under them; without, along the bottom.
+      this.legend.hidden = layout.laneW > 0
       const shape = shapeOf(flow, size)
       if (shape === this._shape && this._drawnFlow) this._patch(flow, layout)
       else this.stage.innerHTML = flowHtml(flow, layout, { faces: this.acts.faces?.(), window: this.window })
@@ -429,9 +605,10 @@ export class CrewMap {
       const el = this.stage.querySelector(`.cm-node[data-node="${CSS.escape(n.id)}"]`)
       if (el && layout.box.has(n.id)) el.outerHTML = plateHtml(n, layout.box.get(n.id), flow.nodes, faces)
     }
-    const lines = new Map(before.edges.map((e) => [e.id, `${e.count}|${e.failed}|${e.lastFailed}`]))
+    const said = (l) => JSON.stringify([l.count, l.failed, l.lastFailed, l.kind, l.kinds])
+    const lines = new Map(bundleEdges(before.edges).map((l) => [l.id, said(l)]))
     for (const l of layout.lines) {
-      if (lines.get(l.id) === `${l.count}|${l.failed}|${l.lastFailed}`) continue
+      if (lines.get(l.id) === said(l)) continue
       const path = this.stage.querySelector(`path[data-edge="${CSS.escape(l.id)}"]`)
       if (path) {
         path.setAttribute('stroke-width', l.width)
@@ -439,7 +616,7 @@ export class CrewMap {
         path.setAttribute('marker-end', `url(#cm-a-${l.lastFailed ? 'bad' : l.kind})`)
       }
       const chip = this.stage.querySelector(`.cm-chip[data-edge="${CSS.escape(l.id)}"]`)
-      if (chip) chip.outerHTML = chipHtml(l, flow.nodes, this.window)
+      if (chip) chip.outerHTML = chipHtml(l, flow.nodes, this.window, ['pa', 'pb', 'solo'].find((c) => chip.classList.contains(c)) || 'solo')
     }
   }
 
@@ -454,13 +631,15 @@ export class CrewMap {
     const flow = this.flow
     if (!flow) return
     // One bot's chain: who briefed it, who checks it, who rules on it, and who waits on it; or one line's two ends.
-    const lines = edge ? flow.edges.filter((e) => e.id === edge) : flow.edges.filter((e) => e.from === id || e.to === id)
+    const all = this._lines || bundleEdges(flow.edges)
+    const lines = edge ? all.filter((e) => e.id === edge) : all.filter((e) => e.from === id || e.to === id)
     const ends = new Set(lines.flatMap((e) => [e.from, e.to]).concat(id ? [id] : []))
     const ids = new Set(lines.map((e) => e.id))
     this.stage.dataset.hot = '1'
     for (const x of this.stage.querySelectorAll('[data-node]')) x.classList.toggle('hot', ends.has(x.dataset.node))
     for (const x of this.stage.querySelectorAll('[data-edge]')) x.classList.toggle('hot', ids.has(x.dataset.edge))
-    for (const x of this.stage.querySelectorAll('.cm-lane-line')) x.classList.toggle('hot', ends.has(x.dataset.from))
+    // The project a lit bot is working in is lit too.
+    for (const x of this.stage.querySelectorAll('.cm-lane')) x.classList.toggle('hot', (x.dataset.bots || '').split(' ').some((b) => ends.has(b)))
   }
 
   _click(e) {
@@ -488,14 +667,15 @@ export class CrewMap {
     const node = t.closest('[data-node]')?.dataset.node
     if (node === 'owner') return this.acts.openNeeds()
     if (node && !node.startsWith('script:')) return this.acts.openBot(node)
-    if (node) return this._openPop(this.flow.edges.find((x) => x.from === node)?.id, t.closest('[data-node]'))
+    if (node) return this._openPop((this._lines || []).find((x) => x.from === node)?.id, t.closest('[data-node]'))
     const lane = t.closest('[data-lane]')?.dataset.lane
     if (lane) return this.acts.openProject(lane)
     if (!t.closest('.cm-pop')) this._closePop()
   }
 
   _openPop(edgeId, near) {
-    const edge = this.flow?.edges.find((x) => x.id === edgeId)
+    // The List names a line by its kind too ("brief:a>b"); its box is the whole line between the two.
+    const edge = (this._lines || []).find((x) => x.id === edgeId || x.id === String(edgeId || '').replace(/^[a-z]+:/, ''))
     if (!edge) return
     this.pop.innerHTML = edgeDetail(edge, this.flow.nodes, this.window)
     this.pop.hidden = false
