@@ -72,6 +72,10 @@ test('show --json is read as the tool prints it: paused is a list of jobs, heldM
   assert.equal(stateLine(readShow(JSON.stringify({ now: 'full', day: 'full', night: 'full', paused: [{ state: 'ok', rssMB: 1 }], heldMB: 0 }))), 'Full: 1 job paused')
   assert.equal(stateLine(readShow(JSON.stringify({ now: 'light', day: 'light', night: 'none', paused: [], heldMB: 0 }))), 'Light (day Light, night None)')
   for (const junk of ['', 'day heavy', '[]', '{"now":"turbo"}', 'null']) assert.equal(stateLine(readShow(junk)), 'The PC load is not known', junk)
+  // The tool's own line of what the level lets run is shown as it is, control characters taken out.
+  const noted = readShow(JSON.stringify({ now: 'none', day: 'none', night: 'none', paused: [], heldMB: 0, note: 'None: up to 6 Claude, 6 free, 4 heavy\n<b>' }))
+  assert.equal(stateLine(noted), 'None: up to 6 Claude, 6 free, 4 heavy <b>')
+  assert.match(throttleHtml({ configured: true, ...noted, line: stateLine(noted) }), /None: up to 6 Claude, 6 free, 4 heavy &lt;b&gt;<\/span>/)
 })
 
 test('a tool that fails is reported, and the state says so', async () => {

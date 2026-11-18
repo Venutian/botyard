@@ -31,7 +31,7 @@ export function throttleHtml(state, ui = {}) {
   return `<span class="ld-label" id="ld-label">PC load</span>
 <div class="ld-group${full ? ' is-full' : ''}" role="radiogroup" aria-labelledby="ld-label">${seg}</div>
 ${resume}<button type="button" class="ld-more" data-act="load-more" aria-expanded="${Boolean(ui.more)}" aria-controls="ld-pop" title="Set day and night apart" aria-label="Day and night settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-<span class="ld-line" role="status" aria-live="polite">${esc(ui.error || (full || split ? state?.line : '') || '')}</span>
+<span class="ld-line" role="status" aria-live="polite" title="${esc(ui.error || state?.line || '')}">${esc(ui.error || (full || split || state?.note ? state?.line : '') || '')}</span>
 `
 }
 
