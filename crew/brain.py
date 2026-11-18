@@ -98,7 +98,7 @@ def notes(root):
     for here, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in SKIP)
         for name in sorted(files):
-            if not name.endswith('.md') or name.lower() in ('readme.md',):
+            if not name.endswith('.md') or name.lower() == 'readme.md' or (here == root and name.lower() == 'index.md'):
                 continue
             path = os.path.join(here, name)
             rel = os.path.relpath(path, root)
