@@ -162,3 +162,49 @@ class Run(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Tuning(unittest.TestCase):
+    def rules(self, **more):
+        return {**json.load(open(os.path.join(CREW, 'github-project-rules.json'))), **more}
+
+    def v(self, r, rules, fl=(), n=1):
+        return gp.verdict(r, rules, files=lambda _r: list(fl), commits=lambda _r, cap=5: n)
+
+    def test_allow_beats_age_and_missing_readme(self):
+        rules = self.rules(allow=['gamey'])
+        self.assertEqual(self.v(repo('gamey', description='', pushed_at=OLD), rules)[0], True)
+        self.assertEqual(self.v(repo('other', description='', pushed_at=OLD), rules)[0], False)
+
+    def test_deny_beats_allow_and_allow_never_beats_fork_or_archived(self):
+        rules = self.rules(allow=['gamey'], deny=[{'name': 'gamey', 'reason': 'nope'}])
+        self.assertEqual(self.v(repo('gamey'), rules), (False, 'nope'))
+        rules = self.rules(allow=['gamey'])
+        self.assertEqual(self.v(repo('gamey', fork=True), rules), (False, 'a fork'))
+        self.assertFalse(self.v(repo('gamey', archived=True), rules)[0])
+
+    def test_manifest_without_readme_is_kept_when_recent(self):
+        rules = self.rules()
+        self.assertEqual(self.v(repo('g', description='', pushed_at='2026-06-01T00:00:00Z'), rules, ['project.godot']), (True, 'no README: add one'))
+        self.assertFalse(self.v(repo('g', description='', pushed_at='2025-06-01T00:00:00Z'), rules, ['project.godot'], 9)[0])
+        self.assertFalse(self.v(repo('g', description='', pushed_at=RECENT), rules, ['notes.txt'])[0])
+
+    def test_coursework_names_stay_dropped(self):
+        rules = self.rules()
+        for n in ('sorting-cpp', 'oop-banking', 'procedural-intro', 'chess-java'):
+            self.assertFalse(self.v(repo(n), rules)[0], n)
+        self.assertTrue(self.v(repo('helper-bot'), rules)[0])
+        self.assertFalse(self.v(repo('old-bot', pushed_at=OLD), rules, ['package.json'], 9)[0])
+
+    def test_owner_file_merges_over_defaults_and_init_never_overwrites(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'github-projects.json')
+            self.assertTrue(gp.init_owner_file(['a'], ['b'], 'because', path))
+            self.assertFalse(gp.init_owner_file(['zzz'], [], 'x', path))
+            rules = gp.load_rules(owner=path)
+            self.assertEqual([x['name'] for x in rules['deny']], ['a'])
+            self.assertEqual([x['name'] for x in rules['allow']], ['b'])
+            self.assertEqual(self.v(repo('a'), rules), (False, 'because'))
+            self.assertTrue(self.v(repo('b', description=''), rules)[0])
+            self.assertIn('excludeNames', rules)
+            self.assertEqual(gp.load_rules(owner=os.path.join(d, 'missing.json'))['deny'], [])

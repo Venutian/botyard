@@ -1,15 +1,19 @@
 {
-  "about": "What makes a repository on the signed-in GitHub account a Botyard project. Read by github-projects.py. Edit freely: `deny` is yours. Patterns are case-insensitive globs on the repo name.",
+  "about": "What makes a repository on the signed-in GitHub account a Botyard project. Read by github-projects.py. Edit freely, but put your own `deny` and `allow` names in ~/.botyard/config/github-projects.json (merged over this file). Patterns are case-insensitive globs on the repo name.",
   "pushedWithinMonths": 24,
   "orElse": { "minCommits": 5, "manifestAtRoot": ["package.json", "Cargo.toml", "pyproject.toml", "go.mod", "pom.xml", "build.gradle", "project.godot", "*.csproj", "app.json", "wrangler.json", "manifest.json"] },
   "needsReadmeOrDescription": true,
+  "manifestNoReadmeMonths": 12,
   "excludeForks": true,
   "excludeArchived": true,
   "excludePages": "the account's own <login>.github.io pages repo",
   "excludeNames": [
     { "pattern": "*html-css*", "reason": "looks like coursework" },
-    { "pattern": "*oop_*", "reason": "looks like coursework" },
+    { "pattern": "oop*", "reason": "looks like coursework" },
     { "pattern": "*procedural*", "reason": "looks like coursework" },
+    { "pattern": "*-cpp", "reason": "looks like coursework" },
+    { "pattern": "*-java", "reason": "looks like coursework" },
+    { "pattern": "*-bot", "olderThanMonths": 24, "reason": "an old bot repo (24+ months), looks like coursework" },
     { "pattern": "*-tutorial", "reason": "looks like a tutorial" },
     { "pattern": "*-example", "reason": "looks like a sample" },
     { "pattern": "*-test", "reason": "looks like a test repo" },
@@ -18,6 +22,7 @@
     { "pattern": "*exercise*", "reason": "looks like coursework" }
   ],
   "deny": [],
+  "allow": [],
   "cloneRootsAbout": "Folders searched (one level down) for a local clone, matched by its remote URL. Empty means the projects folder Botyard uses (beside the Botyard clone).",
   "cloneRoots": []
 }
