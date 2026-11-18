@@ -17,7 +17,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { ownerOnly, ownerOrScript } from './caller.mjs'
-import { Refused, createCard, createJob, note, patchJob, settleCard } from './write.mjs'
+import { Refused, addComment, createCard, createJob, note, patchJob, settleCard } from './write.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const exec = promisify(execFile)
@@ -666,6 +666,16 @@ async function checkMain(store, trip, request, version, { io, now }) {
 
 function finish(store, trip, request, now) {
   putRequest(store, { ...request, status: 'done', finishedAt: iso(now) }, now)
+  // Earlier rounds of a step that makes a commit were replaced by the round that landed: their jobs are closed as
+  // superseded, so a "done, not in main" measure does not list them. Their branches are left as they are.
+  for (const row of rowsOf(store, trip.id)) {
+    if (row.status !== 'stale' || !row.jobId) continue
+    const step = versionOf(store, trip.trackId, trip.version)?.steps.find((s) => s.id === row.stepId)
+    const old = store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId)
+    if (!step?.leaves.includes('commit') || old?.status !== 'done') continue
+    addComment(store, old.id, { body: `Superseded: a later round of this request landed in ${trip.commit ? `main (${String(trip.commit).slice(0, 12)})` : 'main'}. This round's branch is kept as it is.` }, { now, actor: ENGINE, quiet: true })
+    patchJob(store, old.id, { status: 'cancelled' }, { now, actor: ENGINE })
+  }
   const job = store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
   if (job && !['done', 'cancelled'].includes(job.status)) patchJob(store, job.id, { status: 'done' }, { now, actor: ENGINE })
   return { ...trip, status: 'done', reason: '', endedAt: iso(now) }
@@ -834,7 +844,7 @@ export function answerGate(store, tripId, body = {}, { now = Date.now(), actor }
   const to = action === 'context' ? body.to || order[order.indexOf(step.id) - 1] : body.to
   if (!order.includes(to) || order.indexOf(to) >= order.indexOf(step.id)) throw new Refused(400, `Send the work back to a step before the gate: ${order.slice(0, order.indexOf(step.id)).join(', ') || 'there is none'}`)
   settleCard(store, request.jobId, row.cardId, 'reject', { reason: said }, { now, actor })
-  putRow(store, { ...row, status: 'failed', snapshot: { verdict: 'fail', leaves: {}, findings: said, sentBackTo: to }, finishedAt: iso(now) }, now)
+  putRow(store, { ...row, status: 'failed', snapshot: { verdict: 'fail', leaves: {}, findings: said, sentBackTo: to, ...(/^[\w-]{1,80}$/.test(String(body.reviewId || '')) ? { reviewId: String(body.reviewId) } : {}) }, finishedAt: iso(now) }, now)
   const next = goTo(store, tripOr404(store, tripId), version, to, { note: said }, now)
   putTrip(store, { ...next, status: 'running' }, now)
   return tripOr404(store, tripId)
