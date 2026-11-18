@@ -5,6 +5,7 @@ import { Yard } from './yard/yard.js'
 import { Shell } from './shell/shell.js'
 import { Studio } from './ui/studio.js'
 import { waitingCount } from './ui/needs-count.js'
+import { keepFresh } from './ui/fresh.js'
 
 /**
  * Botyard's page: the yard drawn on a canvas, the panels over it, and the few things that join
@@ -13,6 +14,8 @@ import { waitingCount } from './ui/needs-count.js'
  */
 
 const ASK_EVERY_MS = 5000
+// A window left open (the desktop app, a browser tab) reloads itself once the service hands out a new build.
+keepFresh()
 const app = document.getElementById('app')
 const settings = new MapSettings()
 const stage = new Stage(app, settings)
