@@ -73,6 +73,14 @@ DEFAULTS = {'role': 'general', 'tier': 'strong', 'look': {}, 'title': '', 'does'
             'variables': [], 'on': True}
 
 
+LANE_LABEL = {'claude': 'Claude', 'codex': 'Codex', 'gemini': 'Gemini'}
+
+
+def lane_name(name, ai):
+    """The agent that takes a free checker's checks on a paid AI: 'Checker on Codex'."""
+    return f'{name} on {LANE_LABEL.get(ai, ai)}'
+
+
 def slug_of(name):
     return re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
@@ -168,8 +176,10 @@ class CrewSet:
         if not base and not over:
             raise SystemExit(f'There is no bot "{slug}" in {self.dir} or {self.own}.')
         spec = {**DEFAULTS, **base, **over}
+        # The order the file gives is kept: a checker's "fallbacks" are the order it moves down (check_order).
+        names = [*(base.get('fallbacks') or {}), *(ai for ai in (over.get('fallbacks') or {}) if ai not in (base.get('fallbacks') or {}))]
         spec['fallbacks'] = {ai: {**(base.get('fallbacks') or {}).get(ai, {}), **(over.get('fallbacks') or {}).get(ai, {})}
-                             for ai in {*(base.get('fallbacks') or {}), *(over.get('fallbacks') or {})}}
+                             for ai in names}
         spec['slug'] = slug
         if not spec.get('name') or spec.get('ai') not in AIS:
             raise SystemExit(f'{slug}.json needs a "name" and an "ai" that is one of: {", ".join(AIS)}.')
@@ -221,6 +231,19 @@ class CrewSet:
     # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
     # Codex, Claude) for its work: build() refuses, and its "fallbacks" are for a person to ask for on purpose.
     paid_by_hand = False
+
+    def check_order(self, slug):
+        """The AIs a checker's checks move down, in the order its file gives: its own, then each of its "fallbacks"
+        that says "for": "checks" (a bot that runs on a paid AI lists them all). A free bot's other fallbacks are
+        for a person to ask for and are left out."""
+        spec = self.spec(slug)
+        lanes = [ai for ai, f in spec['fallbacks'].items() if ai in AIS and ai != spec['ai']
+                 and (spec['ai'] != 'free' or f.get('for') == 'checks')]
+        return [spec['ai']] + lanes
+
+    def check_lanes(self, slug):
+        """The AIs of a free checker that checks may be given to besides its own: the ones its file lets (\"for\": \"checks\")."""
+        return [ai for ai in self.check_order(slug)[1:] if self.spec(slug)['ai'] == 'free']
 
     def on(self, slug, ai=None):
         """The bot's settings as they hold on `ai`: its own AI when none is given, else its "fallbacks"."""
@@ -380,16 +403,23 @@ class CrewSet:
             return {**HEARTBEAT, 'maxConcurrentRuns': spec['atOnce']}
         return dict(HEARTBEAT)
 
-    def build(self, slug, ai=None, free_model=None):
-        """Everything the seeder needs for one bot on an AI."""
+    def build(self, slug, ai=None, free_model=None, lane=False):
+        """Everything the seeder needs for one bot on an AI. A free bot is never moved to a paid one, except as a
+        lane: a second agent of its own that takes only its checks, when its file lists that AI "for": "checks"."""
         own = self.spec(slug)
-        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand:
+        lane = bool(lane and ai and ai != own['ai'])
+        if lane and ai not in self.check_lanes(slug):
+            raise PaidEngine(f"{own['name']} has no lane on {ai}: its file lists none with \"for\": \"checks\".")
+        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand and not lane:
             raise PaidEngine(f"{own['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         spec = self.on(slug, ai)
+        if lane:
+            spec = {**spec, 'name': lane_name(own['name'], ai), 'on': True}
         return {'slug': slug, 'name': spec['name'], 'role': ROLES[spec['role']], 'title': spec['title'], 'caps': spec['does'],
                 'ai': spec['ai'], 'adapter': AIS[spec['ai']], 'config': self.config(spec, free_model),
                 'heartbeat': self.heartbeat(spec), 'reportsTo': spec.get('reportsTo'),
-                'rulesFile': spec.get('rulesFile') or slug, 'spec': spec}
+                'rulesFile': (f'{slug}-{ai}' if lane else spec.get('rulesFile') or slug), 'spec': spec,
+                **({'lane': ai, 'laneOf': own['name']} if lane else {})}
 
     def listing(self):
         """The set as data, for Botyard's editor: every bot with its settings and where its files are."""

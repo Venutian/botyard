@@ -615,6 +615,38 @@ def safe_folder():
         os.symlink(f'{skills}/botyard', f'{mine}/botyard')
 
 
+def put_lane(bot, existing, boss, dry=False):
+    """A free checker's lane on a paid AI: an agent of its own (fallback.py hands it checks the free models cannot take
+    in time). It is made from the checker's file and follows it on every seed; nothing the owner changes in Botyard is
+    read back, because the file is the one place its order and models are set."""
+    files = crew()
+    path = f"{files.places.crew}/{bot['rulesFile']}.md"
+    text = files.render(bot['slug'], bot['lane'], crew_ids(bot, existing))
+    agent = existing.get(bot['name'])
+    if dry:
+        print(f"{bot['name']:15} {'would be updated' if agent else 'would be made'} ({bot['adapter']} {bot['config'].get('model')})")
+        return None
+    write(path, text)
+    body = body_for(bot, path, existing, boss)
+    answer = call('PATCH', f"/agents/{agent['id']}", body) if agent else call('POST', f'/companies/{botyard_home.studio_id()}/agents', body)
+    state = seeded()
+    state[f"{bot['slug']}@{bot['lane']}"] = {'id': answer.get('id'), 'text': sha(text), 'at': int(time.time())}
+    write(seeded_file(), json.dumps(state, indent=1, sort_keys=True) + '\n')
+    print(f"{bot['name']:15} {answer.get('status')} {bot['adapter']} {bot['config']['model']}  (lane)")
+    return answer
+
+
+def seed_lanes(existing, boss, dry=False):
+    """Every lane the crew's files list, after the bots themselves: a checker with "fallbacks" marked "for": "checks"."""
+    files = crew()
+    for slug in files.slugs():
+        for ai in files.check_lanes(slug):
+            bot = files.build(slug, ai, free_start, lane=True)
+            answer = put_lane(bot, existing, boss, dry)
+            if answer:
+                existing[bot['name']] = {**existing.get(bot['name'], {}), **answer}
+
+
 def move_thinkers(to, back=None, on_claude_now=()):
     """Moves the Codex bots to Antigravity or back, and those named to cheap Claude when every
     Antigravity model is out too. The Claude bots and their sessions are left alone."""
@@ -663,10 +695,14 @@ def main(only=None, dry=False):
         if slug == lead and agent:
             boss = agent['id']
     if dry:
+        if not only:
+            seed_lanes(existing, boss, dry=True)
         return
     if lead and set(existing) != before and not only:
         # The lead was seeded before the bots it hands work to existed: now its list of their ids is whole.
         put(build(lead), existing, boss)
+    if not only:
+        seed_lanes(existing, boss)
     for name in files.crew.get('retired') or []:
         if name in existing and existing[name].get('status') != 'paused' and not only:
             call('POST', f"/agents/{existing[name]['id']}/pause", {})
