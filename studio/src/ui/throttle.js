@@ -1,38 +1,35 @@
 /**
- * The top bar's throttle (PC load) control: a radio group of six levels (Max, None, Light, Medium, Heavy, Full),
+ * The top bar's throttle (PC load) control: a radio group of six paces (Sprint, Run, Jog, Walk, Crawl, Stop),
  * a state line, and a small popover to set Day and Night apart. Pure HTML from the state, so it is
  * tested in Node; `mountThrottle` wires it to the server's /api/studio/throttle.
- * Full is the only level that asks first, and while it holds the control offers Resume.
+ * Stop is the only level that asks first, and while it holds the control offers Resume.
  * A yard with no throttle tool (the server answers `configured: false`) shows no control at all.
  */
 
 const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-export const LEVELS = ['max', 'none', 'light', 'medium', 'heavy', 'full']
-export const NAMES = { max: 'Max', none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
+export const LEVELS = ['sprint', 'run', 'jog', 'walk', 'crawl', 'stop']
+export const NAMES = { sprint: 'Sprint', run: 'Run', jog: 'Jog', walk: 'Walk', crawl: 'Crawl', stop: 'Stop' }
 export const CONFIRM = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.'
 const STOP = '<svg class="ld-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
-const HINTS = {
-  max: 'Max: no slowdown and no weekly Claude limit; the week may run out early',
-  none: 'No throttle: the crew does the most work at once, within the weekly Claude limit',
-  light: 'Light throttle: a little less work at once',
-  medium: 'Medium throttle: about half the work at once',
-  heavy: 'Heavy throttle: the least work at once, the PC stays quiet',
-  full: 'Full stop: heavy work paused, no new builds',
+// What each level means comes from the server (`about`, studio/server/lib/throttle.mjs SAYS), the one source the phone reads too.
+const hint = (state, id) => {
+  const a = (state?.about || []).find((x) => x.id === id)
+  return a ? [a.says, a.numbers].filter(Boolean).join('. ') : NAMES[id]
 }
 
 /** The buttons and the state line. `ui` is `{ confirming, busy, error }`. */
 export function throttleHtml(state, ui = {}) {
   const now = state?.now || ''
-  const full = now === 'full'
-  // The line says what the buttons cannot: Full's paused jobs, a day and night set apart, or what went wrong.
+  const full = now === 'stop'
+  // The line says what the buttons cannot: Stop's paused jobs, a day and night set apart, or what went wrong.
   const split = Boolean(state?.day && state?.night && state.day !== state.night)
   const seg = LEVELS.map((id) => {
     const on = id === now
-    return `<button type="button" role="radio" aria-checked="${on}" tabindex="${on || (!now && id === 'none') ? 0 : -1}" class="ld-seg ld-${id}${on ? ' on' : ''}" data-level="${id}" title="${esc(HINTS[id])}"${ui.busy ? ' aria-disabled="true"' : ''}>${id === 'full' ? STOP : ''}<span>${NAMES[id]}</span></button>`
+    return `<button type="button" role="radio" aria-checked="${on}" tabindex="${on || (!now && id === 'run') ? 0 : -1}" class="ld-seg ld-${id}${on ? ' on' : ''}" data-level="${id}" title="${esc(hint(state, id))}"${ui.busy ? ' aria-disabled="true"' : ''}>${id === 'stop' ? STOP : ''}<span>${NAMES[id]}</span></button>`
   }).join('')
   const resume = full ? '<button type="button" class="ld-resume" data-act="load-resume">Resume</button>' : ''
-  return `<span class="ld-label" id="ld-label" title="How much the crew slows down to keep this PC free: None is full speed, Heavy is the slowest, Full pauses heavy work">Throttle</span>
+  return `<span class="ld-label" id="ld-label" title="${esc(state?.labelSays || '')}">${esc(state?.label || 'Pace')}</span>
 <div class="ld-group${full ? ' is-full' : ''}" role="radiogroup" aria-labelledby="ld-label">${seg}</div>
 ${resume}<button type="button" class="ld-more" data-act="load-more" aria-expanded="${Boolean(ui.more)}" aria-controls="ld-pop" title="Set day and night apart" aria-label="Day and night settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
 <span class="ld-line" role="status" aria-live="polite" title="${esc(ui.error || state?.line || '')}">${esc(ui.error || (full || split || state?.note ? state?.line : '') || '')}</span>
@@ -46,7 +43,7 @@ export function throttleLayerHtml(state, ui = {}) {
     .map(([id, name]) => `<label class="ld-scope"><input type="radio" name="ld-scope" value="${id}"${scope === id ? ' checked' : ''}> ${name}</label>`).join('')
   const split = state?.day && state?.night ? `Day: ${esc(NAMES[state.day] || state.day)}. Night: ${esc(NAMES[state.night] || state.night)}.` : ''
   const confirm = ui.confirming
-    ? `<div class="ld-confirm panel" role="alertdialog" aria-label="Full PC load"><p>${CONFIRM}</p><div class="ld-acts"><button type="button" class="btn primary" data-act="load-full-yes">Pause all</button><button type="button" class="btn ghost" data-act="load-full-no">Cancel</button></div></div>`
+    ? `<div class="ld-confirm panel" role="alertdialog" aria-label="Stop: pause heavy work"><p>${CONFIRM}</p><div class="ld-acts"><button type="button" class="btn primary" data-act="load-full-yes">Pause all</button><button type="button" class="btn ghost" data-act="load-full-no">Cancel</button></div></div>`
     : ''
   return `<div class="ld-pop panel" id="ld-pop" role="dialog" aria-label="Day and night load"${ui.more ? '' : ' hidden'}><p>${split}</p><fieldset><legend>A press sets</legend>${scopes}</fieldset></div>${confirm}`
 }
@@ -56,7 +53,7 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
   const ui = { scope: 'both', more: false, confirming: false, busy: false, error: '' }
   let state = null
   let timer = 0
-  let before = 'none'
+  let before = 'run'
   const draw = () => {
     // Hidden until the server says this yard has a throttle tool, so a yard without one never sees it.
     const shown = state?.configured === true
@@ -74,7 +71,7 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
   }
   const set = async (level) => {
     if (ui.busy) return
-    if (state?.now && state.now !== 'full') before = state.now
+    if (state?.now && state.now !== 'stop') before = state.now
     ui.busy = true; ui.confirming = false; draw()
     try { state = await call('/api/studio/throttle', { level, scope: ui.scope }); ui.error = '' } catch (err) { ui.error = err.message || 'The load could not be set' }
     ui.busy = false; draw()
@@ -82,9 +79,9 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
   }
   const onClick = (e) => {
     const level = e.target.closest('[data-level]')?.dataset.level
-    if (level) return level === 'full' && state?.now !== 'full' ? (ui.confirming = true, draw()) : set(level)
+    if (level) return level === 'stop' && state?.now !== 'stop' ? (ui.confirming = true, draw()) : set(level)
     const act = e.target.closest('[data-act]')?.dataset.act
-    if (act === 'load-full-yes') return set('full')
+    if (act === 'load-full-yes') return set('stop')
     if (act === 'load-full-no') { ui.confirming = false; draw() }
     if (act === 'load-resume') return set(before)
     if (act === 'load-more') { ui.more = !ui.more; draw() }

@@ -620,9 +620,11 @@ export type Helpers = { available: boolean; state: 'on' | 'off'; why: string; jo
 export const getHelpers = (c: Connection) => call<Helpers>(c, '/helpers');
 export const helperAction = (c: Connection, action: 'on' | 'off' | 'run', name?: string) => call<Helpers>(c, '/helpers', 'POST', name ? { action, name } : { action });
 
-/** How hard the crew may work the PC. Hidden when the PC names no throttle tool (`configured: false`). */
-export type LoadLevel = 'max' | 'none' | 'light' | 'medium' | 'heavy' | 'full';
-export type PcLoad = { configured: boolean; levels: LoadLevel[]; now?: LoadLevel | ''; day?: LoadLevel | ''; night?: LoadLevel | ''; paused?: number; heldGb?: number; line?: string };
+/** How fast the crew works (its pace). Hidden when the PC names no throttle tool (`configured: false`). */
+export type LoadLevel = 'sprint' | 'run' | 'jog' | 'walk' | 'crawl' | 'stop';
+/** One pace as the PC describes it: the same words as the page's tooltips. */
+export type PaceAbout = { id: LoadLevel; name: string; says: string; numbers: string; warn: string };
+export type PcLoad = { configured: boolean; levels: LoadLevel[]; now?: LoadLevel | ''; day?: LoadLevel | ''; night?: LoadLevel | ''; paused?: number; heldGb?: number; line?: string; label?: string; labelSays?: string; about?: PaceAbout[] };
 export const getPcLoad = (c: Connection) => call<PcLoad>(c, '/throttle');
 /** Set as the owner: the PC writes the change in its log as made from the phone. */
 export const setPcLoad = (c: Connection, level: LoadLevel, scope: 'both' | 'day' | 'night' = 'both') => call<PcLoad>(c, '/throttle', 'POST', { level, scope });
