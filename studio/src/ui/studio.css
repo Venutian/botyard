@@ -1526,3 +1526,6 @@
 
 /* A card's question keeps its own line breaks: what it is about, then what each answer does. */
 .studio-body .card p.prompt { white-space: pre-line; }
+
+/* The AI a bot's running copy is on, when the bot has copies on other AIs (crew bar, Crew sheet, map). */
+.copy-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--line, #8884); border-radius: 999px; font: 600 10px/16px var(--sans, inherit); font-style: normal; letter-spacing: .02em; color: var(--muted, inherit); vertical-align: middle; white-space: nowrap; }

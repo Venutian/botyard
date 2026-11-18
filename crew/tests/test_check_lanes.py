@@ -206,6 +206,14 @@ class Lanes(Studio):
                          {'Checker on Gemini': 'gemini_local', 'Checker on Codex': 'codex_local', 'Checker on Claude': 'claude_local'})
         self.assertTrue(os.path.isfile(f'{self.crew}/checker-codex.md'))
 
+    def test_a_lane_says_whose_it_is_so_lists_show_one_bot(self):
+        self.m.main()
+        lanes = {a['name']: a['metadata'] for a in self.engine.agents.values() if a['name'].startswith('Checker on')}
+        self.assertEqual({n: (m['laneOf'], m['lane']) for n, m in lanes.items()},
+                         {'Checker on Gemini': ('Checker', 'gemini'), 'Checker on Codex': ('Checker', 'codex'), 'Checker on Claude': ('Checker', 'claude')})
+        own = next(a for a in self.engine.agents.values() if a['name'] == 'Checker')
+        self.assertNotIn('laneOf', own['metadata'])
+
     def test_a_dry_seed_writes_nothing_for_lanes(self):
         self.m.main(dry=True)
         self.assertEqual([a for a in self.engine.agents.values() if a['name'].startswith('Checker on')], [])

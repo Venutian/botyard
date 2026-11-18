@@ -14,6 +14,7 @@ import path from 'node:path'
 import { ALL_JOBS, EngineError, call, companyId, crewOf, orElse, plainTitle, refOf, withRefs } from './engine.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks } from './looks.mjs'
+import { copyGroups, runningCopy } from './copies.mjs'
 import { runFeed, scrub, toolLine } from './run-feed.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -251,20 +252,34 @@ export async function botList({ folder = crewFolder(), now = Date.now(), ...opti
   const liveIds = new Set(live.map((r) => r.agentId))
   const day = new Map(dayCost.map((r) => [r.agentId, tokensOf(r)]))
   const wk = new Map(weekCost.map((r) => [r.agentId, tokensOf(r)]))
-  const shown = new Set(agents.map((a) => a.id))
+  // A bot's copies on other AIs are one card: its look, name and files; the tag says which copy runs now.
+  const fold = copyGroups(agents)
+  const shown = new Set(fold.top.map((a) => a.id))
   const order = { running: 0, error: 1, idle: 2, paused: 3 }
   const looks = crewLooks(agents)
-  const bots = agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    title: agent.title || '',
-    ...looks.get(agent.id),
-    ...stateOf(agent, liveIds, files.rested),
-    ...engineOf(agent, files, now),
-    tokensToday: day.get(agent.id) || 0,
-    tokensWeek: wk.get(agent.id) || 0,
-    waste: files.waste.bots[agent.name] || null,
-  })).sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || a.name.localeCompare(b.name))
+  const bots = fold.top.map((agent) => {
+    const family = fold.family(agent)
+    const on = runningCopy(agent, fold, { liveIds })
+    const sum = (m) => family.reduce((n, a) => n + (m.get(a.id) || 0), 0)
+    const mine = live.filter((r) => family.some((a) => a.id === r.agentId))
+    const state = stateOf(agent, liveIds, files.rested)
+    return {
+      id: agent.id,
+      name: agent.name,
+      title: agent.title || '',
+      ...looks.get(agent.id),
+      ...state,
+      ...(family.length > 1 && family.some((a) => liveIds.has(a.id)) ? { status: 'running', state: 'Working' } : {}),
+      ...engineOf(on, files, now),
+      ...(family.length > 1 ? { copies: family.map((a) => ({ id: a.id, name: a.name, ...engineOf(a, files, now), running: a.id === on.id })), on: ENGINE[on.adapterType] || 'Other' } : {}),
+      // The runs going now, across its copies: "checking 3".
+      running: mine.length,
+      jobIds: [...new Set(mine.map((r) => r.issueId).filter(Boolean))],
+      tokensToday: sum(day),
+      tokensWeek: sum(wk),
+      waste: files.waste.bots[agent.name] || null,
+    }
+  }).sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || a.name.localeCompare(b.name))
   // Who reports to whom, as the engine's org chart has it, without the retired.
   const tree = (nodes) => nodes.filter((n) => shown.has(n.id)).map((n) => ({ id: n.id, name: n.name, reports: tree(n.reports || []) }))
   return { bots, org: tree(org), wasteAt: files.waste.at, wasteStale: files.waste.stale, at: now }
