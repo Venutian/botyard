@@ -49,7 +49,14 @@ class SkillSets(unittest.TestCase):
     def test_other_engines_and_bots_without_a_set_are_left_alone(self):
         self.assertEqual(sets.write_for('Builder', 'gemini_local', SKILLS, want={'qa'}), {})
         sets.sets = lambda: {}
-        self.assertEqual(sets.write_for('Clerk', 'claude_local', SKILLS), {}, 'a bot with no list sees every skill')
+        # A bot with no list sees every skill (nothing is switched off) and still gets the settings that keep what no bot may touch closed.
+        env = sets.write_for('Clerk', 'claude_local', SKILLS)
+        settings = json.load(open(env['BOTYARD_BOT_SETTINGS']['value']))
+        self.assertNotIn('skillOverrides', settings)
+        self.assertIn('PreToolUse', settings['hooks'])
+        config = json.load(open(sets.write_for('Clerk', 'opencode_local', SKILLS)['OPENCODE_CONFIG']['value']))
+        self.assertNotIn('skill', config['permission'])
+        self.assertIn('external_directory', config['permission'])
 
     def test_the_index_says_who_has_each_skill_or_why_nobody_does(self):
         given = {'Builder': {'qa', 'botyard'}, 'Checker': {'botyard'}}

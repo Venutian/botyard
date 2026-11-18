@@ -218,6 +218,15 @@ class Wide(Yard):
         got = self.faults()
         self.assertEqual(got.faults, [], self.say(got))
 
+    def test_a_bot_that_sees_every_skill_is_closed_too(self):
+        self.project()
+        for adapter, name in (('claude_local', 'AllClaude'), ('opencode_local', 'AllFree')):
+            env = skill_sets.write_for(name, adapter, [], want=None)
+            self.assertEqual(len(env), 1, 'a settings file is written whatever the skills are')
+            self.agent(name, name, adapter, self.room, {k: v['value'] for k, v in env.items()})
+        got = self.faults()
+        self.assertEqual(got.faults, [], self.say(got))
+
     def test_the_opencode_denials_keep_the_keys_guards_and_notes_shut(self):
         perm = skill_sets.merged(skill_sets.brain_denials(self.env), skill_sets.protected_denials(self.env))
         keys = os.path.join(self.home, 'keys', 'k')

@@ -247,36 +247,39 @@ def claude_denials(env=None):
 
 
 def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
-    """Writes the bot's skill file and returns the env entries that point its runs at it. `want` is the
-    bot's own list of skill names, from its settings file; with none it is asked from the files. {} for
-    a bot that sees every skill, or an AI that does not read ~/.claude/skills."""
+    """Writes the bot's settings file and returns the env entries that point its runs at it: the skills it sees (`want` is the bot's own
+    list of names, from its settings file; with none it is asked from the files, and a bot whose file says "all" sees every skill) and what
+    it may not touch (the keys, the guards' files, the owner's notes), which every Claude and OpenCode bot gets whatever its skills are.
+    {} for an AI that reads neither."""
     if adapter not in ('claude_local', 'opencode_local'):
         return {}
     if want is None:
         want = sets().get(bot)
-    if want is None:
-        return {}
-    skills = skills if skills is not None else inventory()
-    want = set(want)
+    every = want is None
+    skills = skills if skills is not None else (inventory() if not every else [])
+    want = set(want or ())
     os.makedirs(OUT, exist_ok=True)
     plain = lambda value: {'type': 'plain', 'value': value}
     if adapter == 'claude_local':
-        base = json.load(open(f'{os.path.dirname(os.path.realpath(__file__))}/bot-settings.json'))
-        off = {s['name']: 'off' for s in skills if s['kind'] != 'plugin' and s['name'] not in want}
+        with open(f'{os.path.dirname(os.path.realpath(__file__))}/bot-settings.json') as f:
+            base = json.load(f)
+        off = {} if every else {s['name']: 'off' for s in skills if s['kind'] != 'plugin' and s['name'] not in want}
         plugins = {}
-        for s in skills:
+        for s in ([] if every else skills):
             if s['kind'] == 'plugin':
                 plugins[s['plugin']] = plugins.get(s['plugin'], False) or s['name'] in want
         path = f'{OUT}/{_slug(bot)}.claude.json'
+        deny = sorted(set((base.get('permissions') or {}).get('deny', []) + claude_denials()))
+        out = {**base, **({'permissions': {**(base.get('permissions') or {}), 'deny': deny}} if deny else {})}
+        if not every:
+            out.update({'skillOverrides': dict(sorted(off.items())), 'enabledPlugins': plugins})
         with open(path, 'w') as f:
-            deny = claude_denials()
-            permissions = {**(base.get('permissions') or {}), 'deny': sorted(set((base.get('permissions') or {}).get('deny', []) + deny))} if deny else base.get('permissions')
-            json.dump({**base, **({'permissions': permissions} if permissions else {}), 'skillOverrides': dict(sorted(off.items())), 'enabledPlugins': plugins}, f, indent=1)
+            json.dump(out, f, indent=1)
         return {'BOTYARD_BOT_SETTINGS': plain(path)}
     # OpenCode: hide every skill but the set; add the folders of the plugin skills it needs.
     folders = sorted({os.path.dirname(s['dir']) for s in skills if s['kind'] == 'plugin' and s['name'] in want})
     config = {'$schema': 'https://opencode.ai/config.json',
-              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}},
+              'permission': {**({} if every else {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}}),
                              **scratch_open(read_only(merged(brain_denials(), protected_denials()), [*(reads or []), *job_skill_folder()], own))}}
     if folders:
         config['skills'] = {'paths': folders}
