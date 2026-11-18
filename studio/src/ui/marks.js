@@ -125,6 +125,9 @@ function drawPieces() {
       return `${head}<button type="button" class="mk-pick${p.id === state.current ? ' on' : ''}" data-mk="piece" data-id="${esc(p.id)}" aria-current="${p.id === state.current}"><span>${esc(p.title)}</span>${n ? `<b class="mk-count" aria-label="${n} marks">${n}</b>` : ''}</button>`
     }).join('')
     : '<p class="mk-none">Nothing to review on this job yet.</p>'
+  // On a narrow screen the pieces are a strip: the one being read is brought into view.
+  const on = sheet.querySelector('.mk-pick.on')
+  if (on && window.matchMedia('(max-width: 760px)').matches) on.scrollIntoView({ inline: 'center', block: 'nearest' })
 }
 
 function drawPiece() {
