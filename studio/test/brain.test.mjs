@@ -7,9 +7,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import * as THREE from 'three'
 import { DEMO_BRAIN, brainFolder, brainNote, brainRoute, frontmatter, looksSecret, newNote, readBrain, saveNote, setBrainFolder } from '../server/lib/brain.mjs'
 import { matches } from '../src/ui/brain-map.js'
 import { RADIUS, SHAPE, brainDust, fieldLayout } from '../src/ui/brain-layout.js'
+import { nearestNote, zoomFactor } from '../src/ui/brain-field.js'
 
 const demo = DEMO_BRAIN()
 
@@ -119,6 +121,27 @@ test('the field: every note inside the brain, near its own lobe, the same every 
   for (let i = 0; i < Math.round(3000 * 0.8) * 3; i += 3) assert.ok(Math.abs(dust[i]) > 0.04 * RADIUS * 0.8 || dust[i + 1] < -0.2 * RADIUS, 'the fissure between the halves stays empty')
   assert.deepEqual([...matches(b.notes, 'release green')], ['2026-10-14-release-when-green'])
   assert.equal(matches(b.notes, '  '), null)
+})
+
+test('the zoom helpers: which neurons get labels as the camera comes closer', () => {
+  const at = new Map([
+    ['one', new THREE.Vector3(0, 0, 0)],
+    ['two', new THREE.Vector3(20, 0, 0)],
+    ['three', new THREE.Vector3(90, 0, 0)],
+  ])
+  const order = ['one', 'two', 'three']
+  const cam = new THREE.Vector3(0, 0, 0)
+  const light = new Map([['one', 1], ['two', 1], ['three', 1]])
+  assert.equal(nearestNote(at, order, cam, light), 'one')
+  const dim = new Map([['one', 0.1], ['two', 1], ['three', 1]])
+  assert.equal(nearestNote(at, order, cam, dim), 'two')
+  assert.equal(nearestNote(at, order, new THREE.Vector3(1000, 0, 0), light), 'three')
+  assert.equal(nearestNote(at, order, cam, new Map()), 'one', 'no light map dims nothing')
+  assert.equal(zoomFactor(500), 0, 'no labels far away')
+  assert.equal(zoomFactor(360), 0, 'labels only begin inside about 360')
+  assert.equal(zoomFactor(140), 1, 'full zoom right inside the brain')
+  assert.ok(zoomFactor(300) > 0 && zoomFactor(300) < 1, 'labels begin under about 300')
+  assert.ok(zoomFactor(310) > zoomFactor(340), 'closer means more zoom')
 })
 
 test('the owner edits a note: saved whole, refused when it changed meanwhile or holds a secret; a new note goes to inbox/', () => {
