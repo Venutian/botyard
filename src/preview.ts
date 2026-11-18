@@ -576,10 +576,24 @@ function shaping(route: string, method: string, body: Record<string, any> = {}):
   return undefined;
 }
 
+/** A job to review in the preview: the bot's last message, the brief, a plan and a picture. */
+const reviewSample = {
+  jobId: 'j1', ref: 'HAR-15', title: 'Checkout: one page instead of three', chat: false, bot: 'Builder', projectId: null, gate: null,
+  pieces: [
+    { id: 'message:c1', kind: 'message', ref: 'c1', title: 'Last message from Builder', text: 'Halfway. Address and delivery are on the one page and check as you type.\n\nPayment is next. I have a question for you on a card: it decides how the last step is built.' },
+    { id: 'brief', kind: 'brief', ref: '', title: 'The brief', text: 'One page for the whole checkout.\nA first-time buyer pays in under a minute on a phone.' },
+    { id: 'document:plan', kind: 'document', ref: 'plan', title: 'Plan', text: '# Checkout on one page\n\n1. Address: postcode first\n2. Delivery: two choices\n3. Payment: the provider\'s form, in place' },
+    { id: 'picture:p1', kind: 'picture', ref: 'p1', title: 'checkout-phone.png' },
+  ],
+};
+
 export function sample(path: string, method: string, _body?: unknown) {
   const [route] = path.split('?');
   const shaped = shaping(route, method, (_body ?? {}) as Record<string, any>);
   if (shaped !== undefined) return shaped;
+  if (route === '/marks/sources') return reviewSample;
+  if (route === '/marks' && method === 'POST') return { id: 'r1', text: '', verdict: 'back', marks: ((_body as { marks?: unknown[] })?.marks ?? []).map((_, i) => ({ n: i + 1 })), createdAt: new Date().toISOString(), piece: { kind: 'work', title: '' }, jobRef: 'HAR-15', note: '', gate: null };
+  if (route === '/marks' && method === 'GET') return { reviews: [] };
   if (route === '/bots') return crewBots;
   if (route.startsWith('/bots/') && method === 'GET') return botPage(route.slice('/bots/'.length));
   if (route === '/runs') return { runs, total: runs.length, page: 0, pages: 1, bots: named(['Lead', 'Builder', 'Checker', 'Reviewer']) };

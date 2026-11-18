@@ -266,6 +266,7 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
             {subtitle ? <Txt size={11} color={thread?.working ? t.accentText : t.ink2} numberOfLines={1}>{subtitle}</Txt> : null}
           </View>
         </Pressable>
+        <GlassButton icon="pin" label={`Review what ${who.name} said: mark what to change`} onPress={() => nav.push({ name: 'review', bot: botId })} />
         <GlassButton icon="more" label={`Customize ${who.name}`} onPress={() => nav.push({ name: 'bot', botId })} />
       </View>
 
