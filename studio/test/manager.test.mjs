@@ -72,7 +72,8 @@ test('one piece of work is one line through its build, checks and fix rounds', (
   assert.equal(line.note, 'Lead is checking it')
   assert.equal(line.late, false)
   assert.deepEqual(manager.now.map((w) => [w.bot, w.ref, w.stage, w.minutes, w.model]), [['Lead', 'LH-5', 'Checking LH-3', 5, 'Sonnet 5.5']])
-  assert.match(manager.state, /^1 bot is working: Lead checking LH-3\./)
+  // The short title first, the code after it.
+  assert.match(manager.state, /^1 bot is working: Lead checking Town kit LH-3\./)
 })
 
 test('work that failed its check is trouble until something newer starts', () => {

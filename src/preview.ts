@@ -1,3 +1,5 @@
+import type { Flow, FlowBot, FlowEdge, FlowKind, FlowRole, FlowStatus, FlowWindow } from './api';
+
 /** Sample studio data for the web build, used only to check the design at phone size on the PC. */
 const minutes = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 
@@ -215,6 +217,52 @@ const manager = {
   needsYou: summary.needsYou,
   at: Date.now(),
 };
+
+/** A made-up crew map for the same crew, answered for any window. */
+const flowAt = (n: number) => Date.now() - n * 60_000;
+const flowEdge = (kind: FlowKind, from: string, to: string, count: number, failed: number, text: string, withJob = true): FlowEdge => ({
+  id: `${kind}:${from}>${to}`, kind, from, to, count, failed, last: flowAt(3), lastFailed: failed > 0,
+  messages: [{ at: flowAt(3), failed: failed > 0, text, job: withJob ? { id: 'j1', ref: 'LH-31', title: 'Fix the Lighthouse map loading crash' } : null }],
+});
+const flowBot = (id: string, under: string, status: FlowStatus): FlowBot => {
+  const c = crew.find((r) => r[0] === id)!;
+  const claude = c[4].startsWith('claude');
+  const running = id === 'builder';
+  return {
+    id, kind: 'bot', name: c[1], title: c[2], role: c[8] as FlowRole, roleName: c[1], look: { colour: c[9] || '#4a9d7a', build: 'round', gear: [], hat: 'none', face: 'calm' },
+    reportsTo: id === 'lead' ? null : under, under, model: c[4], engine: claude ? 'Claude' : 'Free models', status, why: status === 'paused' ? 'Paused by hand' : '',
+    job: running ? { id: 'j1', ref: 'LH-31', title: 'Fix the Lighthouse map loading crash', stage: 'build', project: 'Lighthouse', projectId: 'Lighthouse' } : null,
+    runsToday: 6, failedToday: id === 'builder' ? 1 : 0, week: { tokens: claude ? 900_000 : 400_000, share: claude ? 0.38 : null }, met: 4, notMet: id === 'builder' ? 1 : 0,
+  };
+};
+const flowWaiting = summary.needsYou.filter((n) => (n.kind === 'approval' || n.kind === 'question') && !('archived' in n)).length;
+const flow = (window: FlowWindow): Flow => ({
+  at: Date.now(), window, since: Date.now() - (window === '7d' ? 7 * 86400_000 : window === '24h' ? 86400_000 : 3600_000), needs: flowWaiting,
+  nodes: [
+    { id: 'owner', kind: 'owner', name: 'You', role: 'owner', roleName: 'Owner', needs: flowWaiting },
+    flowBot('lead', 'owner', 'free'), flowBot('builder', 'lead', 'working'), flowBot('checker', 'lead', 'working'), flowBot('reviewer', 'lead', 'paused'),
+    { id: 'script:review-guard', kind: 'script', name: 'Review guard', role: 'script', roleName: 'Script', notices: 2, last: flowAt(20) },
+  ],
+  edges: [
+    flowEdge('brief', 'lead', 'builder', 3, 0, 'Fix the map loading crash'),
+    flowEdge('report', 'builder', 'lead', 2, 0, 'Fix is committed, tests are running'),
+    flowEdge('check', 'builder', 'checker', 2, 0, 'Please check the map loader'),
+    flowEdge('verdict', 'checker', 'builder', 2, 1, 'Fail: the crash is still there on large maps'),
+    flowEdge('check', 'builder', 'reviewer', 1, 0, 'Ready for review'),
+    flowEdge('verdict', 'reviewer', 'builder', 1, 0, 'Pass, with two notes'),
+    flowEdge('card', 'lead', 'owner', 1, 0, 'Which map size should ship?'),
+    flowEdge('order', 'owner', 'lead', 2, 0, 'Ship the Lighthouse map first', false),
+    flowEdge('notice', 'script:review-guard', 'builder', 2, 0, 'Review is still open on LH-30'),
+    flowEdge('wait', 'builder', 'checker', 1, 0, 'Waiting for the checker'),
+  ],
+  lanes: [{ id: 'Lighthouse', name: 'Lighthouse', rank: 1, open: 2, running: 1, bots: ['builder', 'lead'] }, { id: 'Harbour', name: 'Harbour', rank: 2, open: 1, running: 1, bots: ['checker'] }],
+  kinds: [
+    ['order', 'Order', 'You tell the lead what to do'], ['brief', 'Brief', 'The lead hands a job to a bot'], ['report', 'Report', 'A bot tells the lead what it did'],
+    ['check', 'Check', 'A bot asks for a check'], ['verdict', 'Verdict', 'A checker says pass or fail'], ['ask', 'Ask', 'A bot asks a question'],
+    ['ruling', 'Ruling', 'A bigger call is made'], ['idea', 'Idea', 'A new idea is sent in'], ['approval', 'Approval', 'You are asked to approve'],
+    ['start', 'Start', 'A job is started'], ['card', 'Card', 'A card is sent to you'], ['notice', 'Notice', 'A script raises a notice'], ['wait', 'Wait', 'One job waits for another'],
+  ].map(([kind, label, says]) => ({ kind, label, says })),
+});
 
 const link = (id: string, ref: string, title: string) => ({ id, ref, title });
 const runRow = (id: string, bot: string, status: string, job: ReturnType<typeof link> | null, mins: number, why = '', tokens = 42_000) => ({
@@ -551,6 +599,7 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (path === '/guard') return summary.guard;
   if (path === '/summary') return summary;
   if (path === '/manager') return manager;
+  if (route === '/flow') return flow((/window=(now|24h|7d)/.exec(path)?.[1] as FlowWindow | undefined) ?? 'now');
   if (path === '/chats') return { bots: chats };
   if (/^\/chats\/[^/]+\/pictures/.test(path) && method === 'POST') return { id: `shot-${Date.now()}`, name: (_body as { name?: string })?.name || 'picture' };
   if (path.startsWith('/chats/') && method === 'GET') return { ...thread, bot: chats.find((c) => path.endsWith(c.id)) ?? thread.bot };

@@ -11,7 +11,7 @@ job's own, has another bot check what was built, asks you when a decision is you
 count of what every run used. The map is how you see it and steer it.
 
 <p align="center">
-  <img src="studio/docs/images/map.png" alt="Botyard's map of a made-up studio: a yard with an open bay for each project, a sign over each bay counting what is being built, checked, waiting and waiting for the owner, the bots of the crew in different colours and gear standing where their work is, free bots waiting in the Depot, a bar along the bottom saying what each bot is on, and a line across the top saying four bots are working." width="100%">
+  <img src="studio/docs/images/crew-map.png" alt="Botyard's crew map of a made-up studio: you at the top with the number of cards waiting for your answer, the lead under you, the ruler and the researcher beside the lead, three builders, a checker and a reviewer below, and the crew's scripts in a machine room along the bottom. Coloured lines with arrows and counts show who briefed whom, who reported back, who checks whose work and what each verdict was; on the right the projects in work order, each with the bots working in it." width="100%">
 </p>
 
 <p align="center"><em>The sample yard that <code>npm run demo</code> starts: a made-up studio, nothing signed in, no bot started.</em></p>
@@ -20,13 +20,15 @@ count of what every run used. The map is how you see it and steer it.
 
 | | |
 |---|---|
+| <img src="studio/docs/images/crew-map-night.png" alt="The crew map after dark: the same plates and lines on a dark board, with a legend of the kinds of message along the bottom."> | **Who tells whom, at a glance.** The crew map is the home: each bot with its job, its runs today, its share of the Claude week and how its work ended; every line a kind of message with a count. Click a bot for its page, a line for its last messages. |
+| <img src="studio/docs/images/map.png" alt="The yard: a 3D floor with an open bay for each project, a sign over each bay counting what is being built, checked and waiting, and the bots of the crew standing where their work is."> | **The yard, one click away.** The same crew as characters on a 3D floor, a bay per project. It is drawn only when something changes. |
 | <img src="studio/docs/images/needs-you.png" alt="The Needs you list beside the map: two cards with yellow and black stripes that wait for the owner's answer, and a blocked job."> | **What needs you, first.** Bots ask on cards and wait. A card with stripes wants your answer; everything else is news. Nothing is merged or sent out of your computer without your yes. |
 | <img src="studio/docs/images/job.png" alt="A job's page: the steps Build, Check, Ruling, Merge and Push across the top, the bot on it, and a question from the bot with two choices."> | **Every job goes through the same steps.** Build, check by a second bot on another model, a ruling when they disagree, then merge and push. A job's page has its brief, its documents with every version, what was said, and its runs. |
 | <img src="studio/docs/images/run.png" alt="One run's page: how it ended, how long it took, the tokens it used, the model, and the log of what the bot read, ran and said."> | **Every run is on record.** How it ended and why, how long it took, what it used, and what the bot read, ran and said. |
 | <img src="studio/docs/images/crew-editor.png" alt="A bot's settings: its name, title, what it does, who it answers to, and a choice of four AIs each marked ready or not signed in."> | **The crew is yours to shape.** A bot is a name, a role, who it answers to, which AI runs it, its limits and what it may not do. Change any of it on the map or the phone. |
 | <img src="studio/docs/images/instructions.png" alt="A bot's instructions in a text editor, with a list of three versions beside it and a button to take an older one back."> | **Instructions are plain text you edit.** Every save keeps the version before it, and one click takes an older one back. |
 | <img src="studio/docs/images/setup.png" alt="The Setup page: a row for free models marked ready, rows for Claude and Codex with a button to sign in or install."> | **Sign-ins in one place.** Free models work with no account. Claude, Codex and Gemini are signed in through their own tools; Botyard never sees a password. |
-| <img src="studio/docs/images/map-night.png" alt="The same map after dark, with the list of work in hand open: each job with its code, its title, a painted tag saying Ruling, Checking, Building, Blocked or Waiting, and who is on it."> | **Work in hand, at a glance.** Each job with where it stands and who is on it. Day plates or night plates. |
+| <img src="studio/docs/images/map-night.png" alt="The yard after dark, with the list of work in hand open: each job with its code, its title, a painted tag saying Checking, Building, Blocked or Waiting, and who is on it."> | **Work in hand, at a glance.** Each job with where it stands and who is on it. Day plates or night plates. |
 | <img src="studio/docs/images/phone.png" alt="The phone app: the crew's state, what needs the owner, and the jobs in hand, in the same look as the map."> | **The same studio on your phone.** Follow the crew, answer its cards, give it jobs and edit a bot from the Android app, through a locked door of its own. |
 
 Also in the box: routines (work that starts by itself, on a timetable you pick in plain words),
@@ -37,7 +39,7 @@ not use up your subscription, and helper scripts that move a finished job on to 
 
 One program that you start on your computer. It holds four things:
 
-- **The map.** A 3D page in your browser: a yard with a bay for each project, each bot of your crew standing where its work is, every
+- **The map.** A page in your browser. Its home is the crew map: who leads, who answers to whom, what each bot is on and every message between them. One click shows the 3D yard instead: a bay for each project, each bot of your crew standing where its work is, every
   job with its state, and a chat with any bot. A chat message can carry pictures (a screenshot pasted, dropped or
   picked), and the bot opens them before it answers. The phone app does the same through the phone's own photo picker.
 - **The engine.** It keeps the jobs, hands each one to a bot, starts the bot's AI tool in the job's

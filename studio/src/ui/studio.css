@@ -110,7 +110,7 @@
   border-radius: 10px;
   background: transparent;
   color: var(--muted);
-  font: 500 11px/1 var(--body);
+  font: 500 12px/1 var(--body);
   cursor: pointer;
 }
 .studio-dock button svg { width: 21px; height: 21px; }
@@ -131,7 +131,7 @@
   border-radius: 9px;
   background: var(--line-strong);
   color: var(--text);
-  font: 600 11px/1.2 var(--body);
+  font: 600 12px/1.2 var(--body);
   text-align: center;
 }
 .studio-dock button b.bad { background: var(--red); color: #1d0705; }
@@ -286,7 +286,7 @@
 .studio-body .proj-row .rank { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; text-align: center; color: var(--muted); }
 .studio-body .proj-row:not(.shelved) .rank { color: var(--ink, inherit); }
 .studio-body .rank-moves { display: flex; flex-direction: column; gap: 0; }
-.studio-body .rank-moves .btn { width: 28px; height: 22px; font-size: 10px; line-height: 1; padding: 0; }
+.studio-body .rank-moves .btn { width: 28px; height: 22px; font-size: 12px; line-height: 1; padding: 0; }
 .studio-body .rank-moves .btn:disabled, .studio-body .rank-acts .btn:disabled { opacity: 0.3; cursor: default; }
 .studio-body .rank-acts { align-items: center; }
 .studio-body .rank-of { flex: 1; font-size: 13px; color: var(--muted); }
@@ -599,7 +599,7 @@
 }
 .studio-tags .tag span { display: flex; flex-direction: column; }
 .studio-tags .tag b { font-weight: 600; }
-.studio-tags .tag small { font: 500 11px/1.2 var(--body); letter-spacing: 0; color: var(--muted); }
+.studio-tags .tag small { font: 500 12px/1.2 var(--body); letter-spacing: 0; color: var(--muted); }
 .studio-tags .tag.running small { color: var(--green); }
 .studio-tags .tag .face { width: 26px; height: 26px; margin: -1px 0 -2px -6px; font-size: 12px; }
 .studio-tags .tag:has(.face) { border-radius: 15px; }
@@ -667,7 +667,7 @@
 
 .studio-chat .msg { max-width: 92%; align-self: flex-start; }
 .studio-chat .msg.mine { align-self: flex-end; }
-.studio-chat .msg .from { display: block; margin: 0 4px 3px; font-size: 11px; color: var(--dim); }
+.studio-chat .msg .from { display: block; margin: 0 4px 3px; font-size: 12px; color: var(--dim); }
 .studio-chat .msg.mine .from { text-align: right; }
 .studio-chat .msg .said {
   padding: 8px 11px;
@@ -742,7 +742,7 @@
   font-size: 13px;
   line-height: 1.45;
 }
-:is(.studio-chat, .studio-sheet) .card .from { font-size: 11px; font-weight: 600; color: var(--accent); }
+:is(.studio-chat, .studio-sheet) .card .from { font-size: 12px; font-weight: 600; color: var(--accent); }
 :is(.studio-chat, .studio-sheet) .card p { margin: 0; overflow-wrap: anywhere; }
 :is(.studio-chat, .studio-sheet) .card .hint { font-size: 12px; color: var(--muted); }
 :is(.studio-chat, .studio-sheet) .card fieldset { display: flex; flex-direction: column; gap: 5px; margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -949,7 +949,7 @@
 .studio-sheet .acts { display: flex; gap: 6px; margin: 0 8px 6px; }
 .studio-sheet .acts .btn { padding: 7px 12px; border: 1px solid var(--line-strong); font-size: 13px; }
 .studio-sheet .note-row { margin: 0 8px 10px; }
-.studio-sheet .note-row .from { display: block; margin-bottom: 3px; font-size: 11px; color: var(--dim); }
+.studio-sheet .note-row .from { display: block; margin-bottom: 3px; font-size: 12px; color: var(--dim); }
 .studio-sheet .said { white-space: normal; font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
 .studio-sheet .note-row .said { padding: 8px 11px; border-radius: 10px; background: var(--raise); }
 .studio-sheet .said > * { margin: 0 0 7px; }
@@ -996,7 +996,7 @@
 .col-a .archived-cards summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .col-a .archived-cards .ask { opacity: 0.75; }
 .col-a .ask.approval { border-color: var(--accent); }
-.col-a .ask .kind { color: var(--accent); font-size: 11px; font-weight: 600; }
+.col-a .ask .kind { color: var(--accent); font-size: 12px; font-weight: 600; }
 .col-a .ask small { color: var(--muted); font-size: 12px; }
 .col-a .ask .pair { display: flex; gap: 6px; margin-top: 5px; }
 .studio-sheet form.comment { margin: 10px 0 4px; }
@@ -1218,7 +1218,7 @@
 /* The library: a small picture or a kind word, then the name and its job. */
 .studio-sheet table.made td.look { width: 64px; padding-right: 0; }
 .studio-sheet table.made img.thumb { width: 56px; height: 42px; object-fit: cover; border-radius: 6px; display: block; background: var(--raise); }
-.studio-sheet table.made .kind { display: inline-block; width: 56px; padding: 12px 0; border-radius: 6px; background: var(--raise); color: var(--dim); font-size: 11px; text-align: center; }
+.studio-sheet table.made .kind { display: inline-block; width: 56px; padding: 12px 0; border-radius: 6px; background: var(--raise); color: var(--dim); font-size: 12px; text-align: center; }
 .studio-sheet .said pre { padding: 8px 10px; border-radius: 8px; background: var(--raise); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .studio-sheet tr.paused b { color: var(--muted); }
 .studio-sheet .money-page { padding-top: 2px; }
@@ -1259,7 +1259,7 @@
 @media (hover: none) { .studio-body .row .clear { opacity: 1; } }
 
 /* Bigger targets for moving a project up and down. */
-.studio-body .rank-moves .btn { width: 30px; height: 25px; font-size: 11px; }
+.studio-body .rank-moves .btn { width: 30px; height: 25px; font-size: 12px; }
 
 /* A form's Save stays in reach at the foot of the column. */
 .studio-sheet form > button.btn.primary[type='submit'] { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 8px 18px -6px rgb(0 0 0 / 0.7); }
@@ -1290,7 +1290,7 @@
 .deck-col .sheet-confirm { position: relative; z-index: 2; }
 
 /* A money score reads as one out of a hundred. */
-.money-page .score small { margin-left: 1px; font-size: 11px; font-weight: 400; color: var(--dim); }
+.money-page .score small { margin-left: 1px; font-size: 12px; font-weight: 400; color: var(--dim); }
 .money-page .spark-none { display: inline-block; width: 64px; }
 
 /* Where a job stands, as a word with a colour. */

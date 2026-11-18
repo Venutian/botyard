@@ -157,9 +157,9 @@
 .hud.studio .studio-dock button.on { background: var(--edge); color: #f2f4f6; border-color: var(--edge); }
 .hud.studio .studio-dock button.on::before { display: none; }
 .hud.studio .studio-dock .dock-gap { height: 2px; margin: 4px 6px; background: var(--line); }
-.hud.studio .studio-dock kbd { position: absolute; top: 3px; left: 5px; font: 600 10px/1 var(--body); color: var(--dim); }
+.hud.studio .studio-dock kbd { position: absolute; top: 3px; left: 5px; font: 600 12px/1 var(--body); color: var(--dim); }
 .hud.studio .studio-dock button.on kbd { color: #9aa3ae; }
-.hud.studio .studio-dock button b { top: 2px; right: 3px; min-width: 19px; padding: 2px 4px; border: 2px solid var(--edge); border-radius: 5px; background: var(--raise); color: var(--text); font: 600 11px/1.1 var(--body); }
+.hud.studio .studio-dock button b { top: 2px; right: 3px; min-width: 19px; padding: 2px 4px; border: 2px solid var(--edge); border-radius: 5px; background: var(--raise); color: var(--text); font: 600 12px/1.1 var(--body); }
 .hud.studio .studio-dock button b.bad { background: var(--yellow-paint); color: #15181d; }
 
 /* ── the roster along the bottom ───────────────────────────────────────────────── */
@@ -214,7 +214,7 @@
 }
 .hud.studio .studio-tags .tag:has(.face) { border-radius: 6px; }
 .hud.studio .studio-tags .tag .face { width: 24px; height: 24px; margin: 0 2px 0 0; border-radius: 4px; border: 2px solid var(--edge); background: var(--bot); }
-.hud.studio .studio-tags .tag small { font: 500 11px/1.2 var(--body); color: var(--muted); }
+.hud.studio .studio-tags .tag small { font: 500 12px/1.2 var(--body); color: var(--muted); }
 .hud.studio .studio-tags .tag.running { border-color: var(--edge); box-shadow: 0 2px 0 var(--edge), inset 0 -3px 0 var(--green-paint); }
 .hud.studio .studio-tags .tag.running small { color: var(--green); font-weight: 600; }
 .hud.studio .studio-tags .tag.screen { background: var(--edge); border-color: var(--edge); color: #f2f4f6; padding-left: 9px; }
@@ -555,7 +555,7 @@
 .hud.studio .rail .btn { background: var(--raise); color: var(--text); }
 .hud.studio .rail .btn:hover { background: var(--sunk); }
 @media (max-height: 900px) {
-  .hud.studio .studio-dock button b { top: 1px; right: 1px; min-width: 16px; padding: 1px 3px; font-size: 9.5px; border-width: 1.5px; }
+  .hud.studio .studio-dock button b { top: 1px; right: 1px; min-width: 16px; padding: 1px 3px; font-size: 12px; border-width: 1.5px; }
   .hud.studio .studio-dock button:has(b) svg { transform: translateX(-8px); }
 }
 
@@ -565,8 +565,8 @@
 @media (max-height: 900px) {
   .hud.studio .studio-dock { width: 68px; max-height: calc(100% - 74px - 96px); }
   .hud.studio .studio-dock button { padding: 5px 0 4px; gap: 2px; }
-  .hud.studio .studio-dock button span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: 11px; }
-  .hud.studio .studio-dock button b { top: 1px; right: 2px; min-width: 17px; padding: 1px 3px; font-size: 11px; border-width: 2px; }
+  .hud.studio .studio-dock button span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: 12px; }
+  .hud.studio .studio-dock button b { top: 1px; right: 2px; min-width: 17px; padding: 1px 3px; font-size: 12px; border-width: 2px; }
   .hud.studio .studio-dock button:has(b) svg { transform: translateX(-9px); }
   .hud.studio .studio-deck { left: 96px; }
 }
@@ -576,7 +576,7 @@
   .hud.studio .studio-dock button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .hud.studio .studio-deck { left: 84px; }
 }
-.hud.studio .studio-dock button b { font-size: 11px; }
+.hud.studio .studio-dock button b { font-size: 12px; }
 @media (max-width: 900px) and (max-height: 900px) { .hud.studio .studio-chat { left: 96px; } }
 @media (max-width: 900px) and (max-height: 740px) { .hud.studio .studio-chat { left: 84px; } }
 
@@ -662,7 +662,7 @@
 /* Money: the tag and the score keep their place on every row. */
 .hud.studio .product .state { min-width: 78px; text-align: center; }
 .hud.studio .product .score { min-width: 64px; text-align: right; font: 800 20px/1 var(--sign); letter-spacing: 0.02em; }
-.hud.studio .product .score small { font: 500 11px/1 var(--body); color: var(--dim); }
+.hud.studio .product .score small { font: 500 12px/1 var(--body); color: var(--dim); }
 
 /* A page runs to just above the roster, and Picture and sound covers a conversation whole. */
 .hud.studio .studio-deck { bottom: 92px; }
@@ -738,13 +738,17 @@
   font-weight: 700;
   pointer-events: auto;
   cursor: pointer;
+  /* Every click target is at least 24 px tall. */
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
 }
 /* A bay too small on the page to carry words keeps its sign and only what waits for the owner. */
 .hud.studio .studio-tags .bay.far .t:not(.you):not(.shelved) { display: none; }
 /* A shelved project: its sign is kept legible (light name on the dark plate, 12:1) with a dashed edge and a small SHELVED tag (7:1). */
 .hud.studio .studio-tags .bay.shelved .name { color: #e8ebef; border-style: dashed; border-color: #6b727d; }
 .hud.studio .studio-tags .bay.shelved .name i { background: repeating-linear-gradient(-45deg, #5b616b 0 3px, #2a2e35 3px 6px); }
-.hud.studio .studio-tags .bay .t.shelved { background: #4a505a; color: #ffffff; border-color: #05070a; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; }
+.hud.studio .studio-tags .bay .t.shelved { background: #4a505a; color: #ffffff; border-color: #05070a; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
 .hud.studio .studio-tags .bay.far .name { font-size: 15px; padding: 3px 8px 4px 4px; }
 .hud.studio .studio-tags .bay.far .name i { width: 11px; height: 14px; }
 
@@ -761,7 +765,7 @@
 }
 .hud.studio .studio-state .next-step::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 9px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: rotate(45deg) translateY(-1px); }
 .hud.studio .studio-state .next-step:hover { background: var(--go); color: var(--go-ink); }
-.hud.studio .studio-tags .bay .t.add { background: var(--go); font-weight: 700; pointer-events: auto; cursor: pointer; }
+.hud.studio .studio-tags .bay .t.add { background: var(--go); font-weight: 700; pointer-events: auto; cursor: pointer; min-height: 24px; display: inline-flex; align-items: center; }
 .hud.studio .studio-tags .bay .t.add:focus-visible { outline: 3px solid #15181d; outline-offset: 2px; }
 .hud.studio .studio-tags .bay .t.stop { background: var(--red-paint); }
 .hud.studio .studio-crew:empty { display: none; }
@@ -843,7 +847,7 @@
   .studio-sheet table.grid:not(.runs) tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; padding: 9px 6px; border-bottom: 1px solid var(--line); }
   .studio-sheet table.grid:not(.runs) td { display: block; min-width: 0 !important; padding: 0 !important; border: 0 !important; text-align: left !important; white-space: normal !important; overflow-wrap: break-word; }
   .studio-sheet table.grid:not(.runs) td:first-child, .studio-sheet table.grid:not(.runs) td.bar { grid-column: 1 / -1; }
-  .studio-sheet table.grid:not(.runs) td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 1px; font: 500 11.5px/1.3 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .studio-sheet table.grid:not(.runs) td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 1px; font: 500 12px/1.3 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
   .studio-sheet table.grid:not(.runs) td:empty { display: none; }
   .studio-sheet table.grid:not(.runs) td .btn { margin: 2px 6px 2px 0 !important; }
   .studio-sheet .grid-wrap { overflow-x: visible; }

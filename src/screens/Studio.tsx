@@ -95,7 +95,7 @@ function ReportCard({ report, onOpen }: { report: DayReport; onOpen: (id: string
   );
 }
 
-/** A small text button for sorting a card: read, unread, archive, restore. */
+/** A small text button for sorting a card: archive, restore. */
 export function SortButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { t } = useLook();
   return (
@@ -154,10 +154,7 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
           {item.archived ? (
             <SortButton label="Restore" onPress={() => onMark(item, { archived: false })} />
           ) : (
-            <>
-              <SortButton label={item.read ? 'Unread' : 'Read'} onPress={() => onMark(item, { read: !item.read })} />
-              <SortButton label="Archive" onPress={() => onMark(item, { archived: true })} />
-            </>
+            <SortButton label="Archive" onPress={() => onMark(item, { archived: true })} />
           )}
         </View>
       ) : null}
@@ -279,6 +276,6 @@ const styles = StyleSheet.create({
   striped: { paddingTop: 21 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   sort: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
-  sortButton: { borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 34, paddingHorizontal: 12, paddingVertical: 5 },
+  sortButton: { borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 12, paddingVertical: 5 },
   reportLine: { justifyContent: 'center', minHeight: 44 },
 });

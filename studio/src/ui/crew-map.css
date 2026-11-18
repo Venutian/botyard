@@ -1,0 +1,450 @@
+/*
+ * The crew map: a signal board in the workshop. The plates are the same powder-coated signs as the rest
+ * of the page (a dark edge, a visible thickness, the bot's own colour down its side); the lines are
+ * painted cable runs, one paint per kind of message; the owner's plate is the one place hazard stripes
+ * appear, because it is the one place that waits on the owner.
+ *
+ * Every line paint is at least 3:1 on the board and every word at least 4.5:1, day and night.
+ */
+
+.hud.studio .crewmap {
+  --cm-board: #e4e7eb;
+  --cm-dot: #c3c9d1;
+  --k-order: #1a3f9e;
+  --k-brief: #2557d6;
+  --k-report: #0b6e60;
+  --k-check: #6a3fd1;
+  --k-verdict: #9b2c9e;
+  --k-ask: #8a5300;
+  --k-ruling: #6e4a00;
+  --k-idea: #11743f;
+  --k-approval: #0e6b3a;
+  --k-start: #11743f;
+  --k-card: #b04f00;
+  --k-notice: #59626e;
+  --k-wait: #3d4550;
+  --k-bad: #c0271b;
+  position: absolute;
+  top: 70px;
+  left: 90px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border: 2px solid var(--edge);
+  border-radius: 10px;
+  background-color: var(--cm-board);
+  background-image: radial-gradient(var(--cm-dot) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  box-shadow: var(--thick);
+  font-family: var(--body);
+  color: var(--text);
+  overflow: hidden;
+}
+.hud.studio[data-plates='night'] .crewmap {
+  --cm-board: #121519;
+  --cm-dot: #262c35;
+  --k-order: #a9c4ff;
+  --k-brief: #74a6ff;
+  --k-report: #4fd1bd;
+  --k-check: #b49bff;
+  --k-verdict: #e58cf0;
+  --k-ask: #ffc61a;
+  --k-ruling: #f0b030;
+  --k-idea: #55dc92;
+  --k-approval: #7ee8a8;
+  --k-start: #55dc92;
+  --k-card: #ffa04d;
+  --k-notice: #a3adb9;
+  --k-wait: #c3cbd6;
+  --k-bad: #ff7a6e;
+  border-color: #3a414c;
+}
+.hud.studio .crewmap[hidden] { display: none; }
+.hud.studio-chatting .crewmap { right: 388px; }
+
+/* The yard is not drawn while the map is the home: its canvas, its signs and the crew bar step aside. */
+
+.hud.studio.map-home .studio-tags,
+.hud.studio.map-home .studio-crew,
+.hud.studio.map-home .rail { display: none; }
+
+/* ── the bar along the top ───────────────────────────────────────────────────── */
+
+.crewmap .cm-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px 8px 16px;
+  border-bottom: 2px solid var(--edge);
+  background: var(--panel);
+}
+.crewmap .cm-title-main {
+  margin: 0;
+  font: 800 24px/1 var(--sign);
+  letter-spacing: 0.01em;
+}
+.crewmap .cm-seg {
+  display: inline-flex;
+  border: 2px solid var(--field-edge);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.crewmap .cm-seg button {
+  min-height: 30px;
+  min-width: 52px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--raise);
+  color: var(--text);
+  font: 600 13px/1 var(--body);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.crewmap .cm-seg button + button { border-left: 2px solid var(--field-edge); }
+.crewmap .cm-seg button[aria-pressed='true'] { background: var(--text); color: var(--panel); }
+.crewmap .cm-said { margin: 0 0 0 auto; font-size: 13px; color: var(--muted); }
+
+/* ── the picture ─────────────────────────────────────────────────────────────── */
+
+.crewmap .cm-stage { position: relative; min-height: 0; overflow: hidden; contain: strict; }
+.crewmap .cm-stage[hidden] { display: none; }
+.crewmap .cm-lines { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+
+.crewmap .cm-edge { fill: none; stroke-linecap: round; transition: opacity 120ms; }
+.crewmap .cm-edge.k-wait { stroke-dasharray: 2 6; }
+.crewmap .cm-lane-line { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 1 5; stroke-linecap: round; }
+.crewmap marker path { stroke: none; }
+.crewmap .cm-edge.bad { stroke: var(--k-bad) !important; }
+
+/* One paint per kind: the line, its arrow, its count and its key. */
+.crewmap .k-order { --k: var(--k-order); }
+.crewmap .k-brief { --k: var(--k-brief); }
+.crewmap .k-report { --k: var(--k-report); }
+.crewmap .k-check { --k: var(--k-check); }
+.crewmap .k-verdict { --k: var(--k-verdict); }
+.crewmap .k-ask { --k: var(--k-ask); }
+.crewmap .k-ruling { --k: var(--k-ruling); }
+.crewmap .k-idea { --k: var(--k-idea); }
+.crewmap .k-approval { --k: var(--k-approval); }
+.crewmap .k-start { --k: var(--k-start); }
+.crewmap .k-card { --k: var(--k-card); }
+.crewmap .k-notice { --k: var(--k-notice); }
+.crewmap .k-wait { --k: var(--k-wait); }
+.crewmap .k-bad, .crewmap .bad { --k: var(--k-bad); }
+.crewmap .cm-edge { stroke: var(--k); }
+.crewmap marker { fill: var(--k); }
+
+.crewmap .cm-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 7px 0 5px;
+  border: 2px solid var(--k);
+  border-radius: 12px;
+  background: var(--raise);
+  color: var(--text);
+  font: 700 12px/1 var(--body);
+  cursor: pointer;
+  z-index: 3;
+}
+.crewmap .cm-chip.bad { border-style: dashed; }
+.crewmap .mk { width: 13px; height: 13px; fill: none; stroke: var(--k); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.crewmap .k-start .mk, .crewmap .k-approval .mk { fill: var(--k); }
+.crewmap .cm-chip:hover, .crewmap .cm-chip:focus-visible { background: var(--k); color: var(--cm-board); }
+.crewmap .cm-chip:hover .mk, .crewmap .cm-chip:focus-visible .mk { stroke: var(--cm-board); }
+
+/* ── the plates ──────────────────────────────────────────────────────────────── */
+
+.crewmap .cm-node {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 9px 10px 8px 16px;
+  border: 2px solid var(--edge);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--edge);
+  font: 400 13px/1.3 var(--body);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  contain: layout paint style;
+  transition: opacity 120ms, transform 120ms;
+}
+.crewmap .cm-bot::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: var(--paint);
+  border-right: 2px solid var(--edge);
+}
+.crewmap .cm-node:hover { transform: translateY(-1px); }
+.crewmap .cm-node:focus-visible, .crewmap .cm-chip:focus-visible, .crewmap .cm-lane:focus-visible, .crewmap button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.crewmap .cm-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crewmap .cm-face {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--edge);
+  border-radius: 50%;
+  object-fit: cover;
+  font: 800 16px/1 var(--sign);
+  font-style: normal;
+}
+.crewmap .cm-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.crewmap .cm-name { font: 800 19px/1.05 var(--sign); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crewmap .cm-role { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crewmap .cm-lamp { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; align-self: flex-start; }
+.crewmap .cm-lamp i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--edge); background: var(--line); }
+.crewmap .st-working .cm-lamp i { background: var(--green-paint); }
+.crewmap .st-working .cm-lamp { color: var(--green); }
+.crewmap .st-waiting .cm-lamp i { background: var(--yellow-paint); }
+.crewmap .st-waiting .cm-lamp { color: var(--amber); }
+.crewmap .st-error .cm-lamp i { background: var(--red-paint); }
+.crewmap .st-error .cm-lamp { color: var(--red); }
+.crewmap .st-paused, .crewmap .st-resting { background: var(--panel); }
+.crewmap .cm-job {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+  min-height: 2.6em;
+}
+.crewmap .cm-job.none { color: var(--muted); }
+.crewmap .cm-step { font-weight: 700; }
+.crewmap .cm-ref { font: 600 12px/1 var(--sign); letter-spacing: 0.03em; color: var(--muted); white-space: nowrap; }
+.crewmap .cm-stats { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--muted); margin-top: auto; }
+.crewmap .cm-bad { color: var(--red); font-weight: 700; }
+
+/* The owner's plate: dark, with the one number that waits on them in hazard paint. */
+.crewmap .cm-owner {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  background: var(--text);
+  color: var(--panel);
+  border-color: var(--edge);
+}
+.crewmap .cm-you { font: 800 30px/1 var(--sign); }
+.crewmap .cm-needs { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.2; }
+.crewmap .cm-needs b {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 6px;
+  border: 2px solid var(--panel);
+  border-radius: 8px;
+  font: 800 24px/1 var(--sign);
+  color: var(--panel);
+}
+.crewmap .cm-needs.on b {
+  color: #15181d;
+  border-color: #15181d;
+  background: repeating-linear-gradient(-45deg, #ffc61a 0 7px, #ffd85c 7px 14px);
+}
+
+/* The machine room: a strip of plain steel along the bottom, the scripts as small plates in it. */
+.crewmap .cm-band {
+  position: absolute;
+  left: 0;
+  border-top: 2px dashed var(--line-strong);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+.crewmap .cm-band span { position: absolute; left: 16px; top: 10px; display: flex; flex-direction: column; font: 800 17px/1.1 var(--sign); }
+.crewmap .cm-band small { font: 400 12px/1.3 var(--body); color: var(--muted); }
+.crewmap .cm-script { flex-direction: row; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 6px; background: var(--panel); }
+.crewmap .cm-script .cm-name { font-size: 16px; flex: 1; }
+.crewmap .cm-cog { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; flex: none; }
+.crewmap .cm-count { font-weight: 700; font-size: 12px; color: var(--muted); }
+
+/* ── the lanes ───────────────────────────────────────────────────────────────── */
+
+.crewmap .cm-lanes-head { position: absolute; top: 18px; margin: 0; font: 800 17px/1 var(--sign); }
+.crewmap .cm-lane {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+  border: 2px solid var(--edge);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--edge);
+  text-align: left;
+  font: 400 13px/1.25 var(--body);
+  cursor: pointer;
+}
+.crewmap .cm-rank {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  align-self: stretch;
+  border-radius: 5px;
+  background: var(--sunk);
+  font: 800 20px/1 var(--sign);
+}
+.crewmap .cm-lane-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.crewmap .cm-lane-text .cm-name { font-size: 18px; }
+.crewmap .cm-lane-sub { font-size: 12px; color: var(--muted); }
+.crewmap .cm-lane-who { display: flex; }
+.crewmap .cm-lane-who .cm-face { width: 26px; height: 26px; font-size: 13px; margin-left: -6px; }
+.crewmap .cm-more { font: 700 12px/26px var(--body); font-style: normal; margin-left: 4px; color: var(--muted); }
+
+/* ── hover: one bot's chain lit, the rest stepped back ───────────────────────── */
+
+.crewmap .cm-stage[data-hot] .cm-node:not(.hot),
+.crewmap .cm-stage[data-hot] .cm-edge:not(.hot),
+.crewmap .cm-stage[data-hot] .cm-chip:not(.hot),
+.crewmap .cm-stage[data-hot] .cm-lane-line:not(.hot) { opacity: 0.18; }
+.crewmap .cm-stage[data-hot] .cm-lane-line.hot { stroke: var(--text); stroke-dasharray: none; }
+
+/* A new message pulses its line once. */
+.crewmap .cm-edge.pulse { animation: cm-pulse 900ms ease-out 1; }
+.crewmap .cm-chip.pulse { animation: cm-chip 900ms ease-out 1; }
+@keyframes cm-pulse { 0% { stroke-width: 9; } 100% { } }
+@keyframes cm-chip { 0% { transform: translate(-50%, -50%) scale(1.35); } 100% { transform: translate(-50%, -50%) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .crewmap .cm-edge.pulse, .crewmap .cm-chip.pulse { animation: none; }
+  .crewmap .cm-node, .crewmap .cm-edge { transition: none; }
+}
+
+/* ── the legend ──────────────────────────────────────────────────────────────── */
+
+.crewmap .cm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 8px 16px;
+  border-top: 2px solid var(--edge);
+  background: var(--panel);
+  font-size: 12px;
+}
+.crewmap .cm-key { display: inline-flex; align-items: center; gap: 5px; }
+.crewmap .cm-key-bad i { width: 18px; height: 0; border-top: 3px solid var(--k-bad); }
+
+/* ── the List view ───────────────────────────────────────────────────────────── */
+
+.crewmap .cm-list { overflow: auto; padding: 14px 20px 24px; min-height: 0; }
+.crewmap .cm-list[hidden] { display: none; }
+.crewmap .cm-list h2 { font: 800 20px/1.1 var(--sign); margin: 6px 0 10px; }
+.crewmap .cm-list ul, .crewmap .cm-list ol { margin: 0; padding: 0 0 0 4px; list-style: none; max-width: 860px; }
+.crewmap .cm-list ol { list-style: none; }
+.crewmap .cm-list li { margin: 0 0 6px; }
+.crewmap .cm-list li ul { margin: 4px 0 10px 22px; }
+.crewmap .cm-list button {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: 400 14px/1.4 var(--body);
+  text-align: left;
+  cursor: pointer;
+}
+.crewmap .cm-list .cm-list-node { font-weight: 600; background: var(--raise); border: 2px solid var(--line); }
+.crewmap .cm-list button:hover { background: var(--sunk); }
+.crewmap .cm-list .mk { margin-top: 3px; }
+.crewmap .cm-list .bad { color: var(--red); }
+
+/* ── the box a line opens ────────────────────────────────────────────────────── */
+
+.crewmap .cm-pop {
+  position: absolute;
+  z-index: 6;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px 12px 12px;
+  border: 2px solid var(--edge);
+  border-radius: 8px;
+  background: var(--raise);
+  box-shadow: var(--thick), var(--lift);
+}
+.crewmap .cm-pop[hidden] { display: none; }
+.crewmap .cm-pop header { display: flex; align-items: flex-start; gap: 8px; }
+.crewmap .cm-pop header .mk { width: 18px; height: 18px; margin-top: 2px; }
+.crewmap .cm-pop h3 { flex: 1; margin: 0; font: 600 14px/1.35 var(--body); }
+.crewmap .cm-x { min-width: 28px; min-height: 28px; border: 2px solid var(--field-edge); border-radius: 6px; background: var(--raise); color: var(--text); font: 700 16px/1 var(--body); cursor: pointer; }
+.crewmap .cm-pop ol { list-style: none; margin: 8px 0 0; padding: 0; }
+.crewmap .cm-pop li { padding: 7px 0; border-top: 1px solid var(--line); }
+.crewmap .cm-pop li.bad p { color: var(--red); }
+.crewmap .cm-pop time { font-size: 12px; color: var(--muted); }
+.crewmap .cm-pop p { margin: 2px 0 4px; font-size: 13px; line-height: 1.4; }
+.crewmap .cm-job-link { min-height: 24px; padding: 2px 6px; border: 2px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--text); font: 600 12px/1.3 var(--body); cursor: pointer; text-align: left; }
+
+/* ── the toggle in the header: the crew map or the yard ─────────────────────── */
+
+.hud.studio .home-seg { display: inline-flex; border: 2px solid var(--field-edge); border-radius: 7px; overflow: hidden; flex: none; }
+.hud.studio .home-seg button { min-height: 30px; padding: 0 12px; border: 0; background: var(--raise); color: var(--text); font: 600 13px/1 var(--body); cursor: pointer; }
+.hud.studio .home-seg button + button { border-left: 2px solid var(--field-edge); }
+.hud.studio .home-seg button[aria-pressed='true'] { background: var(--text); color: var(--panel); }
+
+@media (max-width: 820px) {
+  .crewmap .cm-said { display: none; }
+  .crewmap .cm-bar { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .crewmap .cm-title-main { font-size: 20px; flex-basis: 100%; }
+  .crewmap .cm-seg button { min-width: 0; padding: 0 9px; }
+  .crewmap .cm-list { padding: 10px 10px 20px; }
+  .crewmap .cm-list li ul { margin-left: 8px; }
+}
+
+/* The Work and Needs you lists are wide enough for a job's title (the review of 18 Nov 2026: a quarter of the
+ * window cut every title to two short lines). A page beside them takes the room back. */
+.hud.studio .deck-col.col-a.tab-wide:not(.page) { flex-basis: min(620px, calc(100vw - 140px)); }
+.hud.studio .studio-deck.two .deck-col.col-a.tab-wide:not(.page) { flex-basis: 440px; }
+
+/* "Also going on" in Needs you: news the owner cannot answer, one plain row each, opening its job. */
+.hud.studio .studio-body .also {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  margin: 0 0 4px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: 400 14px/1.4 var(--body);
+  text-align: left;
+}
+.hud.studio .studio-body button.also { cursor: pointer; }
+.hud.studio .studio-body button.also:hover { background: var(--sunk); }
+.hud.studio .studio-body .also .state { flex: none; }
+/* On a window as narrow as a phone the top bar keeps its own buttons; the crew map stays the view. */
+@media (max-width: 600px) {
+  .hud.studio .home-seg { display: none; }
+}
+@media (max-width: 600px) {
+  .hud.studio .studio-top .btn.icon { flex: none; min-width: 28px; }
+  .hud.studio .studio-top .new-job span { display: none; }
+}

@@ -2,12 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, getManager, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, WorkLine } from '../api';
-import { Crew, leadOf, Nav } from '../crew';
-import { BotBadge } from '../mascot/BotBadge';
-import { portraitOf } from '../mascot/look';
+import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, WorkLine } from '../api';
+import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
+import { CrewTree } from '../ui/CrewTree';
 import { Icon } from '../ui/Icon';
 import { Button, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../ui/kit';
 import { Tag } from '../ui/page';
@@ -18,8 +17,7 @@ const REFRESH_MS = 15_000;
 /** The last answer, kept on the phone so the screen is full the moment the app opens. */
 const STORE_KEY = 'manager:last';
 const SHOWN_FEED = 12;
-const STEP_NAMES = ['Build', 'Check', "Lead's ruling", 'Merge', 'Push'];
-const STATUS_WORDS: Record<string, string> = { running: 'Working', idle: 'Free', paused: 'Paused', error: 'In trouble' };
+const STEP_NAMES = ['Build', 'Check', 'Final check', 'Merge', 'Push'];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Everything but the time it was made, so an answer that says nothing new redraws nothing. */
@@ -44,32 +42,6 @@ const Steps = memo(function Steps({ steps }: { steps: StepState[] }) {
       ))}
       {at >= 0 ? <Txt size={12} color={t.ink3} style={styles.stepName}>{STEP_NAMES[at]}</Txt> : null}
     </View>
-  );
-});
-
-const BotRow = memo(function BotRow({ bot, last, onOpen }: { bot: ManagerBot; last: boolean; onOpen: (id: string) => void }) {
-  const { p, t } = useLook();
-  const who = portraitOf(bot, p.bots[bot.id]);
-  const busy = bot.status === 'running';
-  const tone = busy ? t.accentText : bot.status === 'error' ? t.bad : bot.status === 'paused' ? t.warn : t.ink3;
-  const doing = bot.job ? `${bot.job.stage}: ${bot.job.ref} ${bot.job.title}` : bot.why || (bot.last ? `Last: ${bot.last.ref} ${bot.last.title}` : 'Nothing yet');
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${who.name}, ${STATUS_WORDS[bot.status] ?? bot.status}. ${doing}`}
-      onPress={() => onOpen(bot.id)}
-      style={({ pressed }) => [styles.bot, t.plates && { borderLeftColor: who.colour, borderLeftWidth: 7 }, !last && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}
-    >
-      <BotBadge who={who} size={42} tag={false} />
-      <View style={kit.flex}>
-        <View style={styles.botHead}>
-          {t.plates ? <Sign size={21} numberOfLines={1} style={styles.shrink}>{who.name}</Sign> : <Txt size={15} weight={600} numberOfLines={1} style={styles.shrink}>{who.name}</Txt>}
-          {t.plates ? <Tag text={STATUS_WORDS[bot.status] ?? bot.status} color={busy ? t.good : tone} /> : <Txt size={12} weight={700} color={tone}>{STATUS_WORDS[bot.status] ?? bot.status}</Txt>}
-        </View>
-        <Txt size={13} color={bot.job ? t.ink : t.ink2} numberOfLines={2}>{doing}</Txt>
-        <Txt size={12} color={t.ink3} numberOfLines={1}>{[bot.model, bot.doneToday ? `${bot.doneToday} done today` : ''].filter(Boolean).join(', ')}</Txt>
-      </View>
-    </Pressable>
   );
 });
 
@@ -130,6 +102,11 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   const [refreshing, setRefreshing] = useState(false);
   const [allFeed, setAllFeed] = useState(false);
   const shown = useRef<Manager | null>(null);
+  const [flow, setFlow] = useState<Flow | null>(null);
+  const [flowWindow, setFlowWindow] = useState<FlowWindow>('now');
+  const windowRef = useRef<FlowWindow>('now');
+  const scroller = useRef<ScrollView>(null);
+  const needsAt = useRef(0);
 
   const show = useCallback((next: Manager) => {
     if (sameAs(shown.current, next)) return;
@@ -143,6 +120,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       show(next);
       // The door keeps the last answer it had when the engine is down, and says so.
       setError(next.error || '');
+      // The crew map rides on the same poll; a studio without one answers null and the plain crew shows.
+      getFlow(connection, windowRef.current).then(setFlow);
       AsyncStorage.setItem(STORE_KEY, JSON.stringify(next)).catch(() => undefined);
     } catch (err) {
       setError((err as Error).message);
@@ -168,6 +147,12 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       front.remove();
     };
   }, [load, show]);
+
+  const chooseWindow = useCallback((next: FlowWindow) => {
+    windowRef.current = next;
+    setFlowWindow(next);
+    getFlow(connection, next).then(setFlow);
+  }, [connection]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -214,10 +199,15 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   const shownCards = cards.filter((c) => !c.archived).sort((a, b) => Number(Boolean(a.read)) - Number(Boolean(b.read)));
   const archivedCards = cards.filter((c) => c.archived);
   const unread = shownCards.filter((c) => !c.read);
-  const calm = !shownCards.length && !view.trouble.length;
+  // Needs you holds the decisions only; the rest is informational and sits under "Also going on".
+  const decisions = shownCards.filter(isDecision);
+  const others = shownCards.filter((c) => !isDecision(c));
+  const waiting = waitingCount(cards);
+  const calm = !decisions.length;
 
   return (
     <ScrollView
+      ref={scroller}
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120, paddingHorizontal: 18 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.accent} colors={[t.accent]} progressBackgroundColor={t.card} />}
     >
@@ -233,15 +223,22 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       </View>
       {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">Showing the last update. {error}</Txt> : null}
 
-      <Label style={styles.firstLabel}>Needs you</Label>
+      <View onLayout={(e) => { needsAt.current = e.nativeEvent.layout.y; }}>
+        <Label style={styles.firstLabel}>{`Needs you (${waiting})`}</Label>
+      </View>
       {calm ? <Txt color={t.ink2} style={styles.indent}>Nothing right now.</Txt> : null}
       <View style={styles.stack}>
-        {unread.length > 1 ? (
-          <Pressable accessibilityRole="button" onPress={() => mark(unread, { read: true })} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
-            <Txt size={13} weight={600} color={t.accentText}>Mark all {unread.length} read</Txt>
+        {unread.filter(isDecision).length > 1 ? (
+          <Pressable accessibilityRole="button" onPress={() => mark(unread.filter(isDecision), { read: true })} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
+            <Txt size={13} weight={600} color={t.accentText}>Mark all {unread.filter(isDecision).length} read</Txt>
           </Pressable>
         ) : null}
-        {shownCards.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
+        {decisions.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
+      </View>
+
+      {others.length || view.trouble.length ? <Label>Also going on</Label> : null}
+      <View style={styles.stack}>
+        {others.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
         {view.trouble.map((item) => (
           <View key={item.text} style={[styles.trouble, { backgroundColor: t.card, borderLeftColor: item.level === 'bad' ? t.bad : t.warn }, t.plates && { borderRadius: t.r.card }]}>
             <Txt size={14}>{item.text}</Txt>
@@ -260,10 +257,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
         </View>
       ) : null}
 
-      <Label>Crew</Label>
-      <Group>
-        {view.bots.map((bot, index) => <BotRow key={bot.id} bot={bot} last={index === view.bots.length - 1} onOpen={openBot} />)}
-      </Group>
+      <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
       <Label>Work in hand</Label>
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}

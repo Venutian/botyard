@@ -53,22 +53,33 @@ export function botsScreen(list, live, face) {
       <td class="who">${face(b)}<span><b>${esc(b.name)}</b><small>${esc(b.title)}</small></span></td>
       <td><span class="state ${stateClass(b)}">${doing}</span></td>
       <td class="opt"><span>${esc(b.engine)}${b.model ? ` · ${esc(b.model)}` : ''}</span><small>${esc(b.why)}</small></td>
-      <td class="n opt">${tokens(b.tokensToday)}</td>
-      <td class="n wk opt">${tokens(b.tokensWeek)}</td>
+      <td class="n">${b.claudeShare === null || b.claudeShare === undefined ? '<span class="dim">Not on Claude</span>' : `<b>${pct(b.claudeShare)}</b>`}</td>
+      <td class="n">${b.met || b.notMet ? `<span class="${b.notMet > b.met ? 'bad' : ''}">${b.met} met, ${b.notMet} not met</span>` : '<span class="dim">None yet</span>'}</td>
+      <td class="n wk opt">${tokens(b.weekTokensAll ?? b.tokensWeek)}</td>
       <td class="opt">${wasteCell(b.waste)}</td>
     </tr>`
   }).join('')
-  const tree = (nodes) => (nodes.length ? `<ul>${nodes.map((n) => `<li><button class="link" data-act="open-bot" data-id="${esc(n.id)}">${esc(n.name)}</button>${tree(n.reports)}</li>`).join('')}</ul>` : '')
   if (!list.bots.length) return `<p class="none">This studio has no bots yet. A bot is one AI with a job: it reads its instructions, takes work and reports back.</p>
     <div class="acts"><button class="btn primary" data-act="bot-new">Add a bot</button></div>`
-  return `${flags || '<p class="flag good opt"><i></i><span>No bot is past 30% wasted runs in the last day.</span></p>'}
+  // The headline is the week's cost and results, not failed runs: the bot that takes most of the Claude
+  // week, and any bot whose work this week ended NOT MET more often than MET.
+  const claude = list.bots.filter((b) => typeof b.claudeShare === 'number').sort((a, b) => b.claudeShare - a.claudeShare)
+  const top = claude[0]
+  const misses = list.bots.filter((b) => b.notMet > b.met)
+  const head = top && top.claudeShare > 0
+    ? `<p class="flag ${top.notMet > top.met ? 'bad' : 'good'}"><i></i><span><b>${esc(top.name)}</b> uses ${pct(top.claudeShare)} of the Claude week (cached reads included)${top.met || top.notMet ? `: ${top.met} met and ${top.notMet} not met this week` : ''}.</span></p>`
+    : ''
+  const missed = misses.filter((b) => b !== top).map((b) => `<p class="flag bad"><i></i><span><b>${esc(b.name)}</b>: ${b.notMet} not met and ${b.met} met this week.</span></p>`).join('')
+  return `${head}${missed}${flags}`
+    + `${head || missed || flags ? '' : '<p class="flag good opt"><i></i><span>No Claude use counted this week yet, and no bot is past 30% wasted runs.</span></p>'}`
+    + `
     <div class="acts"><button class="btn" data-act="bot-new">Add a bot</button></div>
     <div class="grid-wrap"><table class="grid bots">
-      <thead><tr><th>Bot</th><th>Now</th><th class="opt">Engine, and why</th><th class="n opt">Tokens today</th><th class="n wk opt">7 days</th><th class="opt" title="Runs that failed, timed out or were stopped, in the last day">Wasted, last day</th></tr></thead>
+      <thead><tr><th>Bot</th><th>Now</th><th class="opt">Engine, and why</th><th class="n" title="Its share of all the Claude tokens the crew used this week, cached reads included">Claude week</th><th class="n" title="This week's results: MET and NOT MET">This week</th><th class="n wk opt" title="Tokens in, out and read from cache, 7 days">Tokens, 7 days</th><th class="opt" title="Runs that failed, timed out or were stopped, in the last day">Wasted, last day</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    <p class="hint">Tokens are new tokens in and out; reading from cache is not counted.${list.wasteStale && list.wasteAt ? ' The count of wasted runs is more than two hours old: the helper that counts them may be off (see Routines).' : list.wasteAt ? ` Waste counted ${esc(when(list.wasteAt))}.` : ''}</p>
-    <details class="org"><summary>Who reports to whom</summary>${tree(list.org)}</details>`
+    <p class="hint">Tokens count what went in, came out and was read from cache.${list.wasteStale && list.wasteAt ? ' The count of wasted runs is more than two hours old: the helper that counts them may be off (see Routines).' : list.wasteAt ? ` Waste counted ${esc(when(list.wasteAt))}.` : ''}</p>
+    <p class="hint">Who reports to whom, and who tells whom what: <button class="btn ghost small" data-act="crew-map">Open the crew map</button>.</p>`
 }
 
 /** One bot: what it is doing and on what, what it costs, its runs, and what it is told. */
