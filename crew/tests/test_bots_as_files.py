@@ -122,7 +122,7 @@ class SameAsTheFixture(Studio):
 
 class TheFiles(unittest.TestCase):
     def sets(self):
-        yield 'bots', crew_set.CrewSet(own='', places=crew_set.Places(env={'HOME': '/home/user', 'PATH': ''}, crew='/home/user/.botyard/crew', projects='/home/user/work'))
+        yield 'bots', crew_set.CrewSet(own='', places=crew_set.Places(env={'HOME': '/home/owner', 'PATH': ''}, crew='/home/owner/.botyard/crew', projects='/home/owner/work'))
 
     def test_every_bot_file_is_whole_and_renders_with_nothing_left_over(self):
         for name, files in self.sets():
