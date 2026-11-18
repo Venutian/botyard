@@ -39,6 +39,8 @@ export type Route =
   | { name: 'review'; job?: string; bot?: string }
   /** Answer several waiting questions, hold each, and send them all at once. */
   | { name: 'tray' }
+  /** The kept record of reviews for a job or a project, read-only. */
+  | { name: 'reviews'; job?: string; project?: string; title?: string }
   | { name: 'routines' }
   | { name: 'models' }
   | { name: 'improvements' }

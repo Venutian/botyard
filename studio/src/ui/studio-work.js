@@ -76,6 +76,7 @@ export function jobScreen(job, { line, steps, cards = '', bot, editing = false, 
   const acts = `<div class="acts">
     ${bot ? `<button class="btn" data-act="talk" data-id="${esc(bot.id)}">Talk to ${esc(bot.name.split(' ')[0])}</button>` : ''}
     <button class="btn" data-act="review" data-job="${esc(job.id)}" title="Mark exact places in the bot's last message, the brief, the documents or a picture, and send every mark at once">Review…</button>
+    <button class="btn ghost" data-act="reviews" data-job="${esc(job.id)}" data-title="${esc(job.ref)}" title="Every piece approved or sent back on this job, with its marks">Reviews kept</button>
     <button class="btn" data-act="job-edit" aria-pressed="${editing}">Edit</button>
     <button class="btn" data-act="job-attach">Attach a file</button>
     ${job.run?.live ? '<button class="btn" data-act="job" data-do="stop">Stop the run</button>' : ''}

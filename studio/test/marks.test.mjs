@@ -356,3 +356,25 @@ test('only pages on this computer are opened; the relay adds the pointer to HTML
     page.close()
   }
 })
+
+// ── the kept record (engine reads, the page's record sheet) ────────────────────────
+
+test('every review is kept, newest first, per job and per project, and shown read-only with the words sent and the cut copies', async () => {
+  const { store, dataDir, job } = yard()
+  const other = createJob(store, 'co', { title: 'Elsewhere', assigneeAgentId: 'b1' }, { now: T0, actor: OWNER })
+  const shot = attach(store, 'co', job.id, { name: 'a.png', type: 'image/png', bytes: png(40, 20) }, { now: T0, actor: BOT, dataDir })
+  sendReview(store, job.id, { piece: { kind: 'brief' }, marks: [{ kind: 'text', quote: 'ferry', comment: 'Name it' }] }, { now: T0 + 1, actor: OWNER, dataDir })
+  sendReview(store, job.id, { piece: { kind: 'picture', ref: shot.id }, verdict: 'approve', marks: [{ kind: 'picture', attachmentId: shot.id, box: { x: 0.5, y: 0.5, w: 0, h: 0 }, comment: 'Fine' }] }, { now: T0 + 2, actor: OWNER, dataDir })
+  sendReview(store, other.id, { piece: { kind: 'brief' }, note: 'Later' }, { now: T0 + 3, actor: OWNER, dataDir })
+  const ask = (url) => answer(store, { method: 'GET', url }, { dataDir, actor: OWNER }).body
+  assert.deepEqual(ask(`/api/issues/${job.id}/reviews`).map((r) => r.verdict), ['approve', 'back'])
+  assert.equal(ask('/api/companies/co/reviews?projectId=p1').length, 2)
+  assert.equal(ask('/api/companies/co/reviews').length, 3)
+  // Kept means kept: there is no path that changes or removes a review.
+  for (const method of ['PATCH', 'DELETE', 'PUT']) assert.equal(answer(store, { method, url: `/api/reviews/${ask('/api/companies/co/reviews')[0].id}`, body: {} }, { dataDir, actor: OWNER }).status, 404)
+  const { reviewHtml } = await import('../src/ui/marks-record.js')
+  const html = reviewHtml(ask(`/api/issues/${job.id}/reviews`)[0])
+  assert.match(html, /Approved/)
+  assert.match(html, /<img src="\/api\/studio\/file\?id=/)
+  assert.match(html, /Comment: Fine/)
+})
