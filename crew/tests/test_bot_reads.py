@@ -34,6 +34,14 @@ class Reads(unittest.TestCase):
         self.assertEqual(edit[f'{d}/*'], 'deny')
         self.assertGreater(list(edit).index(f'{notes}/*'), list(edit).index('*'))
 
+    def test_the_bots_own_folder_inside_a_read_folder_stays_editable(self):
+        d = tempfile.mkdtemp()
+        own = os.path.join(d, 'crew', 'hustle')
+        edit = skill_sets.read_only({'edit': {'*': 'allow'}}, [d], own)['edit']
+        keys = list(edit)
+        self.assertEqual(edit[f'{own}/*'], 'allow')
+        self.assertGreater(keys.index(f'{own}/*'), keys.index(f'{d}/*'), 'its own folder comes after, so it wins')
+
     def test_no_reads_changes_nothing(self):
         perm = {'external_directory': {'*': 'ask'}}
         self.assertIs(skill_sets.read_only(perm, None), perm)
