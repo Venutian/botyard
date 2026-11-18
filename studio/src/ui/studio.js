@@ -16,6 +16,7 @@ import './lightbox.js'
 import './shape.css'
 import { shapeMethods } from './studio-shape-acts.js'
 import { readWhen } from './studio-shape.js'
+import { mountThrottle } from './throttle.js'
 
 /**
  * The yard's panels: everything over the map.
@@ -245,12 +246,14 @@ const TEMPLATE = `
   <p class="studio-state"></p>
   <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button></div>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
+  <div class="ld" data-part="load"></div>
   <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
   <button class="btn icon ghost" data-act="shift" title="Day plates or night plates">${ICONS.shift}</button>
   <button class="btn icon ghost" data-act="home" title="See the whole studio (0)">${ICONS.home}</button>
   <button class="btn icon ghost" data-act="look" title="Map settings">${ICONS.look}</button>
   <button class="btn icon ghost" data-act="help" title="Keys and help (?)">${ICONS.help}</button>
 </header>
+<div class="ld-layer" data-part="load-layer"></div>
 <div class="usage-pop panel" id="usage-pop" role="dialog" aria-label="Usage of each AI" hidden></div>
 <nav class="studio-dock panel" aria-label="Studio"></nav>
 <div class="studio-deck">${COL('a')}${COL('b')}</div>
@@ -391,6 +394,8 @@ export class Studio {
       if (act === 'usage') return this.usageOpen ? this.closeUsage() : this.openUsage()
       if (act) this.actions[act]?.()
     })
+    this._load = mountThrottle(this.top.querySelector('[data-part="load"]'), { call, layer: this.root.querySelector('[data-part="load-layer"]') })
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.ld, .ld-layer')) this._load.close() })
     // A click anywhere else closes the usage list.
     document.addEventListener('pointerdown', (e) => { if (this.usageOpen && !e.target.closest('.usage-pop, .usage-btn')) this.closeUsage() })
     this.root.querySelector('.usage-pop').addEventListener('click', (e) => { if (e.target.closest('[data-act="usage-more"]')) { this.closeUsage(); this._enter('a', () => this.openMoney()) } })

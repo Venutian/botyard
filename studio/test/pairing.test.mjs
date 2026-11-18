@@ -64,7 +64,7 @@ test('the address offered is one on the local network, a home network first, nev
 test('pairing from the map opens the closed door at once, and the new key gets in', async (t) => {
   const home = temp()
   const ports = { PORT: await freePort(), BOTYARD_ENGINE_PORT: await freePort(), BOTYARD_PHONE_PORT: await freePort(), BOTYARD_PREVIEW_PORT: await freePort() }
-  const env = { PATH: process.env.PATH, HOME: home, BOTYARD_HOME: path.join(home, 'yard'), BOTYARD_PHONE_HOST: '127.0.0.1', BOTYARD_ENGINE_RUNS: 'off', BOTYARD_TIMETABLE: 'off', NODE_NO_WARNINGS: '1', ...Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, String(v)])) }
+  const env = { PATH: process.env.PATH, HOME: home, BOTYARD_HOME: path.join(home, 'yard'), BOTYARD_PHONE_HOST: '127.0.0.1', BOTYARD_ENGINE_RUNS: 'off', BOTYARD_TIMETABLE: 'off', NODE_NO_WARNINGS: '1', BOTYARD_REFUSE_BOTS: 'off', ...Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, String(v)])) }
   const child = spawn(process.execPath, [path.join(studio, 'server', 'studio.mjs')], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   t.after(() => child.kill('SIGTERM'))
   let out = ''

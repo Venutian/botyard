@@ -32,17 +32,31 @@ class OwnerGuard(unittest.TestCase):
         self.assertIsNotNone(guard.check({'tool_name': 'mcp__acf17dcb__create_draft'}))
         self.assertIsNone(guard.check({'tool_name': 'mcp__gmail__search_threads'}))
 
+    def test_the_pc_load_setting_is_the_owners(self):
+        # It names the program the owner's PC load button runs: no bot reads, writes or points it elsewhere.
+        load = os.path.join(guard.botyard_home.places()['config'], 'pc-load.json')
+        short = guard.botyard_home.short(load)
+        for command in [f'cat {load}', f'echo \'{{"tool":"/tmp/x"}}\' > {short}', f'sed -i s/a/b/ {short}']:
+            self.assertIn('PC load setting', bash(command) or '', command)
+        for tool in ('Read', 'Write', 'Edit'):
+            self.assertIsNotNone(guard.check({'tool_name': tool, 'tool_input': {'file_path': load}}), tool)
+        # The code that reads it, and a test's own file in a temp yard, are not the setting.
+        self.assertIsNone(bash('grep -rn pc-load.json studio/server/lib/throttle.mjs'))
+        self.assertIsNone(guard.check({'tool_name': 'Write', 'tool_input': {'file_path': '/tmp/t/yard/config/pc-load.json'}}))
+
     def test_a_folder_the_studio_closed_is_out_of_reach_and_its_own_script_still_runs(self):
         # A studio names folders no bot may touch in its crew/own/guard.json, each with what the bot is told.
+        real = guard.closed_folders
+        self.addCleanup(setattr, guard, 'closed_folders', real)
         guard.closed_folders = lambda: [('mail-keys', 'Refused: that folder is read by mail.py only.')]
         for command in ['python3 ~/.botyard/crew/own/mail.py fetch', 'mail.py list --all']:
             self.assertIsNone(bash(command), command)
         for command in ['cat ~/.config/mail-keys/config.json', 'cp -r ~/.config/mail-keys /tmp/x',
-                        'python3 -c "print(open(\'/home/owner/.config/mail-keys/config.json\').read())"']:
+                        'python3 -c "print(open(\'/home/user/.config/mail-keys/config.json\').read())"']:
             self.assertIn('mail.py only', bash(command) or '', command)
-        for tool, given in (('Read', {'file_path': '/home/owner/.config/mail-keys/config.json'}),
-                            ('Write', {'file_path': '/home/owner/.config/mail-keys/config.json', 'content': '{}'}),
-                            ('Grep', {'pattern': 'key', 'path': '/home/owner/.config/mail-keys'})):
+        for tool, given in (('Read', {'file_path': '/home/user/.config/mail-keys/config.json'}),
+                            ('Write', {'file_path': '/home/user/.config/mail-keys/config.json', 'content': '{}'}),
+                            ('Grep', {'pattern': 'key', 'path': '/home/user/.config/mail-keys'})):
             self.assertIsNotNone(guard.check({'tool_name': tool, 'tool_input': given}), tool)
         # A script's own source names the folder; a builder's edit of it is an edit like any other.
         self.assertIsNone(guard.check({'tool_name': 'Edit', 'tool_input': {

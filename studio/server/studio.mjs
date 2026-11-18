@@ -13,6 +13,7 @@
  *
  * Who answers a path under /api on the people port:
  *   /api/studio/setup, /api/studio/timetable      this file (lib/setup.mjs, lib/timetable.mjs)
+ *   /api/studio/throttle                          this file (lib/throttle.mjs): the PC load level
  *   /api/studio..., and the map's own short list   the map's API (api.mjs)
  *   anything else                                  the engine, and only for a caller on this computer
  * Someone who comes in through the phone's door or from the internet never reaches the engine raw:
@@ -30,12 +31,13 @@ import { spawnSync } from 'node:child_process'
 import { Console } from 'node:console'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { builtPage } from './lib/built-page.mjs'
-import { ownerKeyHeaders } from './engine/caller.mjs'
+import { botBehind, ownerKeyHeaders } from './engine/caller.mjs'
 import { fromThisComputer } from './lib/local-call.mjs'
 import { devicesFile, readDevices } from './lib/devices.mjs'
 import { configDir, dataDir, keysDir, studioRoot } from './lib/home.mjs'
 import { DOOR_PORT, doorFile, localAddresses, pairPhone, readDoor } from './lib/pairing.mjs'
 import { setupAct, setupState } from './lib/setup.mjs'
+import { throttleAct, throttleState } from './lib/throttle.mjs'
 import { startTimetable, stopTimetable, timetableAct, timetableState } from './lib/timetable.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -46,7 +48,7 @@ const page = builtPage(BUILT)
 const MAP_PATHS = new Set(['health', 'state'])
 /** A bot's call to a connector: /api/mcp/<connector>/<the bot's pass>. The gateway in api.mjs answers it. */
 export const GATEWAY_PATH = /^\/api\/mcp\/[a-z0-9-]+\/[\w-]+$/
-const MINE = new Set(['/api/studio/setup', '/api/studio/timetable', '/api/studio/pair'])
+const MINE = new Set(['/api/studio/setup', '/api/studio/timetable', '/api/studio/pair', '/api/studio/throttle'])
 const MAX_BODY = 64 * 1024
 
 
@@ -100,9 +102,28 @@ async function pairing(req, res, door) {
   return send(res, 200, { ...paired, open: opened.open, why: opened.why })
 }
 
-/** Setup and the timetable, for the person at this computer. */
+/**
+ * Whether a call made by a bot's run is refused here. Always, except on a test server that a test
+ * starts in a temp yard with BOTYARD_REFUSE_BOTS=off: the crew's own bots run the tests, so a test's
+ * own calls come from a bot's run. Turning it off changes only that server, never the live one.
+ */
+const refuseBots = () => process.env.BOTYARD_REFUSE_BOTS !== 'off'
+
+/**
+ * Setup, the timetable, pairing and the PC load, for the person at this computer, and never for a bot:
+ * a call with a bot's pass or a script's key, or one made by a process that runs for a bot, is refused.
+ */
 async function mine(req, res, url, door) {
   if (!fromThisComputer(req)) return send(res, 403, { error: 'Setup and the timetable are for the person at this computer' })
+  if (req.headers.authorization || req.headers['x-botyard-script'] || refuseBots() && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
+  if (url.pathname === '/api/studio/throttle') {
+    try {
+      if (req.method === 'GET') return send(res, 200, await throttleState())
+      if (req.method !== 'POST') return send(res, 405, { error: 'Use GET or POST' })
+      const [status, body] = await throttleAct(await readBody(req), { setBy: 'owner (page)' })
+      return send(res, status, body)
+    } catch (err) { return send(res, 400, { error: String(err?.message || err).slice(0, 200) }) }
+  }
   if (url.pathname === '/api/studio/pair') {
     try { return await pairing(req, res, door) } catch (err) { return send(res, 400, { error: String(err?.message || err).slice(0, 200) }) }
   }

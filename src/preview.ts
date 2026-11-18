@@ -442,6 +442,13 @@ const helperJobs = [
   { name: 'token-guard', kind: 'script', what: 'Paces Claude so it lasts to the weekly reset', when: 'Every hour, on the hour', on: false, ready: false, notReady: 'Waits for Claude to be signed in', running: false, lastAt: null, lastOk: true, lastError: '', nextAt: null },
 ];
 const helpers = { available: true, state: 'on', why: '', jobs: helperJobs };
+/** The sample PC's load: Light by day, None at night, set from the phone or the page. */
+const pcLoad = { configured: true, levels: ['none', 'light', 'medium', 'heavy', 'full'], now: 'light', day: 'light', night: 'none', paused: 0, heldGb: 0, line: 'Light (day Light, night None)' };
+const loadNames: Record<string, string> = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' };
+function pcLoadLine() {
+  if (pcLoad.now === 'full') return `Full: ${pcLoad.paused} job${pcLoad.paused === 1 ? '' : 's'} paused${pcLoad.heldGb ? `, ${pcLoad.heldGb} GB held` : ''}`;
+  return `${loadNames[pcLoad.now]}${pcLoad.day !== pcLoad.night ? ` (day ${loadNames[pcLoad.day]}, night ${loadNames[pcLoad.night]})` : ''}`;
+}
 
 const firstNotes = { name: 'Lighthouse Labs', skipped: [] as string[], seen: ['setup'], closed: false, projects: [] as { id: string; name: string }[], job: null as null | { id: string; ref: string; title: string } };
 const archived = [{ id: 'old-site', name: 'Old tea site' }];
@@ -521,6 +528,16 @@ function shaping(route: string, method: string, body: Record<string, any> = {}):
     if (row && body.action === 'key') Object.assign(row, { state: 'ok', stateWords: 'Key saved', detail: 'Saved just now', forget: true, action: { ...row.action, label: 'Replace the key' } });
     if (row && body.action === 'forget') Object.assign(row, { state: 'missing', stateWords: 'No key', detail: '', forget: false, action: { ...row.action, label: 'Paste a key' } });
     return get || body.action === 'check' ? { ...setupState(), checkedAt: body.action === 'check' ? Date.now() : setupState().checkedAt } : { ok: true, state: setupState() };
+  }
+  if (route === '/throttle') {
+    if (!get && pcLoad.levels.includes(String(body.level))) {
+      const level = String(body.level);
+      if (body.scope !== 'night') pcLoad.day = level;
+      if (body.scope !== 'day') pcLoad.night = level;
+      pcLoad.now = pcLoad.day;
+      Object.assign(pcLoad, level === 'full' ? { paused: 2, heldGb: 9.4 } : { paused: 0, heldGb: 0 });
+    }
+    return { ...pcLoad, line: pcLoadLine() };
   }
   if (route === '/helpers') {
     const one = helperJobs.find((j) => j.name === body.name);

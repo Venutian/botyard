@@ -7,6 +7,7 @@ import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
+import { PcLoadCard } from '../ui/PcLoad';
 import { Icon } from '../ui/Icon';
 import { Button, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../ui/kit';
 import { Tag } from '../ui/page';
@@ -256,6 +257,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
           {archivedCards.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
         </View>
       ) : null}
+
+      <PcLoadCard connection={connection} />
 
       <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
