@@ -9,7 +9,7 @@ import path from 'node:path'
 import { SHOTS, findBrowser, takeShots } from '../tools/shots.mjs'
 
 test('the pictures are the ones the front page shows: the map by day and night, what needs you, a job, a run, a bot\'s settings and instructions, Setup, the phone', () => {
-  assert.deepEqual(SHOTS.map((shot) => shot.name), ['crewmap', 'crewmap-night', 'map', 'needs', 'job', 'run', 'crew', 'rules', 'setup', 'night', 'phone'])
+  assert.deepEqual(SHOTS.map((shot) => shot.name), ['crewmap', 'crewmap-night', 'map', 'needs', 'job', 'run', 'crew', 'rules', 'setup', 'senth', 'senth-note', 'senth-night', 'senth-375', 'senth-375-night', 'night', 'phone'])
   // Every picture the front page points to is one this takes, and it takes no other.
   const readme = fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'README.md'), 'utf8')
   const used = [...readme.matchAll(/studio\/docs\/images\/([\w-]+\.png)/g)].map((found) => found[1]).sort()
@@ -31,6 +31,6 @@ test('a browser is found where one is installed, the one named first', () => {
 })
 
 test('it says so when it cannot work, before starting anything', async () => {
-  await assert.rejects(takeShots({ names: ['nothing'], log: () => {} }), /No picture is called nothing\. There are: crewmap, crewmap-night, map, needs, job, run, crew, rules, setup, night, phone/)
+  await assert.rejects(takeShots({ names: ['nothing'], log: () => {} }), /No picture is called nothing\. There are: crewmap, crewmap-night, map, needs, job, run, crew, rules, setup, senth, senth-note, senth-night, senth-375, senth-375-night, night, phone/)
   await assert.rejects(takeShots({ browser: '', log: () => {} }), /No browser was found/)
 })

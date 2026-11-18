@@ -60,8 +60,8 @@ export const SHOTS = [
   { name: 'senth', file: 'senth.png', what: 'Senth: the notes vault as strata of areas over time', view: 'senth', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200 },
   { name: 'senth-note', file: 'senth-note.png', what: 'Senth with a note open on the side', view: 'senth-note', clicks: [['[data-home="brain"]'], ['.bm-n[data-note*="release-when-green"]']], needs: 0, fewer: true, pause: 1500 },
   { name: 'senth-night', file: 'senth-night.png', what: 'Senth after dark', view: 'senth-night', clicks: [['[data-act="shift"]'], ['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800 },
-  { name: 'senth-375', file: 'senth-375.png', what: 'Senth at a phone\'s width', view: 'senth-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
-  { name: 'senth-375-night', file: 'senth-375-night.png', what: 'Senth at a phone\'s width after dark', view: 'senth-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },
+  { name: 'senth-375', file: 'senth-phone.png', what: 'Senth at a phone\'s width', view: 'senth-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
+  { name: 'senth-375-night', file: 'senth-phone-night.png', what: 'Senth at a phone\'s width after dark', view: 'senth-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },
   // Night is switched to on the page, as a person would: the map's light follows the switch.
   { name: 'night', file: 'map-night.png', what: 'the map at night, with the work in hand open', view: 'night', clicks: [['[data-act="shift"]'], ['[data-tab="work"]']], needs: 200, pause: 3500 },
   // The phone app is another program (`npm run web` in the top folder): taken only when its address is given.
