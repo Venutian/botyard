@@ -58,7 +58,7 @@
 .mk-tray { grid-area: tray; overflow: auto; padding: 14px 16px 18px; border-left: 2px solid var(--line, #cdd3da); display: flex; flex-direction: column; gap: 8px; }
 .mk-tray > * { flex: none; }
 .mk-tray h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 800 20px/1 var(--sign, var(--body)); }
-.mk-tray h3 span { min-width: 24px; padding: 3px 7px; border-radius: 12px; background: var(--edge, #15181d); color: var(--panel-solid, #fff); font: 700 12px/1.2 var(--body); text-align: center; }
+.mk-tray h3 span { min-width: 24px; padding: 3px 7px; border-radius: 12px; background: var(--text, #15181d); color: var(--panel-solid, #fff); font: 700 12px/1.2 var(--body); text-align: center; }
 .mk-marks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mk-mark { padding: 8px 8px 10px; border: 2px solid var(--edge, #15181d); border-radius: 8px; background: var(--raise, #fff); box-shadow: 0 2px 0 var(--edge, #15181d); }
 .mk-mark-head { display: flex; align-items: center; gap: 8px; }
