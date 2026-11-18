@@ -27,8 +27,8 @@ function studio() {
   job('j3', 3, { status: 'done', completedAt: ago(30) })
   const run = (id, jobId, status, minutes, usage = {}) => store.put('runs', { id, companyId: 'co', agentId: 'builder', issueId: jobId, status, error: status === 'failed' ? 'Adapter failed' : null, startedAt: ago(minutes), finishedAt: ago(minutes - 5), usageJson: usage, createdAt: ago(minutes), updatedAt: ago(minutes - 5) })
   run('r-old-fail', 'j1', 'failed', 90, { inputTokens: 100, outputTokens: 10 })
-  run('r-new-ok', 'j1', 'succeeded', 60, { inputTokens: 200, cachedInputTokens: 5000, outputTokens: 20 })
-  run('r-fail', 'j2', 'failed', 40, { inputTokens: 7, outputTokens: 3 })
+  run('r-new-ok', 'j1', 'succeeded', 60, { inputTokens: 200, cachedInputTokens: 5000, outputTokens: 20, costUsd: 0.25 })
+  run('r-fail', 'j2', 'failed', 40, { inputTokens: 7, outputTokens: 3, costUsd: 0.125 })
   run('r-done-fail', 'j3', 'failed', 35)
   store.put('cards', { id: 'c1', companyId: 'co', issueId: 'j1', kind: 'ask_user_questions', status: 'pending', title: 'Which size ships?', createdAt: ago(20) }, { position: 0 })
   store.put('comments', { id: 'm1', issueId: 'j1', authorAgentId: 'builder', body: 'Report', createdAt: ago(15) }, { position: 0 })
@@ -59,6 +59,7 @@ test('the feed, the org chart, the tokens by window, a job\'s cost and what the 
   assert.equal(spend.find((w) => w.window === '7d').inputTokens, 1200)
   const cost = get('/api/issues/LH-1/cost-summary').body
   assert.deepEqual([cost.issueCount, cost.runCount, cost.inputTokens, cost.cachedInputTokens, cost.outputTokens], [2, 3, 307, 5000, 33], 'the job and the one under it')
+  assert.equal(cost.costUsd, 0.375, 'dollars too, over the job and the one under it')
   const made = get('/api/companies/co/artifacts?kind=image').body.artifacts
   assert.equal(made[0].title, 'shot.png')
   assert.equal(made[0].issue.identifier, 'LH-1')
