@@ -1,6 +1,7 @@
 import { Connection, CrewBot, getBots, RunRow } from '../api';
 import { Nav } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
+import { copySentence, copyTag } from '../ui/copies';
 import { BOT_WORDS, DESCRIBE } from '../ui/describe';
 import { GlassButton, Group, Label, Txt, Words } from '../ui/kit';
 import { ago, Line, Page, Tag, tokens, useLoad } from '../ui/page';
@@ -36,10 +37,13 @@ function BotLine({ bot, last, onOpen }: { bot: CrewBot; last: boolean; onOpen: (
   const { t } = useLook();
   const flagged = bot.waste?.flagged;
   const { what, why } = engineLine(bot);
+  // One row for a bot and its copies on other AIs: the tag is the AI the running copy is on.
+  const tag = copyTag(bot);
+  const busy = bot.running && bot.running > 1 ? `${bot.running} jobs` : '';
   return (
     <Line
-      title={bot.name}
-      detail={[bot.resting ? bot.state : '', what, why].filter(Boolean).join('. ')}
+      title={tag ? `${bot.name}  (${tag})` : bot.name}
+      detail={[bot.resting ? bot.state : '', busy, what, why, copySentence(bot)].filter(Boolean).join('. ')}
       note={[bot.tokensToday ? `${tokens(bot.tokensToday)} today` : '', bot.tokensWeek ? `${tokens(bot.tokensWeek)} this week` : ''].filter(Boolean).join(', ')}
       alert={flagged ? wasteWords(bot.waste!.share) : undefined}
       right={<Tag text={bot.resting ? 'Resting' : bot.state} color={stateTone(bot.status, t)} />}

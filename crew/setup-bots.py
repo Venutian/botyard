@@ -395,7 +395,9 @@ def body_for(bot, path, existing, boss, dry=False):
     body = {'name': bot['name'], 'role': bot['role'], 'title': bot['title'], 'capabilities': bot['caps'],
             'adapterType': bot['adapter'],
             # The role and look its settings file gives it: the map draws the bot from these, never from its name.
-            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {}},
+            # A lane copy says whose it is and on which AI, so every list shows it under its bot, not as one more.
+            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {},
+                         **({'laneOf': bot['laneOf'], 'lane': bot['lane']} if bot.get('lane') else {})},
             'runtimeConfig': {'heartbeat': bot['heartbeat']},
             'adapterConfig': {**bot['config'], 'instructionsFilePath': path,
                               'env': {**bot['config'].get('env', {}), **({} if dry else skills_env(bot))}},

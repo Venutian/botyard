@@ -1,6 +1,7 @@
 
 import { inkOn } from './crew-colours.js'
 import { DESCRIBE } from './describe.js'
+import { busyWords, copyTag, jobsTitle } from './copies-view.js'
 
 /**
  * The crew map: the PC's home. An org chart that is also a live wiring diagram — the owner on top, the
@@ -59,10 +60,12 @@ export function nodeSentence(node, nodes) {
   if (node.kind === 'owner') return node.needs ? `You. ${plural(node.needs, 'card waits', 'cards wait')} for your answer.` : 'You. Nothing waits for your answer.'
   if (node.kind === 'script') return `${node.name}, a script. ${plural(node.notices, 'notice')} to the crew.`
   const boss = nodes.find((n) => n.id === node.under)
-  const job = node.job ? `${node.job.stage} ${node.job.title}, ${node.job.ref}${node.job.project ? `, in ${node.job.project}` : ''}.` : node.why || 'No job now.'
+  const many = busyWords(node.jobs)
+  const job = many ? `${many[0].toUpperCase()}${many.slice(1)}: ${node.jobs.map((j) => j.ref).join(', ')}.` : node.job ? `${node.job.stage} ${node.job.title}, ${node.job.ref}${node.job.project ? `, in ${node.job.project}` : ''}.` : node.why || 'No job now.'
+  const copies = node.copies?.length > 1 ? ` On ${node.on}, one of ${node.copies.length} copies.` : ''
   const share = node.week?.share === null || node.week?.share === undefined ? '' : ` ${pct(node.week.share)} of the Claude week.`
   const met = node.met || node.notMet ? ` ${node.met} met, ${node.notMet} not met this week.` : ''
-  return `${node.name}, ${node.roleName.toLowerCase()}, ${node.model}. ${STATUS[node.status] || node.status}. ${job} Answers to ${boss ? (boss.kind === 'owner' ? 'you' : boss.name) : 'nobody'}. ${plural(node.runsToday, 'run')} today.${share}${met}`
+  return `${node.name}, ${node.roleName.toLowerCase()}, ${node.model}.${copies} ${STATUS[node.status] || node.status}. ${job} Answers to ${boss ? (boss.kind === 'owner' ? 'you' : boss.name) : 'nobody'}. ${plural(node.runsToday, 'run')} today.${share}${met}`
 }
 
 /** A line, said in one sentence. */
@@ -371,7 +374,10 @@ function plateHtml(node, b, nodes, faces) {
     </button>`
   }
   const paint = node.look?.colour || '#7d8590'
-  const job = node.job
+  const many = busyWords(node.jobs)
+  const job = many
+    ? `<span class="cm-job" title="${esc(jobsTitle(node.jobs))}"><span class="cm-step">${esc(many)}</span> <span class="cm-title">${esc(node.jobs.map((j) => j.ref).join(', '))}</span></span>`
+    : node.job
     ? `<span class="cm-job"><span class="cm-step" title="${esc(DESCRIBE.status[node.job.stage] || '')}">${esc(node.job.stage)}</span> <span class="cm-title">${esc(node.job.title)}</span> <span class="cm-ref">${esc(node.job.ref)}</span></span>`
     : `<span class="cm-job none">${esc(node.why || (node.status === 'waiting' ? 'Waiting on other work' : 'No job now'))}</span>`
   const stats = [
@@ -379,7 +385,7 @@ function plateHtml(node, b, nodes, faces) {
     node.week?.share === null || node.week?.share === undefined ? '' : `<span title="Its share of all the Claude tokens the crew used this week, cached reads included">${pct(node.week.share)} of Claude</span>`,
   ].filter(Boolean).map((s) => `<span>${s}</span>`).join('')
   return `<button type="button" class="cm-node cm-bot st-${esc(node.status)}" data-node="${esc(node.id)}" style="${style};--paint:${esc(paint)}" aria-label="${label} Open its page.">
-    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role"><span class="cm-lamp" title="${esc(DESCRIBE.botStatus[STATUS[node.status]] || '')}"><i></i>${esc(STATUS[node.status] || node.status)}</span><span class="cm-what">${esc(node.roleName)}, ${esc(node.model)}</span></span></span>${node.met || node.notMet ? `<span class="cm-met${node.notMet > node.met ? ' cm-bad' : ''}" title="This week's results: met and not met"><span>${node.met} met</span><span>${node.notMet} not</span></span>` : ''}</span>
+    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role"><span class="cm-lamp" title="${esc(DESCRIBE.botStatus[STATUS[node.status]] || '')}"><i></i>${esc(STATUS[node.status] || node.status)}</span><span class="cm-what">${esc(node.roleName)}, ${esc(node.model)}${copyTag(node)}</span></span></span>${node.met || node.notMet ? `<span class="cm-met${node.notMet > node.met ? ' cm-bad' : ''}" title="This week's results: met and not met"><span>${node.met} met</span><span>${node.notMet} not</span></span>` : ''}</span>
     ${job}
     <span class="cm-stats">${stats}</span>
   </button>`

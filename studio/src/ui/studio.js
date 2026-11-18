@@ -29,6 +29,7 @@ import { trackMethods } from './studio-tracks.js'
 import { launchMethods } from './studio-launch.js'
 import { readWhen } from './studio-shape.js'
 import { mountThrottle } from './throttle.js'
+import { busyWords, copyTag, jobsTitle } from './copies-view.js'
 
 /**
  * The yard's panels: everything over the map.
@@ -1099,11 +1100,12 @@ setView(view) {
   _putCrew() {
     const crew = this.view.manager.bots
     this._put('crew', this.crewBar, crew.map((b, n) => {
-      const doing = b.job ? `${b.job.stage}${/[A-Z]+-\d+/.test(b.job.stage) ? '' : ` ${b.job.ref}`}` : b.why || (b.last ? `Last on ${b.last.ref}` : 'Nothing given yet')
+      const many = busyWords(b.jobs)
+      const doing = many || (b.job ? `${b.job.stage}${/[A-Z]+-\d+/.test(b.job.stage) ? '' : ` ${b.job.ref}`}` : b.why || (b.last ? `Last on ${b.last.ref}` : 'Nothing given yet'))
       const tier = n > 0 && b.tier !== crew[n - 1].tier ? `<i class="tier-gap" aria-hidden="true"></i>` : ''
-      return `${tier}<button class="mate ${esc(b.status)} ${this.chatBot === b.id ? 'on' : ''}" style="${botStyle(b.name)}" data-bot="${esc(b.id)}" title="${esc(b.name)}: ${esc(doing)}" aria-label="${esc(b.name)}: ${esc(doing)}">
+      return `${tier}<button class="mate ${esc(b.status)} ${this.chatBot === b.id ? 'on' : ''}" style="${botStyle(b.name)}" data-bot="${esc(b.id)}" title="${esc(b.name)}: ${esc(doing)}${many ? `\n${esc(jobsTitle(b.jobs))}` : ''}" aria-label="${esc(b.name)}: ${esc(doing)}${b.copies ? `, on ${esc(b.on)}` : ''}">
         <span class="who">${this._face(b)}<i class="light"></i></span>
-        <span class="text"><b>${esc(b.name.split(' ')[0])}</b><small>${esc(b.status === 'running' ? doing : b.status === 'error' ? 'Stopped on an error' : b.status === 'paused' ? 'Paused' : 'Free')}</small></span>
+        <span class="text"><b>${esc(b.name.split(' ')[0])}${copyTag(b)}</b><small>${esc(b.status === 'running' ? doing : b.status === 'error' ? 'Stopped on an error' : b.status === 'paused' ? 'Paused' : 'Free')}</small></span>
       </button>`
     }).join(''))
   }
@@ -2058,8 +2060,8 @@ setView(view) {
     }).join('') || '<p class="none">No projects yet.</p>')
     this._put('sheet', el, this.view.manager.bots.map((b) => `<div class="crew-row ${esc(b.status)}">
       ${this._face(b)}
-      <span class="name">${esc(b.name)}</span>
-      <span class="said">${esc(b.status === 'paused' ? b.why || 'Paused' : BOT_STATE[b.status] || b.status)}</span>
+      <span class="name">${esc(b.name)}${copyTag(b)}</span>
+      <span class="said">${esc(b.status === 'paused' ? b.why || 'Paused' : busyWords(b.jobs) || BOT_STATE[b.status] || b.status)}</span>
       <button class="btn ghost" type="button" data-act="pause" data-bot="${esc(b.id)}">${b.status === 'paused' ? 'Resume' : 'Pause'}</button>
     </div>`).join(''))
   }
