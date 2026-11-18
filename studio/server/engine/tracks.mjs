@@ -225,7 +225,7 @@ export const SAMPLE_TRACK = {
   steps: [
     {
       id: 'count', kind: 'script', title: 'Count the files', leaves: ['report'], timeoutSec: 60,
-      command: 'node -e "const fs=require(\'fs\');const n=fs.readdirSync(\'.\').length;fs.writeFileSync(process.env.BOTYARD_STEP_OUT,JSON.stringify({verdict:\'pass\',leaves:{report:\'This folder holds \'+n+\' files and folders.\'},numbers:{entries:n}}))"',
+      command: 'node -e "const fs=require(\'fs\');const n=fs.readdirSync(\'.\').length;fs.writeFileSync(process.env.BOTYARD_STEP_OUT,JSON.stringify({verdict:\'pass\',leaves:{report:\'This folder holds \'+n+(n===1?\' file or folder.\':\' files and folders.\')},numbers:{entries:n}}))"',
     },
     { id: 'approve', kind: 'gate', title: 'You look at the count', words: 'Approve the count, or send it back with a note.' },
   ],
