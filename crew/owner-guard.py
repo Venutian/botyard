@@ -37,6 +37,9 @@ SEND_TOOLS = re.compile(r'^mcp__.*(send|reply|forward|draft|post|publish|tweet|s
 KEYS_TOLD = ('Refused: the folder with the keys is read by Botyard only. Use the service through its '
              'tools (mcp__<service>__...); if a tool you need is missing or refused, ask the owner on a card.')
 CLOSED_TOLD = 'Refused: that folder is closed to bots. Ask the owner on a card if the job needs something from it.'
+# The PC load setting names the program the owner's PC load button runs, so no bot may point it elsewhere.
+PC_LOAD_TOLD = ('Refused: the PC load setting is the owner\'s. The level is set with the owner\'s button on the page '
+                'or phone; a run never changes it or the tool it names.')
 
 
 def closed_folders():
@@ -45,6 +48,8 @@ def closed_folders():
     places = botyard_home.places()
     keys = places['keys']
     out = [(mark, KEYS_TOLD) for mark in {keys, botyard_home.short(keys), os.path.join(os.path.basename(places['home']), 'keys')}]
+    load = os.path.join(places['config'], 'pc-load.json')
+    out += [(mark, PC_LOAD_TOLD) for mark in {load, botyard_home.short(load), os.path.join(os.path.basename(places['home']), 'config', 'pc-load.json')}]
     try:
         with open(os.path.join(places['crew'], 'own', 'guard.json'), encoding='utf8') as f:
             for row in json.load(f).get('closed') or []:

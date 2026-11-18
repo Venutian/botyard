@@ -26,7 +26,7 @@ const until = async (check, ms = 20000) => {
 /** Start `server/studio.mjs` as its own process; resolves when it says it is up, or with its exit. */
 async function start(homeDir, extra = {}, args = []) {
   const ports = { PORT: await freePort(), BOTYARD_ENGINE_PORT: await freePort(), BOTYARD_PHONE_PORT: await freePort(), BOTYARD_PREVIEW_PORT: await freePort() }
-  const env = { PATH: process.env.PATH, HOME: homeDir, BOTYARD_HOME: path.join(homeDir, 'studio-home'), NODE_NO_WARNINGS: '1', ...Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, String(v)])), ...extra }
+  const env = { PATH: process.env.PATH, HOME: homeDir, BOTYARD_HOME: path.join(homeDir, 'studio-home'), NODE_NO_WARNINGS: '1', BOTYARD_REFUSE_BOTS: 'off', ...Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, String(v)])), ...extra }
   const child = spawn(process.execPath, [path.join(studio, 'server', 'studio.mjs'), ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   let out = ''
   child.stdout.on('data', (chunk) => { out += chunk })

@@ -26,6 +26,8 @@ import { crewFaces, readFace } from './lib/studio.mjs'
 import { ConnectorError, connectorList, loadTools, setAccess, settleHeld } from './lib/connectors.mjs'
 import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
+import { throttleAct, throttleState } from './lib/throttle.mjs'
+import { botBehind } from './engine/caller.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
 import { crewFlow } from './lib/flow.mjs'
@@ -175,7 +177,7 @@ const phoneCompany = ({ name, about, code, members, invites }) => ({
   invites: invites.map(({ id, role, expires }) => ({ id, role, expires })),
 })
 
-export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, sessions = liveSessions, previews = previewRoot(), previewPort = PREVIEW_PORT, devices = devicesFile(), guard = guardFolder(), firstRunFile = path.join(process.env.BOTYARD_DATA || dataDir(), 'first-run.json'), shape = {}, away = awayFile(), edge = edgeFile(), port = 5288, crew = crewFolder(), plans = readPlans, timers = readTimers }) {
+export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, sessions = liveSessions, previews = previewRoot(), previewPort = PREVIEW_PORT, devices = devicesFile(), guard = guardFolder(), firstRunFile = path.join(process.env.BOTYARD_DATA || dataDir(), 'first-run.json'), shape = {}, away = awayFile(), edge = edgeFile(), port = 5288, crew = crewFolder(), plans = readPlans, timers = readTimers, throttle = {} }) {
   const failures = new Map()
   const seen = new Map()
   // Read and archived marks are added as each answer goes out, so a mark shows at once though the
@@ -438,6 +440,13 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (pathname === '/v1/setup' && get) return send(res, 200, await setupState({ fresh: searchParams.get('fresh') === '1', remote: true }))
       if (pathname === '/v1/setup' && post) return send(res, 200, await setupAct(await readBody(req), { remote: true }))
       if (pathname === '/v1/helpers' && get) return send(res, 200, await helperTimetable())
+      // The PC load, as the owner: the phone's key is the owner's, and the change is logged as made from the phone.
+      if (pathname === '/v1/throttle' && process.env.BOTYARD_REFUSE_BOTS !== 'off' && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
+      if (pathname === '/v1/throttle' && get) return send(res, 200, await throttleState(throttle))
+      if (pathname === '/v1/throttle' && post) {
+        const [status, body] = await throttleAct(await readBody(req), { ...throttle, setBy: 'owner (phone)' })
+        return send(res, status, body)
+      }
       if (pathname === '/v1/helpers' && post) return send(res, 200, await helperAct(await readBody(req)))
       if (pathname === '/v1/first-run' && get) return send(res, 200, await firstRun(first))
       if (pathname === '/v1/first-run' && post) {

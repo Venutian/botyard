@@ -22,6 +22,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { RUN_VARS } from './names.mjs'
 import { Refused } from './write.mjs'
 
 export const OWNER = 'local-board'
@@ -147,9 +148,9 @@ function socketInode(port, enginePort) {
   return ''
 }
 
-/** The command line of the process on this computer that holds the socket, or '' when it cannot be told. */
-export function processOf(port, enginePort) {
-  const inode = socketInode(port, enginePort)
+/** The process on this computer that holds the far end of a loopback call, or '' when it cannot be told. */
+export function pidOf(port, serverPort) {
+  const inode = socketInode(port, serverPort)
   if (!inode || inode === '0') return ''
   const want = `socket:[${inode}]`
   let pids = []
@@ -160,14 +161,48 @@ export function processOf(port, enginePort) {
     for (const fd of fds) {
       let link = ''
       try { link = fs.readlinkSync(`/proc/${pid}/fd/${fd}`) } catch { continue }
-      if (link !== want) continue
-      try {
-        const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean)
-        return `${pid} ${cmd.join(' ')}`.slice(0, 300)
-      } catch { return pid }
+      if (link === want) return pid
     }
   }
   return ''
+}
+
+/** The command line of the process on this computer that holds the socket, or '' when it cannot be told. */
+export function processOf(port, enginePort) {
+  const pid = pidOf(port, enginePort)
+  if (!pid) return ''
+  try {
+    const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean)
+    return `${pid} ${cmd.join(' ')}`.slice(0, 300)
+  } catch { return pid }
+}
+
+/** The variables that say a process runs for a bot: every run is told its own run id and pass. */
+const RUN_MARKS = [RUN_VARS.runId, RUN_VARS.apiKey]
+
+/**
+ * The bot run behind a process, if any: the run id of the nearest process up its family that was
+ * started as a bot's run, or ''. A bot cannot shed this by calling through curl or a script it starts,
+ * since each child keeps its parent's variables unless it clears them, and the parents are read too.
+ */
+export function botRunOf(pid, { proc = '/proc', depth = 12 } = {}) {
+  let at = String(pid || '')
+  for (let i = 0; at && at !== '0' && at !== '1' && i < depth; i += 1) {
+    let vars = []
+    try { vars = fs.readFileSync(path.join(proc, at, 'environ'), 'utf8').split('\0') } catch { return '' }
+    for (const name of RUN_MARKS) {
+      const line = vars.find((v) => v.startsWith(`${name}=`))
+      if (line && line.length > name.length + 1) return line.slice(name.length + 1) || 'a run'
+    }
+    try { at = fs.readFileSync(path.join(proc, at, 'stat'), 'utf8').split(') ').pop().split(' ')[1] } catch { return '' }
+  }
+  return ''
+}
+
+/** Did a bot's run make this call on this computer? Says which run, or ''. */
+export function botBehind(req, options = {}) {
+  const pid = options.pid ?? pidOf(req.socket?.remotePort, req.socket?.localPort)
+  return pid ? botRunOf(pid, options) : ''
 }
 
 const seen = new Map()

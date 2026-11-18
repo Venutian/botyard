@@ -101,6 +101,21 @@ that folder. An own job with the name of one of the tree's replaces it. A mistak
 said on the timetable page and never stops the helpers that came with Botyard. A helper is told
 `BOTYARD_API_URL`, and uses no AI.
 
+## The PC load button
+
+A yard that has a throttle for its computer names the tool in `$BOTYARD_HOME/config/pc-load.json`,
+`{ "tool": "/absolute/path" }`. The page's top bar and the phone's Home then show **PC load**: None,
+Light, Medium, Heavy or Full, the level in force now, and on Full how many jobs are paused and the
+memory they hold. With no tool named the control is not shown. The tool answers `show --json` with
+`{ day, night, now, paused: [ ... ], heldMB }` and takes `<level> [--day|--night]`; it is run with
+plain arguments, never a shell, and told `BOTYARD_SET_BY` (`owner (page)` or `owner (phone)`) for
+its own log.
+
+The level is the owner's alone. The page's route (`/api/studio/throttle`) answers only a caller on
+this computer, and refuses a call with a bot's pass or a script's key, or one made by any process
+whose family runs for a bot (its run's variables, read from `/proc`). The phone's route
+(`/v1/throttle`) needs a paired phone's key. The owner guard keeps bots out of `pc-load.json`.
+
 ## A page of your own
 
 The map can show pages that are yours and are not part of Botyard: a table you keep, a view of files
