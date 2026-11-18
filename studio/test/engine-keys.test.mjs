@@ -122,6 +122,11 @@ test('enforced: a call with no key is refused, and a write must say it is JSON',
   assert.equal(bare.status, 401)
   assert.match(bare.body.error, /pass, or the owner's or a script's key/)
   assert.equal((await s.ask('GET', '/api/health', undefined, s.script('ping'))).status, 200)
+  // "Is it up?" needs no key, and tells nothing else.
+  const up = await s.ask('GET', '/api/health')
+  assert.equal(up.status, 200)
+  assert.deepEqual(Object.keys(up.body).sort(), ['engine', 'live', 'setUp', 'status'])
+  assert.equal((await s.ask('GET', '/api/health/../companies')).status, 401)
   const plain = await s.ask('POST', `/api/issues/${s.job.id}/comments`, '{"body":"hi"}', { ...s.owner(), 'content-type': 'text/plain', 'content-length': 13 })
   assert.equal(plain.status, 415)
   // A bot's own calls are as before.

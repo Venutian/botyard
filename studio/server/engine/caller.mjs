@@ -10,8 +10,8 @@
  *
  * A call with none of these used to be the owner. The keys roll out in two steps, so the crew never
  * stops: in "log" mode such a call is still the owner, and the engine writes down which process made
- * it (`engine-callers.log` in its data folder); in "enforce" mode it is refused. The mode comes from
- * `BOTYARD_ENGINE_KEYS` (log | enforce).
+ * it (`engine-callers.log` in its data folder); in "enforce" mode, the default, it is refused. The mode
+ * comes from `BOTYARD_ENGINE_KEYS` (log | enforce).
  *
  * Only the owner answers a card or changes Botyard's settings. A script may seed a bot's settings and
  * instructions from the crew's files, as the owner may; a bot may not.
@@ -32,10 +32,13 @@ export const SCRIPT_HEADER = 'x-botyard-script'
 export const MODES = new Set(['log', 'enforce'])
 const SCRIPT_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-/** The rollout step the engine is at: 'log' (default) or 'enforce'. */
+/**
+ * Whether a call with no pass and no key is refused ('enforce', the default) or still answered as the owner
+ * and written down ('log', for a studio whose own scripts do not send the scripts key yet).
+ */
 export function keyMode(env = process.env) {
   const told = String(env.BOTYARD_ENGINE_KEYS || '').trim().toLowerCase()
-  return MODES.has(told) ? told : 'log'
+  return MODES.has(told) ? told : 'enforce'
 }
 
 function readKey(file) {
@@ -101,6 +104,7 @@ export function callerOf(headers = {}, keys = {}) {
 /** The actor a call with no pass is, by its caller. null when it is refused. */
 export function actorOf(caller, mode) {
   if (!caller || caller.kind === 'owner') return { user: OWNER }
+  if (caller.kind === 'probe') return { user: 'health-check', probe: true }
   if (caller.kind === 'script') return { user: `script:${caller.script}`, script: caller.script, mode }
   if (caller.kind === 'none' && mode !== 'enforce') return { user: OWNER, unkeyed: true }
   return null

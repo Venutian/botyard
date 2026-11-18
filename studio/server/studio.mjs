@@ -125,9 +125,9 @@ async function mine(req, res, url, door) {
 }
 
 /** Hand a call on to the engine's own listener, bytes in and bytes out, so nothing is read twice. */
-function toEngine(req, res, engineUrl) {
+function toEngine(req, res, engineUrl, keys = keysDir()) {
   const target = new URL(engineUrl)
-  const onward = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: { ...req.headers, host: target.host, ...ownerKeyHeaders(keysDir()) } }, (answer) => {
+  const onward = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: { ...req.headers, host: target.host, ...ownerKeyHeaders(keys) } }, (answer) => {
     res.writeHead(answer.statusCode || 502, answer.headers)
     answer.pipe(res)
   })
@@ -285,7 +285,7 @@ export async function createStudio({ env = process.env, demo = false, engine = t
     if (owner === 'map') return apiMiddleware(req, res, next)
     // The engine speaks to this computer only. Anyone else is told nothing is here.
     if (!engineUrl || !fromThisComputer(req)) return send(res, 404, { error: 'Not found' })
-    return toEngine(req, res, engineUrl)
+    return toEngine(req, res, engineUrl, keysDir(env))
   }
 
   return { middleware, engine: running, engineUrl, get phone() { return doorServer }, door, close }

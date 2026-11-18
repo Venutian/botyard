@@ -75,7 +75,10 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
       // Botyard's own server. A page elsewhere, or one that points its name here, is refused.
       const away = notFromHere(req)
       if (away) return send(403, { error: `The engine only answers this computer: this call was ${away}` })
-      const caller = callerOf(req.headers, keys)
+      // "Is the engine up?" says nothing about the studio, so a probe may ask it with no key.
+      const probe = String(req.method).toUpperCase() === 'GET' && /^\/api\/health\/?(\?.*)?$/.test(String(req.url))
+      const told = callerOf(req.headers, keys)
+      const caller = told.kind === 'none' && probe ? { kind: 'probe' } : told
       if (caller.kind === 'wrong') return send(401, { error: 'That key is not one of this engine\'s keys' })
       const enginePort = server.address().port
       if (caller.kind === 'none') {
