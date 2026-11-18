@@ -583,12 +583,13 @@ def scan_log(path):
 
 
 def refusals(db, env=None, hours=6, now=None):
-    """Every refusal in the runs of the last `hours`: [{agent, run, job, kind, path, silent, started}]. A run that ended with exit 0, no report
+    """Every refusal in the runs of the last `hours`: [{agent, adapter, run, job, kind, path, silent, started}]. A run that ended with exit 0, no report
     and no comment of its own, whose last tool call was refused, is `silent`: a success that did nothing."""
     now = now or time.time()
     cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now - hours * 3600))
     logs = botyard_home.places(env)['run_logs']
     names = dict(db.execute('SELECT id, name FROM agents'))
+    adapters = dict(db.execute('SELECT id, adapter_type FROM agents'))
     out = []
     for rid, agent, job, status, started, ref, result, code in db.execute(
             'SELECT id, agent_id, job_id, status, started_at, log_ref, result_json, exit_code FROM runs WHERE started_at >= ? AND log_ref IS NOT NULL ORDER BY started_at', (cutoff,)).fetchall():
@@ -599,7 +600,7 @@ def refusals(db, env=None, hours=6, now=None):
         spoke = db.execute('SELECT 1 FROM comments WHERE created_by_run_id = ? AND deleted_at IS NULL LIMIT 1', (rid,)).fetchone()
         silent = status == 'succeeded' and code in (0, None) and not said and not spoke and last
         for kind, path in sorted(set(found)):
-            out.append({'agent': names.get(agent, agent), 'run': rid, 'job': job, 'kind': kind, 'path': path, 'silent': silent, 'started': started})
+            out.append({'agent': names.get(agent, agent), 'adapter': adapters.get(agent, ''), 'run': rid, 'job': job, 'kind': kind, 'path': path, 'silent': silent, 'started': started})
     return out
 
 
