@@ -592,7 +592,8 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       }
       // The map's sections, read the same way the map reads them and cut down for a phone.
       if (pathname === '/v1/jobs' && req.method === 'GET') {
-        return send(res, 200, await jobList({ pile: q('pile') || 'active', project: q('project'), bot: q('bot'), q: q('q'), page: page(), ...options }))
+        // 'all' is every pile; a phone that names none gets the older Active pile, as it always did.
+        return send(res, 200, await jobList({ pile: q('pile') === 'all' ? '' : q('pile') || 'active', project: q('project'), bot: q('bot'), q: q('q'), page: page(), ...options }))
       }
       if (jobMore && req.method === 'GET') {
         return send(res, 200, phoneJobMore(await jobPage(jobMore[1], { previews, previewHost: hostOf(req), previewPort, ...options })))

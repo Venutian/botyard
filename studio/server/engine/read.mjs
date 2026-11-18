@@ -307,10 +307,16 @@ function searchScores(store, rows, query, passes) {
   return scores
 }
 
+/** A job the lists show: not a chat (unless words are searched), not a plugin's own operation. */
+const listable = (row, q) => !(!q && row.conversation_agent_id) && !/^plugin:.*:operation(:.*)?$/.test(row.origin_kind || '')
+
+/** When a done or cancelled job was settled, as its stamp. */
+const settledAt = (row) => (row.status === 'cancelled' ? row.cancelled_at || row.updated_at : row.completed_at || row.updated_at) || ''
+
 /**
  * GET /companies/:id/issues. Filters in use: limit, offset, status (one or a comma list), projectId,
- * assigneeAgentId (an id or "null"), parentId, q, view=compact. Chats and hidden jobs are left out,
- * ; a search looks through chats too.
+ * assigneeAgentId (an id or "null"), parentId, q, view=compact, settledSince (an ISO time: only jobs done or
+ * cancelled since then). Chats and hidden jobs are left out; a search looks through chats too.
  */
 export function jobs(store, companyId, query = {}) {
   const { limit: rawLimit, offset: rawOffset, view } = query
@@ -333,19 +339,20 @@ export function jobs(store, companyId, query = {}) {
   const statuses = String(query.status ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   const q = String(query.q ?? '').trim()
   const parentId = query.parentId ?? query.parentIssueId
+  const settledSince = sinceOf(query.settledSince)
 
   const where = ['company_id = ?', 'hidden_at IS NULL', 'harness_kind IS NULL']
   const params = [companyId]
-  const rows = store.rows(`SELECT id, identifier, title, description, status, priority, parent_id, project_id, assignee_agent_id, conversation_agent_id, origin_kind, updated_at, last_activity_at, list_raw FROM jobs WHERE ${where.join(' AND ')}`, ...params)
+  const rows = store.rows(`SELECT id, identifier, title, description, status, priority, parent_id, project_id, assignee_agent_id, conversation_agent_id, origin_kind, updated_at, last_activity_at, completed_at, cancelled_at, list_raw FROM jobs WHERE ${where.join(' AND ')}`, ...params)
   // The filters a job has to pass to be listed at all.
   const passes = (row) => {
-    if (!q && row.conversation_agent_id) return false
+    if (!listable(row, q)) return false
     if (statuses.length && !statuses.includes(row.status)) return false
+    if (settledSince && !(['done', 'cancelled'].includes(row.status) && settledAt(row) >= settledSince)) return false
     if (assignee === null && row.assignee_agent_id) return false
     if (assignee && row.assignee_agent_id !== assignee) return false
     if (query.projectId && row.project_id !== query.projectId) return false
     if (parentId && row.parent_id !== parentId) return false
-    if (/^plugin:.*:operation(:.*)?$/.test(row.origin_kind || '')) return false
     return true
   }
   const scores = q ? searchScores(store, rows, q, passes) : null
@@ -357,6 +364,31 @@ export function jobs(store, companyId, query = {}) {
     || backwards(a.id, b.id))
   const page = shown.slice(offset, offset + limit).map((row) => listed(row.list_raw ? row : store.row('SELECT * FROM jobs WHERE id = ?', row.id)))
   return view === 'compact' ? page.map(compact) : page
+}
+
+/** An ISO time from a query, or '' when none was asked for. */
+function sinceOf(value) {
+  if (value === undefined || value === '') return ''
+  const at = Date.parse(String(value))
+  if (!Number.isFinite(at)) throw new Refused(400, 'settledSince must be an ISO time')
+  return new Date(at).toISOString()
+}
+
+/**
+ * GET /companies/:id/job-counts[?since=ISO&projectId=&assigneeAgentId=]: how many jobs the lists hold in each state, and how many
+ * were done and cancelled since a time (the start of today, say). The same jobs as the list: no chats, nothing hidden.
+ */
+export function jobCounts(store, companyId, query = {}) {
+  const since = sinceOf(query.since)
+  const statuses = {}
+  const settled = { done: 0, cancelled: 0 }
+  for (const row of store.rows('SELECT status, project_id, assignee_agent_id, conversation_agent_id, origin_kind, updated_at, completed_at, cancelled_at FROM jobs WHERE company_id = ? AND hidden_at IS NULL AND harness_kind IS NULL', companyId)) {
+    if (!listable(row, '') || (query.projectId && row.project_id !== query.projectId)) continue
+    if (query.assigneeAgentId && row.assignee_agent_id !== query.assigneeAgentId) continue
+    statuses[row.status] = (statuses[row.status] || 0) + 1
+    if (since && row.status in settled && settledAt(row) >= since) settled[row.status] += 1
+  }
+  return { statuses, since, settled }
 }
 
 /** GET /issues/:id/comments: newest first, or oldest first with order=asc; `limit` keeps the first so many. */

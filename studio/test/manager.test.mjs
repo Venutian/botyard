@@ -245,7 +245,7 @@ test('a job marked done whose code is not in main is named in the trouble list, 
 })
 
 test('a request on a track is one work line with its cost so far, and its steps\' jobs are not lines of their own', () => {
-  const request = { id: 'r1', jobId: 'req', jobCode: 'LH-40', title: 'Add a lamp', projectId: PROJECTS[0].id, status: 'working', updatedAt: new Date(NOW - 60_000).toISOString(), cost: { usd: 0.42 }, trip: { id: 't1', status: 'running', current: 'check', currentTitle: 'Check', currentKind: 'bot', rounds: { 'check>build': 1 } } }
+  const request = { id: 'r1', jobId: 'req', jobCode: 'LH-40', title: 'Add a lamp', projectId: PROJECTS[0].id, status: 'working', updatedAt: new Date(NOW - 60_000).toISOString(), cost: { usd: 0.42 }, trip: { id: 't1', status: 'running', current: 'check', currentTitle: 'Check', currentKind: 'bot', currentBotId: 'checker', rounds: { 'check>build': 1 } } }
   const issues = [
     { id: 'req', identifier: 'LH-40', issueNumber: 40, title: 'Add a lamp', status: 'in_progress', projectId: PROJECTS[0].id, createdAt: new Date(NOW - 3_600_000).toISOString(), updatedAt: new Date(NOW - 60_000).toISOString() },
     { id: 'step', identifier: 'LH-41', issueNumber: 41, title: 'Add a lamp · Build', parentId: 'req', status: 'done', projectId: PROJECTS[0].id, assigneeAgentId: AGENTS[0].id, createdAt: new Date(NOW - 3_000_000).toISOString(), updatedAt: new Date(NOW - 120_000).toISOString() },
@@ -255,10 +255,28 @@ test('a request on a track is one work line with its cost so far, and its steps\
   assert.equal(lines[0].id, 'req')
   assert.equal(lines[0].stage, 'check')
   assert.equal(lines[0].fixes, 1)
-  assert.match(lines[0].note, /Check on its track, \$0\.42 so far/)
-  const waiting = view(issues, { requests: [{ ...request, trip: { ...request.trip, current: 'owner', currentTitle: 'The owner decides', currentKind: 'gate' } }] }).lines[0]
+  // The line names the bot on the step now, and wears its colour (the page colours a line by its bot).
+  assert.equal(lines[0].bot, 'Checker')
+  assert.equal(lines[0].note, 'Checker is checking it, on its track, $0.42 so far')
+  const trip = (more) => view(issues, { requests: [{ ...request, trip: { ...request.trip, ...more } }] }).lines[0]
+  const building = trip({ current: 'build', currentTitle: 'Build', currentBotId: 'freelancer' })
+  assert.equal(building.bot, 'Freelancer The Builder')
+  assert.equal(building.stage, 'build')
+  assert.equal(building.note, 'Freelancer The Builder is on fix 1, on its track, $0.42 so far')
+  const ruling = trip({ current: 'rule', currentTitle: 'Ruling', currentBotId: 'lead', currentRuling: true })
+  assert.equal(ruling.note, 'Lead is ruling on it, on its track, $0.42 so far')
+  // A step whose job no bot has taken yet, a script and a gate name nobody: a plain bar and the step's name.
+  assert.equal(trip({ currentBotId: '' }).bot, '')
+  assert.match(trip({ currentBotId: '' }).note, /^Waiting for a bot to take check, on its track/)
+  const script = trip({ current: 'tests', currentTitle: 'Run the tests', currentKind: 'script', currentBotId: '' })
+  assert.equal(script.bot, '')
+  assert.match(script.note, /^Run the tests, on its track/)
+  const waiting = trip({ current: 'owner', currentTitle: 'The owner decides', currentKind: 'gate', currentBotId: '' })
   assert.equal(waiting.pill, 'waits')
-  assert.match(waiting.note, /^Waits for you: The owner decides/)
+  assert.equal(waiting.bot, '')
+  assert.match(waiting.note, /^Waiting for you: the owner decides/)
+  // A paused trip names nobody at work, even with a bot on its step.
+  assert.equal(trip({ status: 'paused' }).bot, '')
   const done = view(issues, { requests: [{ ...request, status: 'done' }] }).lines[0]
   assert.equal(done.stage, 'merged')
   assert.equal(done.open, false)

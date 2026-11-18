@@ -145,7 +145,7 @@ function Pushed({ route, connection, crew, nav }: { route: Route; connection: Co
       {route.name === 'bots' ? <BotsScreen connection={connection} nav={nav} /> : null}
       {route.name === 'runs' ? <RunsScreen key={route.bot ?? ''} bot={route.bot} connection={connection} nav={nav} /> : null}
       {route.name === 'run' ? <RunScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
-      {route.name === 'jobs' ? <JobsScreen project={route.project} bot={route.bot} connection={connection} nav={nav} /> : null}
+      {route.name === 'jobs' ? <JobsScreen project={route.project} bot={route.bot} pile={route.pile} connection={connection} nav={nav} /> : null}
       {route.name === 'projects' ? <ProjectsScreen connection={connection} nav={nav} /> : null}
       {route.name === 'project' ? <ProjectScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
       {route.name === 'library' ? <LibraryScreen connection={connection} nav={nav} /> : null}

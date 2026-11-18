@@ -136,6 +136,8 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(job1.assigneeAgentId, 'b1')
   assert.match(job1.description, /A lighthouse on the hill/)
   assert.equal(store.object("SELECT raw FROM wakes WHERE agent_id = 'b1'").payload.issueId, build1, 'the bot is woken')
+  // The request names the bot on its step now, for its line on the Work sheet.
+  assert.equal(getRequest(store, request.id).trip.currentBotId, 'b1')
   store.put('runs', { id: 'r1', companyId: 'co', agentId: 'b1', issueId: build1, status: 'succeeded', usageJson: { costUsd: 1.25, inputTokens: 100, outputTokens: 10 } })
   botDoes(store, build1, { commit: 'aaa1111' }, T0)
   await tick(2)

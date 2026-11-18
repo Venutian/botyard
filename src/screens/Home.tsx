@@ -2,14 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getTray, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
+import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
+import { portraitOf } from '../mascot/look';
+import { readable } from '../theme/color';
+import { pileName } from './Jobs';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
 import { PcLoadCard } from '../ui/PcLoad';
 import { Icon } from '../ui/Icon';
-import { Button, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../ui/kit';
+import { Button, Chips, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../ui/kit';
 import { Tag } from '../ui/page';
 import { clock } from '../ui/time';
 import { NeedsYouCard } from './Studio';
@@ -47,14 +50,15 @@ const Steps = memo(function Steps({ steps }: { steps: StepState[] }) {
   );
 });
 
-const LineRow = memo(function LineRow({ line, onOpen }: { line: WorkLine; onOpen: (id: string) => void }) {
+/** A line of work wears the colour of the bot on it, as on the PC page; one nobody is on has a plain edge. */
+const LineRow = memo(function LineRow({ line, colour, onOpen }: { line: WorkLine; colour: string; onOpen: (id: string) => void }) {
   const { t } = useLook();
   const tone = line.steps.includes('failed') ? t.bad : line.late ? t.warn : t.ink2;
   return (
     <Pressable
       accessibilityRole="button"
       onPress={() => onOpen(line.id)}
-      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderRadius: t.r.card, boxShadow: t.shadow }, pressed && kit.dim]}
+      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderLeftWidth: 5, borderLeftColor: colour ? readable(colour, [t.card], 3, t.ink) : t.line, borderRadius: t.r.card, boxShadow: t.shadow }, pressed && kit.dim]}
     >
       <View style={styles.lineHead}>
         {t.plates ? <Sign size={18}>{line.ref}</Sign> : <Txt size={12} weight={700} color={t.accentText}>{line.ref}</Txt>}
@@ -97,7 +101,7 @@ const FeedRow = memo(function FeedRow({ item, last, onOpen }: { item: FeedItem; 
 
 /** The manager's home: what is going on in the studio right now, on one screen. */
 export function HomeScreen({ connection, crew, nav }: { connection: Connection; crew: Crew; nav: Nav }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<Manager | null>(null);
   const [tray, setTray] = useState<TrayItem[]>([]);
@@ -199,6 +203,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   }
 
   const open = view.lines.filter((line) => line.open);
+  // Each bot's colour by its name, the one its robot wears: a line is coloured by the bot on it.
+  const colours = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id]).colour]));
   const feed = allFeed ? view.feed : view.feed.slice(0, SHOWN_FEED);
   const cards = view.needsYou.map((item) => ({ ...item, ...(item.key ? marks[item.key] : undefined) }));
   // New first, then read; archived ones fold away at the bottom.
@@ -271,9 +277,10 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
       <Label>Work in hand</Label>
+      {view.piles?.length ? <Chips value={'' as string} options={view.piles.map((pile) => ({ id: pile.id as string, name: pileName(pile) }))} onChange={(pile) => nav.push({ name: 'jobs', pile: pile as JobPile })} /> : null}
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}
       <View style={styles.stack}>
-        {open.map((line) => <LineRow key={line.id} line={line} onOpen={openJob} />)}
+        {open.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
       </View>
 
       <Label>Projects</Label>

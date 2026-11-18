@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Connection, getJobs, JobListRow, JobPile } from '../api';
+import { Connection, getJobs, JobListRow, JobPile, Pile } from '../api';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
 import { Icon } from '../ui/Icon';
-import { Chips, Group, plainField, Segmented, Txt } from '../ui/kit';
+import { Chips, Group, plainField, Txt } from '../ui/kit';
 import { ago, Line, More, Page, Tag } from '../ui/page';
 
 const ALL = '';
-const PILES: { id: JobPile; name: string }[] = [{ id: 'active', name: 'Active' }, { id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }];
+/** The piles before the door has said how many each holds. */
+const PILES: { id: JobPile; name: string }[] = [
+  { id: 'inhand', name: 'In hand' }, { id: 'waiting', name: 'Waiting to start' }, { id: 'backlog', name: 'Backlog' },
+  { id: 'blocked', name: 'Blocked' }, { id: 'today', name: 'Done today' }, { id: 'cancelled', name: 'Cancelled' },
+];
+/** A pile's name with its count, as its chip says it. */
+export const pileName = (p: { name: string; count?: number }) => (typeof p.count === 'number' ? `${p.name}  ${p.count}` : p.name);
 const SEARCH_WAIT_MS = 350;
 
 export function JobLine({ job, last, onOpen }: { job: JobListRow; last?: boolean; onOpen: () => void }) {
@@ -27,10 +33,11 @@ export function JobLine({ job, last, onOpen }: { job: JobListRow; last?: boolean
   );
 }
 
-/** Any job: one pile at a time, narrowed by project and bot, or found by words. */
-export function JobsScreen({ connection, nav, project: firstProject, bot: firstBot }: { connection: Connection; nav: Nav; project?: string; bot?: string }) {
+/** Any job: one pile at a time, each with its count, narrowed by project and bot, or found by words. */
+export function JobsScreen({ connection, nav, project: firstProject, bot: firstBot, pile: firstPile }: { connection: Connection; nav: Nav; project?: string; bot?: string; pile?: JobPile }) {
   const { t, font } = useLook();
-  const [pile, setPile] = useState<JobPile>('active');
+  const [pile, setPile] = useState<JobPile>(firstPile ?? 'inhand');
+  const [piles, setPiles] = useState<Pile[]>([]);
   const [project, setProject] = useState(firstProject ?? ALL);
   const [bot, setBot] = useState(firstBot ?? ALL);
   const [words, setWords] = useState('');
@@ -51,6 +58,7 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
   const read = async (at: number) => {
     const answer = await getJobs(connection, { pile, project, bot, q, page: at });
     setNames({ bots: answer.bots, projects: answer.projects });
+    if (answer.piles?.length) setPiles(answer.piles);
     setMore(answer.more);
     setPage(at);
     return answer.jobs;
@@ -89,7 +97,7 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
         <TextInput value={words} onChangeText={setWords} placeholder="Search every job" accessibilityLabel="Search every job" placeholderTextColor={t.ink3} autoCorrect={false} returnKeyType="search" style={[styles.input, font(400), plainField, { color: t.ink }]} />
         {words ? <Pressable accessibilityRole="button" accessibilityLabel="Clear the search" hitSlop={8} onPress={() => setWords('')} style={styles.clear}><Icon name="close" size={16} color={t.ink2} /></Pressable> : null}
       </View>
-      <Segmented<JobPile> value={pile} options={PILES} onChange={setPile} />
+      <Chips<JobPile> value={pile} options={[...(piles.length ? piles : PILES).map((p) => ({ id: p.id, name: pileName(p) })), { id: 'all', name: 'All' }]} onChange={setPile} />
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: filters }} onPress={() => setFilters(!filters)} style={styles.filters}>
         <Txt size={14} weight={600} color={t.accentText}>{filters ? 'Hide filters' : narrowed ? `Filtered: ${narrowed}` : 'Filter by project or bot'}</Txt>
         <Icon name={filters ? 'up' : 'down'} size={16} color={t.accentText} />
