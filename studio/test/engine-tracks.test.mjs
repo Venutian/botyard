@@ -7,7 +7,7 @@ import path from 'node:path'
 import { openStore } from '../server/engine/store.mjs'
 import { putDocument } from '../server/engine/write.mjs'
 import {
-  SAMPLE_TRACK, answerGate, checkTrack, getRequest, pauseTrip, rerunTrip, resumeTrip, saveTrack, startRequest, stopTrip, tickTracks, trackIo, tripView, verdictOf,
+  BUILD_TRACK, SAMPLE_TRACK, answerGate, checkTrack, getRequest, pauseTrip, rerunTrip, resumeTrip, saveTrack, startRequest, stopTrip, tickTracks, trackIo, tripView, verdictOf,
 } from '../server/engine/tracks.mjs'
 
 const OWNER = { user: 'local-board' }
@@ -113,6 +113,10 @@ test('verdicts are read in the crew\'s words', () => {
   for (const t of ['PASS', 'pass: all good', 'MET', 'Approved']) assert.equal(verdictOf(t), 'pass', t)
   for (const t of ['FAIL', 'NOT MET: two rows', 'Rejected']) assert.equal(verdictOf(t), 'fail', t)
   assert.equal(verdictOf('looks fine'), null)
+  // A verdict document that repeats its name, as the crew's bots write it, plain or in bold.
+  assert.equal(verdictOf('VERDICT: PASS'), 'pass')
+  assert.equal(verdictOf('**VERDICT:** FAIL. The hero image is blurry.'), 'fail')
+  assert.equal(verdictOf('Verdict: met'), 'pass')
 })
 
 test('a request moves along its track: a failed check goes back with its findings, rounds are counted, the gate decides, and it is finished only in main', async () => {
@@ -276,6 +280,96 @@ test('a gate with nothing to land says so: its yes sends the work back from the 
       assert.equal(tripView(store, tripId).reason, 'Not now')
     }
   }
+})
+
+/** A small crew track with the scored review before landing, as the built-in one has it. */
+const SCORED = {
+  key: 'scored', inputs: ['brief'], optional: ['reviewer', 'public_paths', 'public_projects', 'public_mark'],
+  defaults: { reviewer: 'Judge', public_paths: 'site/,marketing/' },
+  steps: [
+    { id: 'build', kind: 'bot', bot: 'Builder', needs: ['brief'], leaves: ['commit'] },
+    { id: 'check', kind: 'bot', bot: 'Checker', needs: ['brief', 'commit'], leaves: ['verdict'] },
+    { id: 'review', kind: 'bot', bot: '$reviewer', orBot: 'Checker', onlyFor: 'public', needs: ['commit'], leaves: ['verdict'] },
+    { id: 'decide', kind: 'gate' },
+    { id: 'land', kind: 'script', command: 'land it', needs: ['commit'], leaves: ['commit'] },
+  ],
+  lines: [
+    { from: 'build', to: 'check', on: 'pass' }, { from: 'build', to: 'decide', on: 'fail' },
+    { from: 'check', to: 'review', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 1, then: 'decide' },
+    { from: 'review', to: 'land', on: 'pass' }, { from: 'review', to: 'build', on: 'fail', rounds: 1, then: 'decide' },
+    { from: 'decide', to: 'land', on: 'pass' }, { from: 'land', to: 'decide', on: 'fail' },
+  ],
+}
+
+test('work the public will see cannot land without the reviewer\'s PASS; a fail goes back to the build with the findings', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', SCORED, { now: T0, actor: OWNER })
+  const io = { ...fakeIo({ 'land it': (spec) => ({ out: { leaves: { commit: spec.env.BOTYARD_IN_COMMIT } } }) }), changedFiles: async () => ['site/index.html', 'src/app.mjs'] }
+  startRequest(store, 'co', { track: 'scored', title: 'New home page', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+  await tick(2)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'VERDICT: PASS' }, T0)
+  await tick(3)
+  // The check passed, and still nothing lands: the page goes to the reviewer, the bot the track names.
+  const review = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'review'))
+  assert.equal(review.assigneeAgentId, 'j1')
+  assert.equal(io.ran.length, 0)
+  assert.equal(tripView(store, tripId).current, 'review')
+  // The reviewer fails it: back to the build, with the findings.
+  botDoes(store, review.id, { verdict: 'VERDICT: FAIL. The hero image is blurry at 375 px.' }, T0)
+  await tick(4)
+  assert.match(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).description, /blurry at 375 px/)
+  assert.equal(io.ran.length, 0)
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'bbb2222' }, T0)
+  await tick(5)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'VERDICT: PASS' }, T0)
+  await tick(6)
+  botDoes(store, workingJob(store, tripId, 'review'), { verdict: 'VERDICT: PASS' }, T0)
+  await tick(7)
+  // Only after the reviewer's PASS does the land step run.
+  assert.deepEqual(io.ran.map((r) => r.line), ['land it'])
+  assert.equal(tripView(store, tripId).status, 'done')
+})
+
+test('whether work is public is decided from its project and the paths it changes, not from the brief', async () => {
+  const run = async ({ files, defaults = {}, brief = 'b' }) => {
+    const { store, dataDir } = yard()
+    saveTrack(store, 'co', { ...SCORED, defaults: { ...SCORED.defaults, ...defaults } }, { now: T0, actor: OWNER })
+    const io = { ...fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) }), changedFiles: async () => files }
+    startRequest(store, 'co', { track: 'scored', title: 'Change', projectId: 'p1', inputs: { brief } }, { now: T0, actor: OWNER })
+    const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+    await tick(1)
+    const tripId = store.row('SELECT id FROM trips').id
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+    await tick(2)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'VERDICT: PASS' }, T0)
+    await tick(3)
+    return tripView(store, tripId)
+  }
+  // Internal code only: the review does not run, and it says why; the work lands.
+  const inner = await run({ files: ['src/engine.mjs', 'test/engine.test.mjs'] })
+  assert.equal(inner.status, 'done')
+  assert.match(inner.steps.find((s) => s.id === 'review').latest.snapshot.summary, /^Not run: nothing it changes is seen by the public/)
+  // A changed marketing file, a public project, a brief with the mark, or files that cannot be read: it is scored.
+  assert.equal((await run({ files: ['marketing/kit/cover.png'] })).current, 'review')
+  assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_projects: 'harbour' } })).current, 'review')
+  assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_mark: 'SCORED BAR' }, brief: 'SCORED BAR: page bar' })).current, 'review')
+  assert.equal((await run({ files: null })).current, 'review')
+  // A brief that leaves the mark out does not skip it when the files are public.
+  assert.equal((await run({ files: ['site/about.html'], defaults: { public_mark: 'SCORED BAR' }, brief: 'nothing said' })).current, 'review')
+})
+
+test('the built-in crew track scores public work before landing, and its ruling cannot skip the score', () => {
+  const lines = BUILD_TRACK.lines
+  assert.deepEqual(lines.filter((l) => l.to === 'land').map((l) => l.from).sort(), ['owner', 'review'])
+  assert.ok(lines.some((l) => l.from === 'rule' && l.to === 'review' && l.on === 'pass'))
+  assert.ok(lines.some((l) => l.from === 'check' && l.to === 'review' && l.on === 'pass'))
+  assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' })
+  assert.equal(BUILD_TRACK.steps.find((s) => s.id === 'review').onlyFor, 'public')
+  assert.equal(checkTrack(BUILD_TRACK, { selfKey: 'build-check-land' }).optional.includes('reviewer'), true)
 })
 
 test('a track that delivers a change and leaves no commit is stuck, never done', async () => {

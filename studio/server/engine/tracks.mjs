@@ -68,6 +68,15 @@ export const trackIo = {
       return err?.code === 1 ? false : null
     }
   },
+  /** The files a commit changes against where it left `branch`, or null when git cannot say. */
+  async changedFiles(repo, commit, branch) {
+    try {
+      const base = (await exec('git', ['-C', repo, 'merge-base', branch, commit], { timeout: 30_000 })).stdout.trim()
+      return (await exec('git', ['-C', repo, 'diff', '--name-only', base, commit], { timeout: 30_000 })).stdout.split('\n').filter(Boolean)
+    } catch {
+      return null
+    }
+  },
 }
 
 // ── saving a track ────────────────────────────────────────────────────────────────
@@ -91,12 +100,15 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   if (!Array.isArray(body.steps) || !body.steps.length) throw new Refused(400, 'A track needs at least one step')
   if (body.steps.length > MOST_STEPS) throw new Refused(400, `A track has at most ${MOST_STEPS} steps`)
   const inputs = names(body.inputs, 'The track\'s inputs')
+  // Inputs a request may give but need not: a step that names one copes when it is empty.
+  const optional = names(body.optional, 'The track\'s optional inputs').filter((n) => !inputs.includes(n))
+  const known = [...inputs, ...optional]
   // Values a studio fills in once for the track (which bot builds, which checks): a request may say otherwise.
   const defaults = {}
   if (body.defaults !== undefined && (typeof body.defaults !== 'object' || Array.isArray(body.defaults) || body.defaults === null)) throw new Refused(400, 'A track\'s defaults are names and their values')
   for (const [name, value] of Object.entries(body.defaults || {})) {
     if (!NAME.test(name)) throw new Refused(400, `Default "${String(name).slice(0, 40)}" is not a name`)
-    if (!inputs.includes(name)) throw new Refused(400, `Default "${name}" is not one of the track's inputs`)
+    if (!known.includes(name)) throw new Refused(400, `Default "${name}" is not one of the track's inputs`)
     defaults[name] = words(value, 4000)
   }
   const steps = body.steps.map((raw, index) => {
@@ -105,9 +117,15 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
     if (!NAME.test(id)) throw new Refused(400, `Step ${index + 1} needs an id: small letters, numbers, - and _`)
     if (!STEP_KINDS.includes(step.kind)) throw new Refused(400, `Step "${id}" is one of: ${STEP_KINDS.join(', ')}`)
     const out = { id, kind: step.kind, title: words(step.title, 200) || id, needs: names(step.needs, `Step "${id}" needs`), leaves: names(step.leaves, `Step "${id}" leaves`) }
+    if (step.onlyFor !== undefined) {
+      if (step.onlyFor !== 'public') throw new Refused(400, `Step "${id}": onlyFor is "public" (the step runs only for work the public will see)`)
+      if (step.kind === 'gate') throw new Refused(400, `Step "${id}": a gate always waits; it cannot run only for public work`)
+      out.onlyFor = 'public'
+    }
     if (step.kind === 'bot') {
       if (!String(step.bot || '').trim()) throw new Refused(400, `Step "${id}" is a bot step: say which bot`)
       Object.assign(out, { bot: words(step.bot, 200).trim(), words: words(step.words, 40_000), ruling: Boolean(step.ruling) })
+      if (step.orBot) out.orBot = words(step.orBot, 200).trim()
       if (step.model) out.model = words(step.model, 120)
       if (step.timeoutSec) out.timeoutSec = Math.max(60, Math.min(24 * 3600, Number(step.timeoutSec) || 0))
     }
@@ -161,10 +179,10 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   }
   // Every need is there by the time its step starts: from the request, or left by an earlier step.
   steps.forEach((s, n) => {
-    const before = new Set([...GIVEN, ...inputs, ...HANDED, ...steps.slice(0, n).flatMap((e) => e.leaves)])
+    const before = new Set([...GIVEN, ...known, ...HANDED, ...steps.slice(0, n).flatMap((e) => e.leaves)])
     for (const need of s.needs) if (!before.has(need)) throw new Refused(400, `Step "${s.id}" needs "${need}", which no earlier step leaves and the request does not give`)
     // A bot named as $name is the bot the request (or the track's default) names under that input.
-    if (s.kind === 'bot' && s.bot.startsWith('$') && !inputs.includes(s.bot.slice(1))) throw new Refused(400, `Step "${s.id}" takes its bot from "${s.bot.slice(1)}", which is not one of the track's inputs`)
+    for (const ref of [s.bot, s.orBot]) if (s.kind === 'bot' && ref?.startsWith('$') && !known.includes(ref.slice(1))) throw new Refused(400, `Step "${s.id}" takes its bot from "${ref.slice(1)}", which is not one of the track's inputs`)
   })
   // Every step can be reached from the first.
   const reached = new Set([steps[0].id])
@@ -178,7 +196,7 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   if (lost.length) throw new Refused(400, `No line reaches ${lost.map((id) => `"${id}"`).join(', ')}`)
   const delivers = body.delivers === 'nothing' ? 'nothing' : 'change'
   const main = /^[\w][\w./-]{0,99}$/.test(String(body.main || '')) ? String(body.main) : 'main'
-  return { title: words(body.title, 200), description: words(body.description, 4000), inputs, defaults, delivers, main, steps, lines }
+  return { title: words(body.title, 200), description: words(body.description, 4000), inputs, ...(optional.length ? { optional } : {}), defaults, delivers, main, steps, lines }
 }
 
 const sameShape = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -244,8 +262,11 @@ export const SAMPLE_TRACK = {
 export const BUILD_TRACK = {
   key: 'build-check-land',
   title: 'Build, check, land',
-  description: 'A bot builds, the tests run, another bot checks; a failed check goes back to the builder with its findings; the work is finished when it is in main.',
+  description: 'A bot builds, the tests run, another bot checks; work the public will see is also scored by the reviewer before it lands; a failed check or score goes back to the builder with its findings; the work is finished when it is in main.',
   inputs: ['builder', 'checker', 'lead'],
+  optional: ['reviewer', 'public_paths', 'public_projects', 'public_mark'],
+  // What counts as public: a project named here, a changed path starting with one of these, or a brief with this mark.
+  defaults: { reviewer: '', public_paths: 'site/,web/,public/,pages/,marketing/,store/,press/,trailer/,release-notes,CHANGELOG', public_projects: '', public_mark: '' },
   steps: [
     { id: 'brief', kind: 'script', title: 'Brief check', command: 'node "$BOTYARD_TRACK_TOOLS/brief.mjs"', leaves: ['brief'], timeoutSec: 60 },
     { id: 'write-brief', kind: 'bot', bot: '$lead', title: 'Write the brief', needs: ['words'], leaves: ['brief'], words: 'Turn this request into a brief the builder can work from, with every section the brief check named in its findings. Save it as the document `brief`.' },
@@ -253,6 +274,7 @@ export const BUILD_TRACK = {
     { id: 'tests', kind: 'script', title: 'Tests', needs: ['commit'], command: 'sh -c "${BOTYARD_IN_TEST_COMMAND:-echo No test command is set for this project.}"', timeoutSec: 1800 },
     { id: 'check', kind: 'bot', bot: '$checker', title: 'Check', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'Check the build against the brief: run what proves it, read the change. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, what must change.' },
     { id: 'rule', kind: 'bot', bot: '$lead', title: 'Ruling', ruling: true, needs: ['brief'], leaves: ['verdict'], words: 'The rounds back to the builder are used. Read the findings and the work, and rule: VERDICT: PASS lands it as it is, VERDICT: FAIL hands it to the owner with what you would do.' },
+    { id: 'review', kind: 'bot', bot: '$reviewer', orBot: '$checker', title: 'Scored review', onlyFor: 'public', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'This work will be seen by the public. Score it against the bar that matches what changed: the page bar for pages, the kit bar for store listings, art and marketing kits, the release bar for release notes and public releases. Look at the real result (screenshots at phone and desktop width for pages), not only the code. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
     { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The crew could not finish this on its own. Approve to land it as it is, or send it back to a step with a note.' },
     { id: 'land', kind: 'script', title: 'Land in main', needs: ['commit'], leaves: ['commit'], command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"', timeoutSec: 3600 },
   ],
@@ -261,8 +283,9 @@ export const BUILD_TRACK = {
     { from: 'write-brief', to: 'build', on: 'pass' }, { from: 'write-brief', to: 'owner', on: 'fail' },
     { from: 'build', to: 'tests', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
     { from: 'tests', to: 'check', on: 'pass' }, { from: 'tests', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
-    { from: 'check', to: 'land', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
-    { from: 'rule', to: 'land', on: 'pass' }, { from: 'rule', to: 'owner', on: 'fail' },
+    { from: 'check', to: 'review', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    { from: 'review', to: 'land', on: 'pass' }, { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' },
+    { from: 'rule', to: 'review', on: 'pass' }, { from: 'rule', to: 'owner', on: 'fail' },
     { from: 'owner', to: 'land', on: 'pass' },
     { from: 'land', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
   ],
@@ -274,7 +297,12 @@ const seeded = new WeakSet()
 export function ensureBuiltIns(store, { now = Date.now() } = {}) {
   if (seeded.has(store)) return
   for (const company of store.rows('SELECT id FROM company')) {
-    for (const track of BUILT_IN) if (!trackOf(store, company.id, track.key)) saveTrack(store, company.id, track, { now, builtIn: true })
+    // A built-in track that has changed in this release is saved again as a new version (the same shape saves nothing);
+    // trips already moving keep the version they started on.
+    for (const track of BUILT_IN) {
+      const have = trackOf(store, company.id, track.key)
+      if (!have || have.builtIn) saveTrack(store, company.id, track, { now, builtIn: true })
+    }
   }
   seeded.add(store)
 }
@@ -383,7 +411,8 @@ export const commitIn = (value) => /\b[0-9a-f]{7,40}\b/i.exec(String(value || ''
 
 /** PASS / FAIL in the words the crew uses, or null when the text says neither. */
 export function verdictOf(text) {
-  const t = String(text || '').trim()
+  // A verdict kept as a document often repeats its own name: "VERDICT: PASS" is read as PASS.
+  const t = String(text || '').trim().replace(/^\**\s*verdict\s*\**\s*:\s*\**\s*/i, '')
   if (/^(fail|failed|not met|rejected|no go|no-go|not approved)\b/i.test(t)) return 'fail'
   if (/^(pass|passed|met|approved|go|ok|report only)\b/i.test(t)) return 'pass'
   return null
@@ -435,8 +464,14 @@ const envName = (name) => `BOTYARD_IN_${name.toUpperCase().replace(/[^A-Z0-9]/g,
 /** Start one step's try. Returns the row as it is now. */
 async function startStep(store, trip, request, version, step, row, values, { dataDir, io, now }) {
   const inputs = { ...values, ...(row.inputs || {}) }
+  if (step.onlyFor === 'public') {
+    const seen = await publicOf(store, request, version, inputs, io)
+    if (!seen.public) return { ...row, status: 'passed', snapshot: { verdict: 'pass', leaves: {}, findings: '', summary: `Not run: ${seen.why}`, skipped: true }, startedAt: iso(now), finishedAt: iso(now) }
+    inputs.public_why = seen.why
+  }
   if (step.kind === 'bot') {
-    const named = step.bot.startsWith('$') ? String(inputs[step.bot.slice(1)] || '') : step.bot
+    const pick = (ref) => (ref?.startsWith('$') ? String(inputs[ref.slice(1)] || '') : ref || '')
+    const named = pick(step.bot) || pick(step.orBot)
     const bot = named && botOf(store, request.companyId, named)
     if (!bot) return { stuck: `Step "${step.id}" asks for a bot called "${named || step.bot}", and there is none` }
     const job = createJob(store, request.companyId, {
@@ -527,6 +562,28 @@ export function gateCard(version, step, row, trip, request, inputs) {
     continuationPolicy: 'none', idempotencyKey: `trip-step:${row.id}`,
     payload: { tripId: trip.id, stepId: step.id, rowId: row.id, prompt: prompt.slice(0, 4000), acceptLabel: yes.label, rejectLabel: no.label, yes, no, findings },
   }
+}
+
+const listOf = (value) => String(value || '').split(',').map((x) => x.trim()).filter(Boolean)
+
+/**
+ * Whether the public will see this work, decided from the project and the paths the commit touches, never from
+ * whether the brief asked for a review: a project on the public list, a changed path under a public prefix, or a
+ * brief carrying the public mark. When the changed files cannot be read, the work is treated as public.
+ */
+export async function publicOf(store, request, version, inputs, io) {
+  const project = request.projectId ? store.row('SELECT name FROM projects WHERE id = ?', request.projectId)?.name || '' : ''
+  if (project && listOf(inputs.public_projects).some((p) => p.toLowerCase() === project.toLowerCase())) return { public: true, why: `${project} is a public project` }
+  const mark = String(inputs.public_mark || '').trim()
+  if (mark && String(inputs.brief || '').includes(mark)) return { public: true, why: `the brief carries ${mark}` }
+  const prefixes = listOf(inputs.public_paths)
+  if (!prefixes.length) return { public: false, why: 'no public paths are set for this track' }
+  const commit = commitIn(inputs.commit)
+  const repo = String(inputs.repo || projectFolder(store, request.projectId) || '')
+  const files = commit && repo ? await io.changedFiles(repo, commit, version.main) : null
+  if (!files) return { public: true, why: 'the changed files could not be read, so it is scored to be safe' }
+  const shown = files.filter((f) => prefixes.some((p) => f.startsWith(p) || f.includes(`/${p}`)))
+  return shown.length ? { public: true, why: `it changes ${shown.slice(0, 3).join(', ')}${shown.length > 3 ? ` and ${shown.length - 3} more` : ''}` } : { public: false, why: 'nothing it changes is seen by the public' }
 }
 
 function readJson(file) {
