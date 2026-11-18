@@ -30,6 +30,10 @@
 }
 .hud.studio[data-plates='night'] .brainmap { --bm-void: #020309; --bm-board: #121519; --bm-dot: #262c35; border-color: #3a414c; }
 .hud.studio .brainmap[hidden] { display: none; }
+/* The map's overlay lets the mouse through to the yard below; Engram is a view of its own and takes it. */
+.hud.studio .brainmap { pointer-events: auto; }
+.brainmap .bm-hint, .brainmap .bm-tip, .brainmap .bf-labels { pointer-events: none; }
+.brainmap .bf-label { pointer-events: auto; }
 .hud.studio-chatting .brainmap { right: 388px; }
 
 /* ── the bar ─────────────────────────────────────────────────────────────────── */
