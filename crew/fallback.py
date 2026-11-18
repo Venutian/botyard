@@ -443,6 +443,8 @@ def route_checks(call=call, now=None):
             started = datetime.fromisoformat(run['createdAt'].replace('Z', '+00:00')).timestamp()
             if now - started < CHECK_REST_FOR:
                 rest_engine(ai, now=now)
+    rows = call('GET', f'/companies/{COMPANY}/projects')
+    project_names = {p['id']: p['name'] for p in rows if isinstance(p, dict)} if isinstance(rows, list) else {}
     moves = []
     for agent_id, now_on in ours.items():
         for job in call('GET', f"/companies/{COMPANY}/issues?assigneeAgentId={agent_id}&status=todo"):
@@ -455,7 +457,8 @@ def route_checks(call=call, now=None):
             built_on = (re.findall(r'built-on: (\S+) -->', text) or [None])[0]
             family = bots.free_family(built_on) if built_on and built_on != 'None' else None
             allowed = (MARK_ENGINES.findall(text) or [''])[0].split(',')
-            never = tuple(ai for ai in ('codex', 'gemini', 'claude') if allowed != [''] and ai not in allowed)
+            never = {ai for ai in ('codex', 'gemini', 'claude') if allowed != [''] and ai not in allowed}
+            never = tuple(never | set(checker_never(spec, project_names.get(job.get('projectId')))))
             pick = check_engine(bots, files.check_order(slug), family, built_by, waited, never, have=set(found))
             order = files.check_order(slug)
             # Only down the order, so a check never flips back and forth; up again only when its lane is resting.

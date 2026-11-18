@@ -241,6 +241,8 @@ class Routing(Lanes):
             return self.agents
         if 'heartbeat-runs' in path:
             return []
+        if path.endswith('/projects'):
+            return [{'id': 'p-hidden', 'name': 'Hidden Project'}, {'id': 'p-open', 'name': 'Open Project'}]
         if '/issues?assigneeAgentId=' in path:
             return self.jobs[path.split('assigneeAgentId=')[1].split('&')[0]]
         return {}
@@ -287,6 +289,14 @@ class Routing(Lanes):
         self.jobs['a-codex'] = [{**self.job(), 'updatedAt': fresh}]
         fb.route_checks(self.call, now=1795000010)
         self.assertEqual([b['assigneeAgentId'] for m, p, b in self.sent if m == 'PATCH'], ['a-checker'])
+
+    def test_a_project_the_checker_keeps_on_free_models_is_not_moved_by_its_job(self):
+        spec = self.files.spec('checker')
+        self.files.spec = lambda slug, _s=spec: {**_s, 'freeOnly': ['Hidden Project']}
+        self.jobs['a-checker'] = [{**self.job(), 'projectId': 'p-hidden'}]
+        self.assertEqual(fb.route_checks(self.call, now=1795000000), [])
+        self.jobs['a-checker'] = [{**self.job(), 'projectId': 'p-open'}]
+        self.assertEqual(len(fb.route_checks(self.call, now=1795000000)), 1)
 
     def test_a_studio_with_no_lanes_changes_nothing(self):
         self.agents = [{'id': 'a-checker', 'name': 'Checker'}]
