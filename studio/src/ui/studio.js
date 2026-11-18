@@ -4,6 +4,7 @@ import './crew-map.css'
 import './marks.js'
 import './marks-change.js'
 import './marks-page.js'
+import './marks-record.js'
 import './tray.js'
 import './tracks.css'
 import { CrewMap } from './crew-map.js'
@@ -1211,6 +1212,7 @@ setView(view) {
       + (bots.length ? `<h3>Here now</h3>${bots.map((b) => `<button class="bot ${esc(b.status)}" data-bot="${esc(b.id)}"><span class="who">${this._face(b)}<i class="light"></i></span><span class="name">${esc(b.name)}</span><span class="model">${esc(b.model || '')}</span><span class="doing">${esc(b.job ? `${b.job.stage} ${b.job.title}` : b.why || 'Free')}</span></button>`).join('')}` : '')
       + projectPlan(info?.page?.plan)
       + (info?.page ? projectExtras(info.page) : '')
+      + `<h3>Reviews</h3><div class="acts"><button class="btn ghost" data-act="reviews" data-project="${esc(p.id)}" data-title="${esc(name)}">Every piece approved or sent back, with its marks</button></div>`
       + `<h3>Its place</h3><div class="acts">${shelved ? '' : `<button class="btn" data-act="rank" data-by="-1" data-project="${esc(name)}" ${at === 0 ? 'disabled' : ''}>Rank higher</button><button class="btn" data-act="rank" data-by="1" data-project="${esc(name)}" ${at === live.length - 1 ? 'disabled' : ''}>Rank lower</button>`}</div>
         <div class="acts"><button class="btn" data-act="fly" data-project="${esc(name)}">Show its bay</button><button class="btn ${shelved ? 'primary' : ''}" data-act="shelve" data-project="${esc(name)}" aria-pressed="${shelved}">${shelved ? 'Take off the shelf' : 'Put on the shelf'}</button></div>
         <div class="acts"><button class="btn ghost" data-act="project-edit" data-project="${esc(name)}">Name, folder, archive…</button></div>`

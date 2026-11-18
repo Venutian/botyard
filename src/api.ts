@@ -668,7 +668,7 @@ export type ReviewSources = { jobId: string; ref: string; title: string; chat: b
 export type DraftMark =
   | { n: number; kind: 'text'; pieceId: string; quote: string; line: number; lineEnd: number; comment: string }
   | { n: number; kind: 'picture'; pieceId: string; box: { x: number; y: number; w: number; h: number }; comment: string };
-export type SentReview = { id: string; text: string; verdict: string; marks: { n: number }[]; createdAt: string; piece: { kind: string; title: string }; jobRef: string | null; note: string; gate: { tripId: string } | null };
+export type SentReview = { id: string; text: string; verdict: string; marks: { n: number }[]; createdAt: string; piece: { kind: string; title: string }; jobRef: string | null; note: string; gate: { tripId: string } | null; cuts?: string[] };
 export type ReviewSend = {
   jobId: string; verdict: 'back' | 'approve'; note: string; piece: { kind: string; ref: string; title: string };
   gate?: { tripId: string; to?: string };

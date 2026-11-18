@@ -252,7 +252,8 @@ export function ProjectScreen({ id, connection, nav }: { id: string; connection:
               ))}
             </Group>
           ) : <Txt color={t.ink2}>Nothing open.</Txt>}
-          <Line title="Every job in this project" onPress={() => nav.push({ name: 'jobs', project: id })} last />
+          <Line title="Every job in this project" onPress={() => nav.push({ name: 'jobs', project: id })} />
+          <Line title="Reviews kept" detail="Every piece approved or sent back, with its marks" onPress={() => nav.push({ name: 'reviews', project: id, title: p.name })} last />
           {p.plan ? <PlanCard plan={p.plan} onOpen={() => nav.push({ name: 'job', id: p.plan!.id })} /> : null}
 
           {p.routines.length ? (

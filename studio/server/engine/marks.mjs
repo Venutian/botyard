@@ -20,6 +20,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { ownerOnly } from './caller.mjs'
 import { cropMark } from './crop.mjs'
+import { displayOf } from './codes.mjs'
 import { attach, fileOf } from './files.mjs'
 import { answerGate, tripView } from './tracks.mjs'
 import { MOST_FILES_PER_COMMENT, Refused, addComment } from './write.mjs'
@@ -259,7 +260,7 @@ export function sendReview(store, jobRef, body = {}, ctx = {}) {
     commentId = comment.id
   }
   const review = {
-    id, companyId: job.companyId, jobId: job.id, jobRef: job.identifier || null, projectId: job.projectId || null, botId: job.assigneeAgentId || null,
+    id, companyId: job.companyId, jobId: job.id, jobRef: job.identifier ? displayOf(store, job.identifier) || job.identifier : null, projectId: job.projectId || null, botId: job.assigneeAgentId || null,
     piece, verdict, note, marks, text, commentId, gate: gate ? { tripId: gate.tripId, stepId: gate.stepId, to: body.gate?.to || null } : null,
     cuts, createdAt: iso(now), by: 'owner',
   }

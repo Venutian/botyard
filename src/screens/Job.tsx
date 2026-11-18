@@ -423,6 +423,7 @@ export function JobScreen({ id, connection, crew, nav }: { id: string; connectio
               );
             })}
             <Button label="Review: mark what to change" kind="quiet" icon="pin" onPress={() => nav.push({ name: 'review', job: id })} />
+            <Button label="Reviews kept" kind="quiet" icon="clock" onPress={() => nav.push({ name: 'reviews', job: id, title: job.ref })} />
             <Field label="Reply to the bots" value={text} onChangeText={setText} multiline tall maxLength={8000} placeholder="Answer a question or change the plan" />
             <Button label="Send" onPress={send} busy={busy} disabled={!text.trim()} />
             {closed ? (
