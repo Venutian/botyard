@@ -2,6 +2,10 @@
  * The owner's notes vault, read for the Brain view: any folder of markdown notes (an Obsidian-style vault),
  * read-only. Botyard never writes to it; editing stays in the files.
  *
+ * The owner may edit a note or start a new one from the page (never a bot, never from the phone door); a save is
+ * refused when the file changed since it was opened, or when the text looks like it holds a secret. Nothing is
+ * ever deleted here.
+ *
  * Which folder: `BOTYARD_BRAIN_DIR`, else `config/brain.json` `{ "folder": "..." }` (set from the page by the
  * person at this computer), else, in the demo yard, the made-up vault in `studio/demo/brain/`.
  *
@@ -12,6 +16,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { configDir, studioRoot } from './home.mjs'
 
 export const DEMO_BRAIN = () => path.join(studioRoot(), 'demo', 'brain')
@@ -174,8 +179,55 @@ export function brainNote(id, folder = brainFolder()) {
   const file = path.join(folder, note.path)
   // Never outside the vault, whatever the name says.
   if (!path.resolve(file).startsWith(path.resolve(folder) + path.sep)) throw Object.assign(new Error('Not in the vault'), { status: 400 })
-  const { data, body } = frontmatter(fs.readFileSync(file, 'utf8'))
-  return { ...note, meta: data, text: body.trim() }
+  const raw = fs.readFileSync(file, 'utf8')
+  const { data, body } = frontmatter(raw)
+  return { ...note, meta: data, text: body.trim(), raw, version: versionOf(raw) }
+}
+
+const versionOf = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16)
+
+/** What must never be saved in the notes: keys, tokens, passwords, card numbers (the backup refuses them too). */
+const SECRET = [
+  /\b(sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,})/, /\b(ghp|gho|ghs|ghu|github_pat)_[A-Za-z0-9_]{20,}/, /\bAKIA[0-9A-Z]{16}\b/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\./,
+  /\b(password|passwd|pwd|passcode)\s*[:=]\s*\S{4,}/i, /\b(api[_ -]?key|secret|token)\s*[:=]\s*[A-Za-z0-9_\-]{12,}/i,
+]
+const luhn = (digits) => { let t = 0; let alt = false; for (let i = digits.length - 1; i >= 0; i -= 1) { let n = Number(digits[i]); if (alt) n = n * 2 > 9 ? n * 2 - 9 : n * 2; t += n; alt = !alt } return t % 10 === 0 }
+export function looksSecret(text) {
+  if (SECRET.some((rx) => rx.test(text))) return true
+  return [...String(text).matchAll(/\b(?:\d[ -]?){13,19}\b/g)].some((m) => { const d = m[0].replace(/\D/g, ''); return luhn(d) && !/^(19|20)\d{6,}/.test(d) })
+}
+
+function writeAtomic(file, text) {
+  fs.writeFileSync(`${file}.tmp`, text)
+  fs.renameSync(`${file}.tmp`, file)
+}
+
+/** Save a note's whole text (frontmatter included). `version` is what the page opened; a newer file wins. */
+export function saveNote({ id, text, version }, folder = brainFolder()) {
+  const note = brainNote(String(id || ''), folder)
+  if (typeof text !== 'string' || !text.trim()) throw Object.assign(new Error('A note cannot be saved empty'), { status: 400 })
+  if (text.length > MAX_BYTES) throw Object.assign(new Error('That note is too long to save here'), { status: 413 })
+  if (version !== note.version) throw Object.assign(new Error('This note changed since you opened it. Open it again to see the newer text.'), { status: 409 })
+  if (looksSecret(text)) throw Object.assign(new Error('That looks like a password, key or card number. Keep it out of the notes.'), { status: 400 })
+  writeAtomic(path.join(folder, note.path), text.endsWith('\n') ? text : `${text}\n`)
+  cache = { key: '', value: null }
+  return brainNote(note.id, folder)
+}
+
+/** Start a note in inbox/ (unsorted until the owner files it): a title, and the text under it. */
+export function newNote({ title, text = '' }, folder = brainFolder(), today = new Date().toISOString().slice(0, 10)) {
+  const name = String(title || '').trim().slice(0, 120)
+  if (!name) throw Object.assign(new Error('Give the note a title'), { status: 400 })
+  if (looksSecret(`${name}\n${text}`)) throw Object.assign(new Error('That looks like a password, key or card number. Keep it out of the notes.'), { status: 400 })
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'note'
+  const dir = path.join(folder, 'inbox')
+  fs.mkdirSync(dir, { recursive: true })
+  let file = path.join(dir, `${today}-${slug}.md`)
+  for (let n = 2; fs.existsSync(file); n += 1) file = path.join(dir, `${today}-${slug}-${n}.md`)
+  writeAtomic(file, `---\ntype: inbox\ndate: ${today}\n---\n# ${name}\n\n${String(text).trim()}\n`)
+  cache = { key: '', value: null }
+  return brainNote(path.basename(file, '.md'), folder)
 }
 
 /**
@@ -185,6 +237,8 @@ export function brainNote(id, folder = brainFolder()) {
  *
  *   GET  <base>            the map: notes without their text, areas, date span
  *   GET  <base>/note?id=   one note's text
+ *   POST <base>/note       { id, text, version }: save a note's whole text (the owner's page only)
+ *   POST <base>/new        { title, text }: start a note in inbox/ (the owner's page only)
  *   POST <base>/folder     { folder }: where the notes are (the person at this computer only)
  *
  * Answers true when it answered.
@@ -199,7 +253,13 @@ export async function brainRoute(req, res, { pathname, query, base, send, readBo
   try {
     if (pathname === base && req.method === 'GET') send(res, 200, readBrain())
     else if (pathname === `${base}/note` && req.method === 'GET') send(res, 200, brainNote(String(query.get('id') || '')))
-    else if (pathname === `${base}/folder` && req.method === 'POST') {
+    else if (pathname === `${base}/note` && req.method === 'POST') {
+      if (!local) send(res, 403, { error: 'Notes are edited on the PC page' })
+      else send(res, 200, saveNote(await readBody(req)))
+    } else if (pathname === `${base}/new` && req.method === 'POST') {
+      if (!local) send(res, 403, { error: 'Notes are written on the PC page' })
+      else send(res, 201, newNote(await readBody(req)))
+    } else if (pathname === `${base}/folder` && req.method === 'POST') {
       if (!local) send(res, 403, { error: 'The notes folder is set at the computer it is on' })
       else send(res, 200, setBrainFolder((await readBody(req)).folder))
     } else send(res, 405, { error: 'Not here' })
