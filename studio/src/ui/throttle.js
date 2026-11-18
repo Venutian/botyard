@@ -1,5 +1,5 @@
 /**
- * The top bar's throttle (PC load) control: a radio group of five levels (None, Light, Medium, Heavy, Full),
+ * The top bar's throttle (PC load) control: a radio group of six levels (Max, None, Light, Medium, Heavy, Full),
  * a state line, and a small popover to set Day and Night apart. Pure HTML from the state, so it is
  * tested in Node; `mountThrottle` wires it to the server's /api/studio/throttle.
  * Full is the only level that asks first, and while it holds the control offers Resume.
@@ -8,12 +8,13 @@
 
 const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-export const LEVELS = ['none', 'light', 'medium', 'heavy', 'full']
-export const NAMES = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
+export const LEVELS = ['max', 'none', 'light', 'medium', 'heavy', 'full']
+export const NAMES = { max: 'Max', none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
 export const CONFIRM = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.'
 const STOP = '<svg class="ld-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
 const HINTS = {
-  none: 'No throttle: the crew does the most work at once',
+  max: 'Max: no slowdown and no weekly Claude limit; the week may run out early',
+  none: 'No throttle: the crew does the most work at once, within the weekly Claude limit',
   light: 'Light throttle: a little less work at once',
   medium: 'Medium throttle: about half the work at once',
   heavy: 'Heavy throttle: the least work at once, the PC stays quiet',

@@ -18,7 +18,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { configDir } from './home.mjs'
 
-export const LEVELS = ['none', 'light', 'medium', 'heavy', 'full']
+export const LEVELS = ['max', 'none', 'light', 'medium', 'heavy', 'full']
 export const SCOPES = ['both', 'day', 'night']
 const WAIT_MS = 15_000
 
@@ -69,7 +69,7 @@ export function readShow(text) {
   return { day: level(j.day) || now, night: level(j.night) || now, now, paused, heldGb, note }
 }
 
-const NAMES = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
+const NAMES = { max: 'Max', none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
 
 /** The one line under the control. */
 export function stateLine(s) {

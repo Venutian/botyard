@@ -5,14 +5,14 @@ import { useLook } from '../theme/prefs';
 import { ask } from './ask';
 import { Label, Segmented, styles as kit, Txt } from './kit';
 
-const NAMES: Record<LoadLevel, string> = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' };
-const LEVELS: LoadLevel[] = ['none', 'light', 'medium', 'heavy', 'full'];
+const NAMES: Record<LoadLevel, string> = { max: 'Max', none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' };
+const LEVELS: LoadLevel[] = ['max', 'none', 'light', 'medium', 'heavy', 'full'];
 const SCOPES = [{ id: 'both', name: 'Day and night' }, { id: 'day', name: 'Day only' }, { id: 'night', name: 'Night only' }] as const;
 type Scope = (typeof SCOPES)[number]['id'];
 export const FULL_QUESTION = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.';
 
 /**
- * How hard the crew may work the PC, set from the phone as the owner: None, Light, Medium, Heavy, Full.
+ * How hard the crew may work the PC, set from the phone as the owner: Max, None, Light, Medium, Heavy, Full.
  * Shows the level in force now and, on Full, how many jobs are paused and the memory they hold.
  * A PC that names no throttle tool answers `configured: false`, and nothing is shown.
  */

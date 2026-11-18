@@ -58,6 +58,10 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 QUIET = 240
 MOST_SWITCHES = 8
 BUSY = botyard_home.state('free-busy.json')
+# A provider that answers 429 ("Too Many Requests", "usage limit reached") rests here for REST_FOR seconds: every run
+# picks another provider's model meanwhile, instead of each run waiting out the same provider in turn.
+RESTING = botyard_home.state('free-rest.json')
+REST_FOR = 600
 # The same call with nothing changed: this many is a loop.
 REPEATS = 5
 # How old the kept listing of the tool's models may be before a run asks the tool again.
@@ -292,6 +296,46 @@ def alive(pid):
         return False
 
 
+def provider_of(model):
+    return (model or '').split('/')[0]
+
+
+def resting(now=None):
+    """The providers resting after a 429 now, with until when."""
+    now = now or time.time()
+    try:
+        with open(RESTING) as f:
+            got = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {p: t for p, t in got.items() if isinstance(t, (int, float)) and t > now} if isinstance(got, dict) else {}
+
+
+def rest(model, seconds=REST_FOR, now=None):
+    """Rests the model's provider for `seconds` after a 429. Returns the provider."""
+    provider, now = provider_of(model), now or time.time()
+    if not provider:
+        return provider
+    with open(RESTING, 'a+') as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            got = json.loads(f.read() or '{}')
+        except ValueError:
+            got = {}
+        got = {p: t for p, t in (got.items() if isinstance(got, dict) else []) if isinstance(t, (int, float)) and t > now}
+        got[provider] = max(got.get(provider, 0), now + seconds)
+        f.seek(0)
+        f.truncate()
+        json.dump(got, f)
+    return provider
+
+
+def light_first():
+    """True for a run whose bot takes the light free models first (a scout), keeping the strong ones for builds and checks."""
+    return os.environ.get('BOTYARD_FREE_TIER') == 'light'
+
+
 def claim(model):
     """Records this run's model, or none, and returns the models the free builder's other live runs are on."""
     with open(BUSY, 'a+') as f:
@@ -384,6 +428,14 @@ def pick(bots, avoid_family=None):
     families = {bots.free_family(m) for m in used} | {avoid_family} | NEVER
     aside = bots.free_aside()
     rows = [(m, f, t) for m, f, t in bots.free_list() if m not in aside]
+    rested = resting()
+    awake = [r for r in rows if provider_of(r[0]) not in rested]
+    rows = awake or rows
+    if light_first() and not NEVER:
+        light = [m for m, f, t in rows if t != 'strong']
+        for choice in ([m for m in light if m not in used], light):
+            if choice:
+                return choice[0]
     if NEVER:
         other = [(m, f, t) for m, f, t in rows if f not in NEVER]
         for choice in ([m for m, f, t in other if t == 'strong' and m not in used and f not in families],
@@ -622,6 +674,24 @@ def main():
             prompt = LOOPED.format(call=what, times=times)
             loops = Loops()
             continue
+        # A 429 rests the provider for REST_FOR and the run goes on at once, same session, on another provider's model
+        # that answers (18 Nov: runs waited 20, 60 and 180 seconds on a provider that kept saying "usage limit
+        # reached", 57 times in 6 hours). Only when no other provider answers is it waited out below.
+        low = (failed or '').lower()
+        if (code and failed and any(w in low for w in BUSY_WORDS + ('usage limit',))
+                and not provider_wide(failed, model) and not any(w in low for w in guards.NOT_TRANSIENT)):
+            tired = rest(model)
+            nxt, bots = next_working(fallback, bots, avoid_family=None)
+            if nxt and provider_of(nxt) != tired:
+                note(f'The free builder met a 429 on {model} ({failed[:80]}); {tired} rests {REST_FOR // 60} minutes, going on with {nxt}, same session')
+                sys.stderr.write(f'{tired} is busy (429); continuing the same session on {nxt}.\n')
+                args, model = with_model(args, nxt, session), nxt
+                claim(model)
+                if session:
+                    prompt = guards.RETRY.format(why=failed[:80])
+                loops = Loops()
+                retried = 0
+                continue
         # STANDARDS.md rule 15: a burst limit or a network error is waited out and the same call tried again, on
         # this model in this session, 20, 60 and 180 seconds later. Only a fourth failure in a row counts.
         if code and failed and guards.transient(failed) and retried < len(guards.RETRY_WAITS):
