@@ -5,7 +5,8 @@ import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
 import { Icon } from '../ui/Icon';
-import { Button, Field, Group, Label, Row, styles as kit, Toggle, Txt, useTap } from '../ui/kit';
+import { BOT_WORDS, DESCRIBE } from '../ui/describe';
+import { Button, Field, Group, Label, Row, styles as kit, Toggle, Txt, useTap, Words } from '../ui/kit';
 import { Markdown } from '../ui/Markdown';
 import { Line, Page, plural, Tag, tokens, useLoad } from '../ui/page';
 import { JobLine } from './Jobs';
@@ -28,7 +29,7 @@ function Move({ icon, label, disabled, onPress }: { icon: 'up' | 'down'; label: 
   const { t } = useLook();
   const tap = useTap();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => { tap(); onPress(); }}
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={icon === 'up' ? DESCRIBE.act['Rank higher'] : DESCRIBE.act['Rank lower']} accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => { tap(); onPress(); }}
       style={({ pressed }) => [styles.move, { backgroundColor: t.control, borderColor: t.edge, opacity: disabled ? 0.3 : 1 }, pressed && kit.dim]}>
       <Icon name={icon} size={18} color={t.ink} />
     </Pressable>
@@ -100,13 +101,13 @@ export function ProjectsScreen({ connection, nav }: { connection: Connection; na
           <Label>On the shelf: no new work</Label>
           <Group>
             {shelf.map((project, index) => (
-              <Row key={project.id} title={project.name} detail={countsLine(project)} last={index === shelf.length - 1}
-                right={<Toggle label={`${project.name} is active`} value={false} onChange={(on) => shelve(project, on)} />} />
+              <Row key={project.id} title={project.name} detail={`${countsLine(project)}. Switch on: ${DESCRIBE.act['Take off the shelf'].toLowerCase()}`} last={index === shelf.length - 1}
+                right={<Toggle label={`${project.name} is active`} hint={DESCRIBE.act['Take off the shelf']} value={false} onChange={(on) => shelve(project, on)} />} />
             ))}
           </Group>
         </>
       ) : null}
-      {live.length ? <Txt size={12} color={t.ink3}>Open a project to put it on the shelf. The lead hears of a new order within half an hour.</Txt> : null}
+      {live.length ? <Txt size={12} color={t.ink3}>{`Up arrow: ${DESCRIBE.act['Rank higher'].toLowerCase()}. Down arrow: ${DESCRIBE.act['Rank lower'].toLowerCase()}. Open a project to put it on the shelf. The lead hears of a new order within half an hour.`}</Txt> : null}
       {data && !data.projects.length ? <Txt color={t.ink2}>This studio has no projects yet. Add the folder your code is in, and the crew can work there.</Txt> : null}
       {data ? (
         <Group>
@@ -176,6 +177,7 @@ function PlanCard({ plan, onOpen }: { plan: ProjectPlan; onOpen: () => void }) {
   return (
     <>
       <Label>The lead's plan</Label>
+      <Words words={[state]} />
       <Group>
         <Line title={plan.title} detail={plan.goal ? `Aim: ${plan.goal}` : undefined} note={[plan.ref, state].filter(Boolean).join(', ')} onPress={onOpen} last={!plan.report} />
         {plan.report ? <Line title={open ? 'Hide the steps' : 'The steps and why'} onPress={() => setOpen(!open)} last /> : null}
@@ -225,7 +227,7 @@ export function ProjectScreen({ id, connection, nav }: { id: string; connection:
             }} /> : null}
           <Group>
             <Row title={onShelf ? 'On the shelf' : 'Active'} detail={onShelf ? 'The lead gives nobody work here until you take it off' : 'The lead can give the crew work here'} last={!p.paused && !p.budget}
-              right={<Toggle label={`${p.name} is active`} value={!onShelf} onChange={flip} />} />
+              right={<Toggle label={`${p.name} is active`} hint={onShelf ? DESCRIBE.act['Take off the shelf'] : DESCRIBE.act['Put on the shelf']} value={!onShelf} onChange={flip} />} />
             {p.paused ? <Row title="Paused" detail={p.paused} last={!p.budget} /> : null}
             {p.budget ? <Row title={`Budget: ${Math.round(p.budget.share)} % used`} detail={`${p.budget.used} of ${p.budget.amount} ${p.budget.metric}, ${p.budget.window}`} last /> : null}
           </Group>
@@ -233,6 +235,7 @@ export function ProjectScreen({ id, connection, nav }: { id: string; connection:
           {p.bots.length ? (
             <>
               <Label>Here now</Label>
+              <Words from={BOT_WORDS} words={p.bots.map((b) => (b.status === 'running' ? 'Working' : b.status))} />
               <Group>
                 {p.bots.map((bot, index) => (
                   <Line key={bot.id} title={bot.name} detail={bot.job ? `${bot.job.stage}: ${bot.job.ref} ${bot.job.title}` : bot.why || 'Free'} note={bot.model}

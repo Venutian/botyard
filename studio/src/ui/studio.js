@@ -9,6 +9,7 @@ import './marks-record.js'
 import './tray.js'
 import './tracks.css'
 import { CrewMap } from './crew-map.js'
+import { DESCRIBE } from './describe.js'
 import { BrainMap } from './brain-map.js'
 import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
@@ -1287,7 +1288,7 @@ setView(view) {
         </div>`
         : `<div class="row"><button class="line ${l.late ? 'late' : ''}" style="${l.bot ? botStyle(l.bot) : ''}" data-line="${esc(l.id)}" data-job="${esc(l.ref)}" data-bot="${esc(m.bots.find((b) => b.name === l.bot)?.id || '')}">
         <span class="ref">${esc(l.ref)}</span><span class="title">${esc(l.title)}</span>
-        <span class="stage ${esc(STAGE[l.pill || l.stage]?.[1] || '')}" title="${esc(l.steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', '))}">${esc(STAGE[l.pill || l.stage]?.[0] || l.stage)}</span>
+        <span class="stage ${esc(STAGE[l.pill || l.stage]?.[1] || '')}" title="${esc([DESCRIBE.status[STAGE[l.pill || l.stage]?.[0]], l.steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', ')].filter(Boolean).join('. '))}">${esc(STAGE[l.pill || l.stage]?.[0] || l.stage)}</span>
         <span class="note">${esc(noteOf(l))}</span>
       </button>${CLEARABLE.has(l.stage) ? `<button class="clear" data-clear="${esc(l.id)}" title="Clear ${esc(l.ref)}: no longer needed" aria-label="Clear ${esc(l.ref)}">${CLOSE_ICON}</button>` : ''}</div>`)).join('')
       : `<p class="none">${none}</p>`

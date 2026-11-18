@@ -14,7 +14,8 @@ import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { ProofRow } from '../ui/Proof';
 import { clock } from '../ui/time';
-import { Button, Chips, Field, GlassButton, Group, Label, Segmented, plainField, Title, Txt, useTap } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, GlassButton, Group, Label, Segmented, plainField, Title, Txt, useTap, Words } from '../ui/kit';
 import { Small, useAct } from '../ui/form';
 import { ago, Line, plural, seconds, Tag, tokens } from '../ui/page';
 import { RunLine } from './Crew';
@@ -74,7 +75,8 @@ export function NewJobScreen({ connection, crew, nav }: { connection: Connection
         ) : null}
         <View style={styles.choice}>
           <Txt size={14} weight={600} color={t.ink2}>Who starts it</Txt>
-          <Chips value={owner} options={lead ? [{ id: NONE, name: 'The lead decides' }, ...bots] : [{ id: NONE, name: 'Nobody yet' }, ...bots]} onChange={setOwner} />
+          <Chips value={owner} options={lead ? [{ id: NONE, name: 'The lead decides' }, ...bots] : [{ id: NONE, name: 'Nobody yet' }, ...bots]} onChange={setOwner}
+            hints={{ [NONE]: lead ? 'The lead reads the job and picks who does it' : 'The job waits until you give it to a bot' }} />
         </View>
         <View style={styles.choice}>
           <Txt size={14} weight={600} color={t.ink2}>Priority</Txt>
@@ -160,6 +162,7 @@ export function ConfirmCard({ question, onAccept, onReject, busy }: { question: 
         <View style={styles.flex}><Button label={question.accept} onPress={onAccept} busy={busy} /></View>
         <View style={styles.flex}><Button label={question.reject} kind="danger" onPress={onReject} busy={busy} /></View>
       </View>
+      <Txt size={13} color={t.ink2}>{DESCRIBE.gate.confirm}</Txt>
     </View>
   );
 }
@@ -341,6 +344,7 @@ export function JobScreen({ id, connection, crew, nav }: { id: string; connectio
           <>
             <Txt size={26} weight={700}>{job.title}</Txt>
             <Txt size={14} color={t.ink2}>{[job.ref, STATUS_WORDS[job.status] ?? job.status, job.project, job.bot].filter(Boolean).join(', ')}</Txt>
+            <Words words={[STATUS_WORDS[job.status] ?? job.status]} />
 
             {more?.blockedBy.length ? (
               <>
@@ -354,7 +358,7 @@ export function JobScreen({ id, connection, crew, nav }: { id: string; connectio
                 <View style={styles.flex}>
                   <Txt size={15} weight={600}>{job.run.bot || 'A bot'} is working on this</Txt>
                 </View>
-                <Button label="Stop" kind="danger" busy={acting} onPress={() => confirm('Stop this run?', 'The job stays open. Comment on it to start it again.', 'Stop', () => jobAction(connection, id, 'stop'))} />
+                <Button label="Stop" kind="danger" hint={DESCRIBE.act['Stop the run']} busy={acting} onPress={() => confirm('Stop this run?', 'The job stays open. Comment on it to start it again.', 'Stop', () => jobAction(connection, id, 'stop'))} />
               </View>
             ) : null}
             {job.run?.why ? (
@@ -422,14 +426,14 @@ export function JobScreen({ id, connection, crew, nav }: { id: string; connectio
                 </View>
               );
             })}
-            <Button label="Review: mark what to change" kind="quiet" icon="pin" onPress={() => nav.push({ name: 'review', job: id })} />
-            <Button label="Reviews kept" kind="quiet" icon="clock" onPress={() => nav.push({ name: 'reviews', job: id, title: job.ref })} />
+            <Button label="Review: mark what to change" kind="quiet" icon="pin" hint={DESCRIBE.act['Mark exact places']} onPress={() => nav.push({ name: 'review', job: id })} />
+            <Button label="Reviews kept" kind="quiet" icon="clock" hint={DESCRIBE.act['Reviews kept']} onPress={() => nav.push({ name: 'reviews', job: id, title: job.ref })} />
             <Field label="Reply to the bots" value={text} onChangeText={setText} multiline tall maxLength={8000} placeholder="Answer a question or change the plan" />
             <Button label="Send" onPress={send} busy={busy} disabled={!text.trim()} />
             {closed ? (
-              <Button label="Reopen this job" kind="quiet" icon="reset" busy={acting} onPress={() => act(() => jobAction(connection, id, 'reopen'))} />
+              <Button label="Reopen this job" kind="quiet" icon="reset" hint={DESCRIBE.act.Reopen} busy={acting} onPress={() => act(() => jobAction(connection, id, 'reopen'))} />
             ) : (
-              <Button label="Cancel this job" kind="danger" busy={acting} onPress={() => confirm('Cancel this job?', 'You can reopen it later.', 'Cancel job', () => jobAction(connection, id, 'cancel'))} />
+              <Button label="Cancel this job" kind="danger" hint={DESCRIBE.act['Cancel the job']} busy={acting} onPress={() => confirm('Cancel this job?', 'You can reopen it later.', 'Cancel job', () => jobAction(connection, id, 'cancel'))} />
             )}
           </>
         )}

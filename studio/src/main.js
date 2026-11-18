@@ -6,6 +6,7 @@ import { Shell } from './shell/shell.js'
 import { Studio } from './ui/studio.js'
 import { waitingCount } from './ui/needs-count.js'
 import { keepFresh } from './ui/fresh.js'
+import { watchDescriptions } from './ui/describe-controls.js'
 
 /**
  * Botyard's page: the yard drawn on a canvas, the panels over it, and the few things that join
@@ -16,6 +17,8 @@ import { keepFresh } from './ui/fresh.js'
 const ASK_EVERY_MS = 5000
 // A window left open (the desktop app, a browser tab) reloads itself once the service hands out a new build.
 keepFresh()
+// Buttons whose label could be misread get a plain tooltip, whichever panel draws them.
+watchDescriptions()
 const app = document.getElementById('app')
 const settings = new MapSettings()
 const stage = new Stage(app, settings)

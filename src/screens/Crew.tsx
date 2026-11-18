@@ -1,7 +1,8 @@
 import { Connection, CrewBot, getBots, RunRow } from '../api';
 import { Nav } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
-import { GlassButton, Group, Label, Txt } from '../ui/kit';
+import { BOT_WORDS, DESCRIBE } from '../ui/describe';
+import { GlassButton, Group, Label, Txt, Words } from '../ui/kit';
 import { ago, Line, Page, Tag, tokens, useLoad } from '../ui/page';
 
 const REFRESH_MS = 20_000;
@@ -54,7 +55,7 @@ export function BotsScreen({ connection, nav }: { connection: Connection; nav: N
   const { data, error, load } = useLoad(() => getBots(connection), [connection], REFRESH_MS);
   const wasteful = data?.bots.filter((b) => b.waste?.flagged) ?? [];
   return (
-    <Page title="Bots" onBack={nav.back} onRefresh={load} error={error} loading={!data} right={<GlassButton icon="plus" label="Add a bot" onPress={() => nav.push({ name: 'botNew' })} />}>
+    <Page title="Bots" onBack={nav.back} onRefresh={load} error={error} loading={!data} right={<GlassButton icon="plus" label="Add a bot" hint={DESCRIBE.icon.addBot} onPress={() => nav.push({ name: 'botNew' })} />}>
       {wasteful.length ? (
         <Txt size={14} color={t.bad}>
           {wasteful.map((b) => `${b.name}: ${wasteWords(b.waste!.share)}${b.waste!.causes[0] ? ` (${b.waste!.causes[0].text})` : ''}`).join('. ')}.
@@ -63,6 +64,7 @@ export function BotsScreen({ connection, nav }: { connection: Connection; nav: N
       {data ? (
         <>
           <Label>{`${data.bots.filter((b) => b.status === 'running').length} working, ${data.bots.filter((b) => b.status === 'paused').length} resting or paused`}</Label>
+          <Words from={BOT_WORDS} words={data.bots.map((b) => (b.resting ? 'Resting' : b.state))} />
           {data.bots.length ? (
             <Group>
               {data.bots.map((bot, index) => <BotLine key={bot.id} bot={bot} last={index === data.bots.length - 1} onOpen={() => nav.push({ name: 'bot', botId: bot.id })} />)}

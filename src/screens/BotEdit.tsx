@@ -13,7 +13,8 @@ import { portraitOf } from '../mascot/look';
 import { useLook } from '../theme/prefs';
 import { ask, tell } from '../ui/ask';
 import { Choice, leaving, MONO, Small, useAct, useLeaveGuard } from '../ui/form';
-import { Button, Chips, Field, Group, Label, Row, Toggle, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, Group, Label, Row, Toggle, Txt, Words } from '../ui/kit';
 import { Line, Page, plural, Tag, useLoad } from '../ui/page';
 
 /** What the form holds while it is typed in: numbers stay text until they are sent. */
@@ -117,10 +118,12 @@ export function BotForm({ draft, set, choices, was, ready, adding, kept }: {
         <View style={styles.pick}>
           <Txt size={14} weight={600} color={t.ink2}>Kind of work</Txt>
           <Chips value={draft.role} options={choices.roles} onChange={put('role')} />
+          <Txt size={13} color={t.ink2}>{DESCRIBE.botEdit.role}</Txt>
         </View>
         <View style={styles.pick}>
           <Txt size={14} weight={600} color={t.ink2}>Answers to</Txt>
           <Chips value={draft.reportsTo} options={[{ id: '', name: 'Nobody: it leads the crew' }, ...choices.bosses]} onChange={put('reportsTo')} />
+          <Txt size={13} color={t.ink2}>{DESCRIBE.botEdit.answers}</Txt>
         </View>
       </View>
 
@@ -312,10 +315,11 @@ export function BotEditScreen({ botId, connection, nav }: { botId: string; conne
             {dirty ? <Tag text="Changed since last save" color={t.warn} /> : saved ? <Tag text="Saved" color={t.good} /> : null}
             {dirty && problem ? <Txt size={13} color={t.bad}>{problem}</Txt> : null}
             <Button label="Save changes" busy={busy === 'save'} disabled={!dirty || Boolean(problem) || Boolean(busy)} onPress={save} />
-            {dirty ? <Button label="Put it back as it was" kind="quiet" disabled={Boolean(busy)} onPress={() => setDraft(null)} /> : null}
+            {dirty ? <Button label="Put it back as it was" kind="quiet" hint={DESCRIBE.act['Put it back as it was']} disabled={Boolean(busy)} onPress={() => setDraft(null)} /> : null}
           </View>
 
           <Label>Connectors it may use</Label>
+          {s.connectors.length ? <Words from={DESCRIBE.level} words={s.connectors.map((c) => LEVEL[c.level] ?? c.level)} /> : null}
           {s.connectors.length ? (
             <Group>
               {s.connectors.map((c, index) => (

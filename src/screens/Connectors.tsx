@@ -9,7 +9,8 @@ import { checkConnector, Connection, Connector, getConnectors, setConnectorAcces
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
-import { Button, Group, Label, Row, Segmented, Toggle, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Group, Label, Row, Segmented, Toggle, Txt, Words } from '../ui/kit';
 import { ago, Line, Page, Tag, useLoad } from '../ui/page';
 
 const LEVELS = [{ id: 'off' as const, name: 'No' }, { id: 'read' as const, name: 'May look' }, { id: 'write' as const, name: 'May change' }];
@@ -40,6 +41,7 @@ export function ConnectorsScreen({ connection, nav }: { connection: Connection; 
           ) : <Txt color={t.ink2}>Nothing is connected yet.</Txt>}
           <Txt size={12} color={t.ink3}>Add a service, or sign in to one again, on the PC under Connectors: the service sends you back to that computer.</Txt>
           <Label>What the bots run on</Label>
+          <Words words={data.engines.map((e) => (e.ok ? 'Signed in' : 'Needs sign-in'))} />
           <Group>
             {data.engines.map((e, index) => (
               <Line key={e.id} title={e.name} detail={e.words} note={e.for} alert={e.fix || undefined} right={<Tag text={e.ok ? 'Signed in' : 'Needs sign-in'} color={e.ok ? t.good : t.bad} />} last={index === data.engines.length - 1} noteLines={1} />
@@ -85,7 +87,7 @@ export function ConnectorScreen({ id, connection, nav }: { id: string; connectio
             <Row title="Sign-in" detail={c.trouble || (c.signedInAt ? `${c.how === 'key' ? 'Key added' : c.how === 'open' ? 'Added' : 'Signed in'} ${ago(c.signedInAt)}` : 'Sign in on the PC, under Connectors')} right={<Tag text={c.stateWords} color={stateTone(c, t)} />} />
             <Row title="Address" detail={c.address} last />
           </Group>
-          <Button label="Check it now" kind="quiet" onPress={check} busy={busy} />
+          <Button label="Check it now" kind="quiet" hint={DESCRIBE.act['Check it now']} onPress={check} busy={busy} />
           <Label>Whose account</Label>
           <Group>
             <Row title="Is this your own account, or a business's the bots may act in?" last>

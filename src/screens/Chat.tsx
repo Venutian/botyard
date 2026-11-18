@@ -11,6 +11,7 @@ import { tell } from '../ui/ask';
 import { Bubble, TypingBubble } from '../ui/Bubble';
 import { ChatPictures } from '../ui/Proof';
 import { Icon } from '../ui/Icon';
+import { DESCRIBE } from '../ui/describe';
 import { Button, GlassButton, plainField, Txt, useTap } from '../ui/kit';
 import { Wallpaper } from '../ui/Wallpaper';
 import { ChoiceCard, ConfirmCard } from './Job';
@@ -266,8 +267,8 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
             {subtitle ? <Txt size={11} color={thread?.working ? t.accentText : t.ink2} numberOfLines={1}>{subtitle}</Txt> : null}
           </View>
         </Pressable>
-        <GlassButton icon="pin" label={`Review what ${who.name} said: mark what to change`} onPress={() => nav.push({ name: 'review', bot: botId })} />
-        <GlassButton icon="more" label={`Customize ${who.name}`} onPress={() => nav.push({ name: 'bot', botId })} />
+        <GlassButton icon="pin" label={`Review what ${who.name} said: mark what to change`} hint={DESCRIBE.icon.review} onPress={() => nav.push({ name: 'review', bot: botId })} />
+        <GlassButton icon="more" label={`Customize ${who.name}`} hint={DESCRIBE.icon.customize} onPress={() => nav.push({ name: 'bot', botId })} />
       </View>
 
       {waiting.length ? (
@@ -312,7 +313,7 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
           {pictures.map((pic, n) => (
             <View key={`${pic.uri}-${n}`} style={[styles.trayItem, { borderColor: t.outline ? t.ink : t.line, borderWidth: t.outline ? 2 : 1 }]}>
               <Image source={{ uri: pic.uri }} style={styles.trayImage} resizeMode="cover" accessibilityLabel={pic.name} />
-              <Pressable accessibilityRole="button" accessibilityLabel={`Take ${pic.name} out`} hitSlop={8} onPress={() => setPictures((now) => now.filter((_, i) => i !== n))} style={styles.trayDrop}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Take ${pic.name} out`} accessibilityHint={DESCRIBE.icon.takeOut} hitSlop={8} onPress={() => setPictures((now) => now.filter((_, i) => i !== n))} style={styles.trayDrop}>
                 <Icon name="close" size={14} color="#ffffff" weight={2.6} />
               </Pressable>
             </View>
@@ -321,8 +322,8 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
       ) : null}
 
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <GlassButton icon={quick ? 'close' : 'plus'} label={quick ? 'Close quick messages' : 'Open quick messages'} onPress={() => setQuick(!quick)} size={42} />
-        <GlassButton icon="image" label="Add a picture" onPress={pick} size={42} />
+        <GlassButton icon={quick ? 'close' : 'plus'} label={quick ? 'Close quick messages' : 'Open quick messages'} hint={quick ? DESCRIBE.icon.quickClose : DESCRIBE.icon.quick} onPress={() => setQuick(!quick)} size={42} />
+        <GlassButton icon="image" label="Add a picture" hint={DESCRIBE.icon.picture} onPress={pick} size={42} />
         <View style={[styles.pill, { backgroundColor: t.composer, borderColor: t.outline ? t.ink : t.line, borderWidth: t.hair }]}>
           <TextInput
             value={text}
@@ -343,11 +344,11 @@ export function ChatScreen({ botId, connection, crew, nav }: { botId: string; co
             style={[styles.input, font(400), plainField, { color: t.ink }]}
           />
           {text.trim() || pictures.length ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={Boolean(pending)} onPress={() => send(text)} style={({ pressed }) => [styles.send, { backgroundColor: t.accent }, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Send" accessibilityHint={DESCRIBE.icon.send} disabled={Boolean(pending)} onPress={() => send(text)} style={({ pressed }) => [styles.send, { backgroundColor: t.accent }, pressed && styles.pressed]}>
               <Icon name="send" size={19} color={t.accentInk} weight={2.6} />
             </Pressable>
           ) : CAN_TALK ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={listening ? 'Stop listening' : 'Talk'} onPress={toggle} style={({ pressed }) => [styles.send, listening && { backgroundColor: t.bad }, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={listening ? 'Stop listening' : 'Talk'} accessibilityHint={listening ? DESCRIBE.icon.stopTalk : DESCRIBE.icon.talk} onPress={toggle} style={({ pressed }) => [styles.send, listening && { backgroundColor: t.bad }, pressed && styles.pressed]}>
               <Icon name="mic" size={20} color={listening ? '#ffffff' : t.ink2} />
             </Pressable>
           ) : null}

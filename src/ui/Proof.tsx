@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, ImageSourcePropType, Modal, Pressable, Scroll
 import { ChatPicture, Connection, Proof, proofSource } from '../api';
 import { useLook } from '../theme/prefs';
 import { Icon } from './Icon';
+import { DESCRIBE } from './describe';
 import { Txt } from './kit';
 
 function useProof(connection: Connection, id: string) {
@@ -71,7 +72,7 @@ export function ProofRow({ connection, proof }: { connection: Connection; proof:
 function Viewer({ open, onClose }: { open: { source: ImageSourcePropType; name: string } | null; onClose: () => void }) {
   return (
     <Modal visible={Boolean(open)} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close the picture" onPress={onClose} style={styles.viewer}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close the picture" accessibilityHint={DESCRIBE.icon.closePicture} onPress={onClose} style={styles.viewer}>
         {open ? <Image source={open.source} style={styles.fill} resizeMode="contain" accessibilityLabel={open.name} /> : null}
         <View style={styles.caption}><Txt size={13} color="#ffffff">{open?.name}</Txt></View>
       </Pressable>

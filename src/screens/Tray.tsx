@@ -5,6 +5,7 @@ import { Connection, NeedsYou, TrayItem, TrayQuestion, dropFromTray, getSummary,
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { Icon } from '../ui/Icon';
+import { DESCRIBE } from '../ui/describe';
 import { Button, Field, GlassButton, Label, Title, Txt } from '../ui/kit';
 
 /** How the tray says what it holds. */
@@ -42,13 +43,13 @@ export function TrayBar({ connection, items, onChange }: { connection: Connectio
             <Txt size={12} color={t.ink2} numberOfLines={2}>{i.kind === 'review' ? 'Review' : i.title}: {itemWords(i)}</Txt>
             {i.error ? <Txt size={12} color={t.bad}>Not sent: {i.error}</Txt> : null}
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Take ${i.title} out of the tray`} hitSlop={10}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Take ${i.title} out of the tray`} accessibilityHint={DESCRIBE.icon.takeOut} hitSlop={10}
             onPress={async () => onChange((await dropFromTray(connection, i.key)).items)}>
             <Icon name="close" size={18} color={t.ink2} />
           </Pressable>
         </View>
       ))}
-      <Button label={items.length === 1 ? 'Send it' : `Send all ${items.length}`} icon="send" busy={busy} onPress={send} />
+      <Button label={items.length === 1 ? 'Send it' : `Send all ${items.length}`} icon="send" hint={DESCRIBE.act['Send the tray']} busy={busy} onPress={send} />
     </View>
   );
 }

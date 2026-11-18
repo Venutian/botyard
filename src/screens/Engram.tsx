@@ -5,7 +5,8 @@ import { RADIUS, SHAPE, brainDust, fieldLayout } from '../brainLayout';
 import { Brain, BrainNote, Connection, getBrain, getBrainNote } from '../api';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
-import { Chips, Field, Label, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Chips, Field, Label, Txt, Words } from '../ui/kit';
 import { Line, Page, Tag, useLoad } from '../ui/page';
 import { Markdown } from '../ui/Markdown';
 
@@ -149,6 +150,8 @@ export function EngramScreen({ connection, nav }: { connection: Connection; nav:
           <BrainField brain={brain} chosenArea={area} onArea={setArea} onNote={(id) => nav.push({ name: 'engramNote', id })} />
           <Field label="Search the notes" value={query} onChangeText={setQuery} autoCorrect={false} autoCapitalize="none" returnKeyType="search" />
           <Chips value={area} options={[{ id: '', name: 'All areas' }, ...brain.areas.map((a) => ({ id: a.id, name: `${a.name} ${a.count}` }))]} onChange={setArea} />
+          <Txt size={13} color={t.ink2}>{DESCRIBE.brain.area}</Txt>
+          <Words from={DESCRIBE.engram} words={[...(brain.notes.some((n) => n.status === 'superseded') ? ['Replaced'] : []), ...(brain.notes.some((n) => n.imported) ? ['To review'] : [])]} />
           {months.length === 0 ? <Txt color={t.ink2}>No note matches.</Txt> : null}
           {months.map((m) => (
             <View key={m.name}>

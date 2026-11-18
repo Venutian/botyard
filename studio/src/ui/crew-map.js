@@ -1,5 +1,6 @@
 
 import { inkOn } from './crew-colours.js'
+import { DESCRIBE } from './describe.js'
 
 /**
  * The crew map: the PC's home. An org chart that is also a live wiring diagram — the owner on top, the
@@ -360,25 +361,25 @@ function plateHtml(node, b, nodes, faces) {
   if (node.kind === 'owner') {
     return `<button type="button" class="cm-node cm-owner" data-node="owner" style="${style}" aria-label="${label} Open Needs you.">
       <span class="cm-you">You</span>
-      <span class="cm-needs ${node.needs ? 'on' : ''}"><b>${node.needs}</b><span>${node.needs === 1 ? 'card waits for your answer' : 'cards wait for your answer'}</span></span>
+      <span class="cm-needs ${node.needs ? 'on' : ''}" title="${esc(DESCRIBE.map.owner)}"><b>${node.needs}</b><span>${node.needs === 1 ? 'card waits for your answer' : 'cards wait for your answer'}</span></span>
     </button>`
   }
   if (node.kind === 'script') {
     return `<button type="button" class="cm-node cm-script" data-node="${esc(node.id)}" style="${style}" aria-label="${label}">
       <svg class="cm-cog" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 3.8a2.2 2.2 0 1 0 0 4.4a2.2 2.2 0 1 0 0-4.4zM6 .8v1.6M6 9.6v1.6M.8 6h1.6M9.6 6h1.6M2.3 2.3l1.1 1.1M8.6 8.6l1.1 1.1M2.3 9.7l1.1-1.1M8.6 3.4l1.1-1.1"/></svg>
-      <span class="cm-name">${esc(node.name)}</span><span class="cm-count">${node.notices}</span>
+      <span class="cm-name">${esc(node.name)}</span><span class="cm-count" title="${esc(DESCRIBE.map.script)}">${node.notices}</span>
     </button>`
   }
   const paint = node.look?.colour || '#7d8590'
   const job = node.job
-    ? `<span class="cm-job"><span class="cm-step">${esc(node.job.stage)}</span> <span class="cm-title">${esc(node.job.title)}</span> <span class="cm-ref">${esc(node.job.ref)}</span></span>`
+    ? `<span class="cm-job"><span class="cm-step" title="${esc(DESCRIBE.status[node.job.stage] || '')}">${esc(node.job.stage)}</span> <span class="cm-title">${esc(node.job.title)}</span> <span class="cm-ref">${esc(node.job.ref)}</span></span>`
     : `<span class="cm-job none">${esc(node.why || (node.status === 'waiting' ? 'Waiting on other work' : 'No job now'))}</span>`
   const stats = [
     `${plural(node.runsToday, 'run')} today`,
     node.week?.share === null || node.week?.share === undefined ? '' : `<span title="Its share of all the Claude tokens the crew used this week, cached reads included">${pct(node.week.share)} of Claude</span>`,
   ].filter(Boolean).map((s) => `<span>${s}</span>`).join('')
   return `<button type="button" class="cm-node cm-bot st-${esc(node.status)}" data-node="${esc(node.id)}" style="${style};--paint:${esc(paint)}" aria-label="${label} Open its page.">
-    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role"><span class="cm-lamp"><i></i>${esc(STATUS[node.status] || node.status)}</span><span class="cm-what">${esc(node.roleName)}, ${esc(node.model)}</span></span></span>${node.met || node.notMet ? `<span class="cm-met${node.notMet > node.met ? ' cm-bad' : ''}" title="This week's results: met and not met"><span>${node.met} met</span><span>${node.notMet} not</span></span>` : ''}</span>
+    <span class="cm-head">${face(node, faces)}<span class="cm-who"><span class="cm-name">${esc(node.name)}</span><span class="cm-role"><span class="cm-lamp" title="${esc(DESCRIBE.botStatus[STATUS[node.status]] || '')}"><i></i>${esc(STATUS[node.status] || node.status)}</span><span class="cm-what">${esc(node.roleName)}, ${esc(node.model)}</span></span></span>${node.met || node.notMet ? `<span class="cm-met${node.notMet > node.met ? ' cm-bad' : ''}" title="This week's results: met and not met"><span>${node.met} met</span><span>${node.notMet} not</span></span>` : ''}</span>
     ${job}
     <span class="cm-stats">${stats}</span>
   </button>`
@@ -395,7 +396,7 @@ export function lineSentence(line, nodes, window = '24h') {
 }
 
 /** A line's half of its pair's pill: the way it goes, its total and dots for its main kinds; it opens the breakdown. */
-const chipHtml = (l, nodes, window, part = '') => `<button type="button" class="cm-chip ${part} k-${l.kind}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" style="left:${l.chip.x}px;top:${l.chip.y}px;width:${l.chip.w}px" aria-label="${esc(lineSentence(l, nodes, window))} Show the breakdown and the last messages."><span class="cm-arrow" aria-hidden="true">${ARROW[l.dir] || ''}</span><b>${l.count}</b>${l.kinds.slice(0, 2).map((k) => `<i class="cm-dot k-${k.kind}" aria-hidden="true"></i>`).join('')}</button>`
+const chipHtml = (l, nodes, window, part = '') => `<button type="button" class="cm-chip ${part} k-${l.kind}${l.lastFailed ? ' bad' : ''}" data-edge="${esc(l.id)}" data-from="${esc(l.from)}" data-to="${esc(l.to)}" style="left:${l.chip.x}px;top:${l.chip.y}px;width:${l.chip.w}px" title="${esc(DESCRIBE.map.chip)}" aria-label="${esc(lineSentence(l, nodes, window))} Show the breakdown and the last messages."><span class="cm-arrow" aria-hidden="true">${ARROW[l.dir] || ''}</span><b>${l.count}</b>${l.kinds.slice(0, 2).map((k) => `<i class="cm-dot k-${k.kind}" aria-hidden="true"></i>`).join('')}</button>`
 
 /**
  * What decides where everything stands: the size, the window, which plates, which lines, the lanes. While it
@@ -423,8 +424,8 @@ export function flowHtml(flow, layout, { faces = {}, window = '24h' } = {}) {
       <div class="cm-lane-list">${layout.lanes.map((lane) => {
     const who = lane.bots.map((id) => nodes.find((n) => n.id === id)).filter(Boolean)
     return `<button type="button" class="cm-lane" data-lane="${esc(lane.name)}" data-bots="${esc(lane.bots.join(' '))}" style="min-height:${lane.h}px" aria-label="${esc(`${lane.rank}. ${lane.name}: ${plural(lane.open, 'open job')}, ${who.length ? `${who.map((n) => n.name).join(', ')} working` : 'nobody working'}. Open the project.`)}">
-      <span class="cm-rank">${lane.rank}</span><span class="cm-lane-text"><span class="cm-name">${esc(lane.name)}</span><span class="cm-lane-sub">${plural(lane.open, 'open job')}${who.length ? '' : ', nobody on it'}</span></span>
-      <span class="cm-lane-who">${who.slice(0, 4).map((n) => face(n, faces)).join('')}${who.length > 4 ? `<i class="cm-more">+${who.length - 4}</i>` : ''}</span>
+      <span class="cm-rank" title="${esc(DESCRIBE.map.rank)}">${lane.rank}</span><span class="cm-lane-text"><span class="cm-name">${esc(lane.name)}</span><span class="cm-lane-sub">${plural(lane.open, 'open job')}${who.length ? '' : ', nobody on it'}</span></span>
+      <span class="cm-lane-who">${who.slice(0, 4).map((n) => face(n, faces)).join('')}${who.length > 4 ? `<i class="cm-more" title="${esc(DESCRIBE.map.more)}">+${who.length - 4}</i>` : ''}</span>
     </button>`
   }).join('')}</div>
       <div class="cm-legend-side" aria-label="What the lines mean">${legendHtml(flow)}</div>
@@ -455,7 +456,7 @@ export function legendHtml(flow) {
   const here = new Set(flow.edges.map((e) => e.kind))
   const kinds = flow.kinds.filter((k) => here.has(k.kind))
   return kinds.map((k) => `<span class="cm-key k-${k.kind}" title="${esc(k.says)}">${markSvg(k.kind)}${esc(k.label)}</span>`).join('')
-    + '<span class="cm-key cm-key-bad"><i></i>Last one failed or not met</span>'
+    + `<span class="cm-key cm-key-bad" title="${esc(DESCRIBE.map.failed)}"><i></i>Last one failed or not met</span>`
 }
 
 /** One line's breakdown by kind and its last messages, for the box a click opens. */
@@ -485,8 +486,8 @@ export class CrewMap {
     this.el.setAttribute('aria-label', 'Crew map')
     this.el.innerHTML = `<div class="cm-bar">
         <h1 class="cm-title-main">The crew</h1>
-        <div class="cm-seg" role="group" aria-label="Lines from">${[['now', 'Now'], ['24h', '24 h'], ['7d', '7 days']].map(([w, t]) => `<button type="button" data-window="${w}" aria-pressed="false">${t}</button>`).join('')}</div>
-        <div class="cm-seg" role="group" aria-label="Show as">${[['picture', 'Map'], ['list', 'List']].map(([m, t]) => `<button type="button" data-mode="${m}" aria-pressed="false">${t}</button>`).join('')}</div>
+        <div class="cm-seg" role="group" aria-label="Lines from">${[['now', 'Now'], ['24h', '24 h'], ['7d', '7 days']].map(([w, t]) => `<button type="button" data-window="${w}" title="${esc(DESCRIBE.map[w])}" aria-pressed="false">${t}</button>`).join('')}</div>
+        <div class="cm-seg" role="group" aria-label="Show as">${[['picture', 'Map'], ['list', 'List']].map(([m, t]) => `<button type="button" data-mode="${m}" title="${esc(DESCRIBE.map[m])}" aria-pressed="false">${t}</button>`).join('')}</div>
         <p class="cm-said" role="status" aria-live="polite"></p>
       </div>
       <div class="cm-stage"></div>
