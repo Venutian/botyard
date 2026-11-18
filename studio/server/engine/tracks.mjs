@@ -516,7 +516,9 @@ export function gateCard(version, step, row, trip, request, inputs) {
   }
   const why = findings ? `It waits for you because a step failed. What it said:\n${findings}` : step.words || 'The steps before this one passed; the next one waits for your yes.'
   // What the work is: what the gate needs and what the step before it left, for the owner to judge.
-  const made = [...new Set([...step.needs, ...Object.keys(row.beforeLeaves || {})])].filter((n) => !['workdir', 'branch', 'findings'].includes(n) && inputs[n] !== undefined)
+  // A value that only repeats the findings (a ruling's verdict, say) is not said twice.
+  const same = (v) => findings && String(v).replace(/\s+/g, ' ').trim().toLowerCase().slice(8, 200) === String(findings).replace(/\s+/g, ' ').trim().toLowerCase().slice(8, 200)
+  const made = [...new Set([...step.needs, ...Object.keys(row.beforeLeaves || {})])].filter((n) => !['workdir', 'branch', 'findings'].includes(n) && inputs[n] !== undefined && !same(inputs[n]))
   const work = made.map((n) => `${n}: ${words(inputs[n], 600)}`).join('\n')
   const prompt = [why, work && `What there is to look at:\n${work}`, `${yes.label}: ${yesText}\n${no.label}: ${noText}`].filter(Boolean).join('\n\n')
   return {
