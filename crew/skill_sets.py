@@ -159,7 +159,12 @@ def brain_denials(env=None):
         return {'edit': {'*': 'allow', f'{root}/*': 'deny', f'*{name}/*': 'deny'}}
     deny = {'*': 'allow', **{p: 'deny' for p in paths}}
     shell = {'*': 'allow', **{f'*{os.path.join(root, t)}*': 'deny' for t in tops}, **{f'*{t}/*': 'deny' for t in tops}, **{f'*{os.path.basename(f)}*': 'deny' for f in files}}
-    return {'read': deny, 'glob': deny, 'grep': deny, 'list': deny, 'edit': {**deny, f'{root}/*': 'deny', f'*{name}/*': 'deny'}, 'bash': shell}
+    # A search names a pattern, not a folder, so the whole vault is kept outside the run (OpenCode's
+    # external_directory, where anything else outside the worktree is asked, which an unattended run refuses),
+    # and a shell command that names the vault is refused: the bots read work notes through brain.py.
+    shell.update({f'*{root}*': 'deny', f'*{name}/*': 'deny'})
+    outside = {'*': 'ask', root: 'deny', f'{root}/*': 'deny'}
+    return {'read': deny, 'glob': deny, 'grep': deny, 'list': deny, 'edit': {**deny, f'{root}/*': 'deny', f'*{name}/*': 'deny'}, 'bash': shell, 'external_directory': outside}
 
 
 def write_for(bot, adapter, skills=None, want=None):
