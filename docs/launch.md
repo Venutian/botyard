@@ -1,0 +1,113 @@
+# Launch: getting each product from built to live, and knowing where it stands
+
+Botyard's **Launch** page answers two questions for every product: where is it on each store or channel right
+now, and what is the next step, and who does it wait on. Releasing is a [track](tracks.md) like any other
+work, with the owner's yes at a gate before anything goes to review, goes live or costs money.
+
+## Words
+
+| Word | Means |
+|---|---|
+| **channel** | One place a product is released: Google Play, the App Store, a web address, a Steam branch, an itch.io channel, a game portal, a GitHub release. |
+| **plan** | Which channels a product has, with its ids there (package name, bundle id, app id, address, repository). One file, written once per product. |
+| **cell** | One product on one channel: a state, a version, when it was read, how it was read, the next step and who it waits on. |
+| **check** | A small script that reads one cell's true state. Checks run on a timer and on the owner's "Check now". |
+| **readiness** | A product's checklist for its next release: listing, build, signing, payments, monitoring, legal. |
+| **release** | One trip along a release track for one product and version. |
+
+## What the page shows
+
+- **The board.** One row per product, one column per channel. Each cell shows one plain state ("Internal
+  testing 2.0.1 (17)", "In review", "Live 2.0.0", "Halted at 20%", "Draft waits for you"), the time it was
+  read, and a mark that says how it was known: **read** (from the store's own API or the live thing),
+  **told** (typed by a person, with its age; it turns amber when old) or **not known** (no key, or no API).
+  A cell never shows green for something that was not read.
+- **Next step, and who it waits on.** The owner (a key to add, a yes to give, a form only a person may fill),
+  the crew (a build, a fix), or the store (processing, review). One line per product on the board.
+- **Readiness.** Per product, a checklist with pass, fail, not known and "yours" (only the owner can do it),
+  grouped as below.
+- **History.** Every change of a cell's state and every release step, with its time: built, uploaded,
+  processed, sent for review, approved, released, halted, rolled back. "Nothing has moved for N hours"
+  becomes a line under Needs you.
+- **Drift.** The version the crew last released against what each channel holds now, in plain words
+  ("Play is one version behind").
+
+## How each channel is read
+
+| Channel | Read by | States it can show | Not readable (told by a person, or inferred and marked so) |
+|---|---|---|---|
+| Google Play | The store's publishing API with a service-account key: every track's releases, version codes, status and rollout share. An edit is opened only to read and is always discarded. | Not in the console, internal, closed or open testing, production draft, rolling out at N%, halted, complete. | Google's review: not exposed. "Probably in review" is shown as a guess after a production commit, with a one-tap "I see it live" for the owner. |
+| App Store | The store's API with a team key (issuer, key id, private key; a short-lived token is made per read). | No record, build processing, build ready, in TestFlight, waiting for review, in review, rejected, pending release, phased release day N of 7, live. | Creating the first app record and accepting agreements (the owner, in the console). |
+| Web | A request to the live address, and a version marker the build writes (`/version.json` or a meta tag). | Live with version, down, behind. | none |
+| GitHub release | The repository's releases. | No release, draft waiting, published (with tag and assets). | none |
+| itch.io | The public latest-build endpoint per channel, no key. | Latest version per channel, none. | Whether the page is public. |
+| Steam | The publisher API with a publisher key: builds and branches. | Build on each branch, which build is live on the default branch. | Store page and build review, "coming soon", wishlists: told by the owner. |
+| Game portals | No API. | Told: submitted, in QA, basic launch (day N, plays so far from our own counts), full launch. | All of it. The page keeps the portal's submission kit ready instead. |
+
+## What Botyard automates, and what always waits for the owner
+
+**Automated, with no question:** builds; tests; reading every store; uploads to a store's own testing lane
+(Play internal testing as a draft release, TestFlight to the internal group); a web preview; a GitHub draft
+release with its files; a push to a non-default Steam branch or an itch channel that is not public; dry runs
+that validate a store edit without committing it.
+
+**Always the owner's yes, on a card that names the product, version, channel and what will happen:** sending
+for review; releasing to production or raising a rollout; publishing a GitHub release; making a web money
+product live; setting the default Steam branch; making an itch page public; any price, payout, purchase or
+spend; accepting terms. A "yes" is logged with who and when.
+
+**Only the owner can do, so the page says so plainly and links to the right console page:** adding each store's
+key once on its key row; creating the first app record where a store has no API for it; content rating,
+privacy and data-safety forms; tax and bank details; agreements. Bots never type a key.
+
+Safe defaults: uploads go to testing lanes; Play releases start as drafts; App Store releases are manual with
+phased release on. Going live is never a default.
+
+## Readiness checklist
+
+- **Listing:** name, short and full descriptions, screenshots and icon at the store's sizes, release notes,
+  support and marketing addresses answering, category set.
+- **Build:** uploaded and processed; version and build number higher than the last release; target SDK at
+  the store's minimum; the test phone's smoke test passed; the store's own validation passes.
+- **Signing:** store keys work (the check button lists what each key may do); upload key and certificates
+  present and not near expiry; export compliance answered.
+- **Payments (test mode only):** every product in the app exists in the store and maps to an entitlement; a
+  test purchase seen; for web payments, products and prices exist, the webhook answers, a test checkout passed,
+  and no secret key ships in the build. Going live with payments is the owner's card.
+- **Monitoring:** crash reporting and analytics keys in the build; the release name matches; after a rollout,
+  crash-free sessions at or above the target and events arriving from the new version. A halt plan exists.
+- **Legal:** privacy policy live and linked from the listing and the app; account deletion path when the app
+  has accounts; subscription terms on the paywall; licences and rights for made assets.
+
+## The release track
+
+A built-in track, `release-app`, per product and version:
+
+1. **Build** (script): the product's build command; leaves the artifact and its version and build number.
+2. **Tests** (script): the product's test command.
+3. **Readiness** (script): the checklist above; a fail goes back to the crew with what failed.
+4. **Upload to testing** (script): the store's testing lane; leaves the store's build id.
+5. **Wait for processing** (script): until the store has the build, or a time limit.
+6. **The owner decides** (gate): the card shows the version, the readiness list, the testing link and what
+   "send for review" will do.
+7. **Send for review** (script).
+8. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to the
+   crew with the store's words.
+9. **The owner decides** (gate): release now, or hold.
+10. **Release** (script), then **Watch the rollout** (script): crash-free sessions and events; a bad number
+    halts the rollout and goes to the owner.
+
+Web products and Botyard's own GitHub releases use a short form: build, tests, preview or draft, the owner's
+gate, publish, check the live version.
+
+## Where the files are
+
+- The plan: `launch-plan.json` in Botyard's data folder (`~/.botyard/`), one entry per product; a studio may
+  keep its own copy elsewhere and link it there.
+- What the checks read: `launch-state.json` in the same folder, with the history beside it.
+- Keys: the key rows Botyard already has for each store; checks and release steps read them, bots do not.
+
+## Left out on purpose
+
+Prices, payouts and store agreements are never automated. Steam's and the portals' review states are told,
+not guessed. The page does not depend on any build service to report store state: it reads the stores.
