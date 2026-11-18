@@ -67,7 +67,7 @@ function QuestionForm({ q, onHold }: { q: TrayQuestion; onHold: (kind: 'answer' 
       <View style={styles.gap}>
         <Txt size={15} weight={700}>{q.title}</Txt>
         {q.prompt ? <Txt size={14} color={t.ink2}>{q.prompt}</Txt> : null}
-        <Field label="Why, if no (optional)" value={reason} onChangeText={setReason} multiline maxLength={4000} />
+        <Field label={q.tripId ? 'What to change, if no (goes back with the work)' : 'Why, if no (optional)'} value={reason} onChangeText={setReason} multiline maxLength={4000} />
         <View style={styles.pair}>
           <View style={styles.flex}><Button label={`${q.accept}: hold`} busy={busy === 'accept'} onPress={() => run('accept')} /></View>
           <View style={styles.flex}><Button label={`${q.reject}: hold`} kind="quiet" busy={busy === 'reject'} onPress={() => run('reject', { reason: reason.trim() })} /></View>
@@ -151,7 +151,7 @@ export function TrayScreen({ connection, nav }: { connection: Connection; nav: N
                 {heldKeys.has(`card:${a.jobId}:${q.id}`) ? <Txt size={13} weight={700} color={t.good}>Answer held. Answer again to change it.</Txt> : null}
                 <QuestionForm q={q} onHold={async (kind, extra) => {
                   try {
-                    const out = await holdInTray(connection, { kind, jobId: a.jobId, cardId: q.id, title: q.title, job: a.job, ...(a.need.botId ? { botId: a.need.botId } : {}), ...extra });
+                    const out = await holdInTray(connection, { kind, jobId: a.jobId, cardId: q.id, title: q.title, job: a.job, ...(a.need.botId ? { botId: a.need.botId } : {}), ...(q.tripId ? { tripId: q.tripId } : {}), ...extra });
                     setItems(out.items);
                   } catch (err) { setError((err as Error).message); }
                 }} />

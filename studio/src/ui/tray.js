@@ -98,7 +98,7 @@ export function answersOf(form, q) {
 function questionHtml(q) {
   if (q.kind === 'confirm') {
     return `<form class="tray-q" data-q="${esc(q.id)}"><p><b>${esc(q.title)}</b></p>${q.prompt ? `<p>${esc(q.prompt)}</p>` : ''}
-      <label class="stack">Why, if no (optional)<textarea name="reason" rows="2" maxlength="4000"></textarea></label>
+      <label class="stack">${q.tripId ? 'What to change, if no (goes back with the work)' : 'Why, if no (optional)'}<textarea name="reason" rows="2" maxlength="4000"></textarea></label>
       <div class="row"><button class="btn primary" type="button" data-hold="accept">${esc(q.accept)}: hold</button><button class="btn" type="button" data-hold="reject">${esc(q.reject)}: hold</button></div></form>`
   }
   return `<form class="tray-q" data-q="${esc(q.id)}"><p><b>${esc(q.title)}</b></p>${q.items.map((item) => `
@@ -144,7 +144,7 @@ async function onDialog(e) {
   const form = button.closest('form')
   const q = asked.questions.find((x) => x.id === form.dataset.q)
   const kind = button.dataset.hold
-  const base = { jobId: asked.jobId, cardId: q.id, title: q.title, job: asked.job, ...(asked.botId ? { botId: asked.botId } : {}) }
+  const base = { jobId: asked.jobId, cardId: q.id, title: q.title, job: asked.job, ...(asked.botId ? { botId: asked.botId } : {}), ...(q.tripId ? { tripId: q.tripId } : {}) }
   let item
   if (kind === 'answer') {
     const got = answersOf(form, q)
