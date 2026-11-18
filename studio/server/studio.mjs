@@ -274,7 +274,15 @@ export async function createStudio({ env = process.env, demo = false, engine = t
       return { open: false, why: doorWhy }
     }
     const { startPhoneDoor } = await import('./phone.mjs')
-    doorServer = startPhoneDoor(own)
+    const server = startPhoneDoor(own)
+    // Open means listening: a phone that pairs and calls at once must find the door there.
+    try {
+      if (!server.listening) await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject) })
+    } catch (err) {
+      doorWhy = err.message
+      return { open: false, why: doorWhy }
+    }
+    doorServer = server
     doorServer.on('error', (err) => { log(`[botyard] the phone's door stopped: ${err.message}`); doorWhy = err.message; doorServer = null })
     doorWhy = ''
     return { open: true, why: '' }

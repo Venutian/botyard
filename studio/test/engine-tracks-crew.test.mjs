@@ -10,6 +10,8 @@ import { addComment } from '../server/engine/write.mjs'
 import { BUILD_TRACK, TRACK_MARK, TRACK_TOOLS, botLeft, getRequest, saveTrack, startRequest, tickTracks, trackIo, tripView } from '../server/engine/tracks.mjs'
 
 const OWNER = { user: 'local-board' }
+// The land step runs git with this process's own environment: on a machine with no git identity (CI), it needs one.
+for (const [key, value] of Object.entries({ GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' })) process.env[key] ??= value
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' } }).trim()
 
 function repo() {
