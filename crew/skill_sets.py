@@ -181,7 +181,10 @@ def read_only(perm, reads, own=None):
     edit = perm.get('edit') if isinstance(perm.get('edit'), dict) else {'*': 'allow'}
     mine = os.path.realpath(os.path.expanduser(own)).rstrip('/') if own else ''
     # The bot's own folder stays its to edit, even inside a folder it only reads.
-    edit = {**edit, **{f'{f}/*': 'deny' for f in folders}, **({mine: 'allow', f'{mine}/*': 'allow'} if mine else {}),
+    # A job is worked in its own worktree (<repo>/.botyard/worktrees/<job>), which lies inside the folder a bot only reads when that is a
+    # projects folder: those stay editable, or a job given to the bot would find every edit refused.
+    trees = {p: 'allow' for f in folders for p in (f'{f}/.botyard/worktrees/*', f'{f}/*/.botyard/worktrees/*')}
+    edit = {**edit, **{f'{f}/*': 'deny' for f in folders}, **trees, **({mine: 'allow', f'{mine}/*': 'allow'} if mine else {}),
             **{k: v for k, v in edit.items() if v == 'deny'}}
     return {**perm, 'external_directory': outside, 'edit': edit}
 
