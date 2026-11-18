@@ -136,6 +136,10 @@ test('full shows its stop icon, its paused jobs and Resume; the others offer no 
   assert.match(full, /ld-icon/)
   assert.match(full, /Full: 2 jobs paused, 9\.4 GB held/)
   assert.doesNotMatch(throttleHtml({ configured: true, now: 'heavy', line: 'Heavy' }), /Resume/)
+  // The line only says what the buttons cannot: a plain level shows none, a day and night split or an error does.
+  assert.match(throttleHtml({ configured: true, now: 'heavy', day: 'heavy', night: 'heavy', line: 'Heavy' }), /<span class="ld-line"[^>]*><\/span>/)
+  assert.match(throttleHtml({ configured: true, now: 'light', day: 'light', night: 'none', line: 'Light (day Light, night None)' }), /day Light, night None/)
+  assert.match(throttleHtml({ configured: true, now: 'none', line: 'None' }, { error: 'The load could not be set' }), /could not be set/)
 })
 
 test('pressing Full asks once, with the words the owner gave', () => {
