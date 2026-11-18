@@ -677,7 +677,9 @@ def main():
         # A 429 rests the provider for REST_FOR and the run goes on at once, same session, on another provider's model
         # that answers (18 Nov: runs waited 20, 60 and 180 seconds on a provider that kept saying "usage limit
         # reached", 57 times in 6 hours). Only when no other provider answers is it waited out below.
-        if code and failed and any(w in failed.lower() for w in BUSY_WORDS + ('usage limit',)):
+        low = (failed or '').lower()
+        if (code and failed and any(w in low for w in BUSY_WORDS + ('usage limit',))
+                and not provider_wide(failed, model) and not any(w in low for w in guards.NOT_TRANSIENT)):
             tired = rest(model)
             nxt, bots = next_working(fallback, bots, avoid_family=None)
             if nxt and provider_of(nxt) != tired:
