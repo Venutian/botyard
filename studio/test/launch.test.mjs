@@ -91,20 +91,31 @@ test('a check reads every channel, says "not known" without a key, keeps what pe
   assert.equal(page.rows.find((r) => r.name === 'Site').next.waits, 'you')
 })
 
-test('the board draws a column per channel and a row per product; an unread cell has no colour of its own', async () => {
+test('the board lists what waits for you first, then a column per channel and a row per product; an unread cell has no colour of its own, an unused one is blank', async () => {
   const { launchScreen, productScreen } = await import('../src/ui/studio-launch.js')
   const data = {
     planFound: true, planFile: '~/.botyard/launch-plan.json', checkedAt: NOW,
     channels: [{ id: 'play', name: 'Google Play' }, { id: 'web', name: 'Web' }],
     rows: [{ name: 'Lamp', note: '', next: { channel: 'Google Play', text: 'Add the Google Play key on its row in Connectors', waits: 'you' },
-      cells: { play: { state: 'Not known: no Google Play key', how: 'none', tone: 'wait', checkedAt: NOW }, web: null },
+      cells: { play: { state: 'Not known: no Google Play key', how: 'none', tone: 'wait', checkedAt: NOW, waits: 'owner', next: 'Add the Google Play key on its row in Connectors' }, web: null },
       readiness: [{ group: 'Keys', text: 'Google Play key added', state: 'yours', detail: 'Add it once on its row in Connectors' }], history: [] }],
   }
   const board = launchScreen(data)
   assert.match(board, /<th>Google Play<\/th><th>Web<\/th>/)
-  assert.match(board, /class="cell wait how-none">Not known: no Google Play key/)
-  assert.match(board, /Waits for you/)
+  // What waits for you: one line per step with the button that does it, counted from the cells.
+  assert.match(board, /<h3 id="launch-yours-h">1 step waits for you<\/h3>/)
+  assert.match(board, /data-act="launch-step" data-go="connectors" data-name="Lamp">Add the key</)
+  // Unread: the dashed mark and muted text, never a colour of its own; the time is said once, not per cell.
+  assert.match(board, /<td class="unread" data-ch="Google Play"><span class="st"><svg class="g g-none"[^]*?Not known: no Google Play key/)
+  assert.equal((board.match(/Read from each channel/g) || []).length, 1)
+  // A channel the product is not on is a blank cell: no dash, no words.
+  assert.match(board, /<td class="empty" data-ch="Web"><\/td>/)
+  assert.doesNotMatch(board, /–/)
   assert.match(board, /data-act="launch-check"/)
+  // Nothing for the owner: one quiet line instead of the yellow block.
+  const clear = launchScreen({ ...data, rows: [{ ...data.rows[0], cells: { play: { state: 'Live 1.0', how: 'read', tone: 'ok' }, web: null } }] })
+  assert.match(clear, /Nothing waits for you\./)
+  assert.doesNotMatch(clear, /launch-yours/)
   const page = productScreen(data, 'Lamp')
   assert.match(page, /<span class="mark">Yours<\/span>Google Play key added/)
   // A channel that cannot be read can be told where it stands.

@@ -1,0 +1,71 @@
+/* Shared by the three directions: Botyard's own fonts and plate tokens (studio/src/ui/plates.css), and a plain
+   stand-in for the studio's shell (top sign, rail, the map behind) so the sheet's width rule can be seen. */
+@font-face { font-family: 'Big Shoulders Display'; font-weight: 600; font-display: swap; src: url('../../../../studio/node_modules/@fontsource/big-shoulders-display/files/big-shoulders-display-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Big Shoulders Display'; font-weight: 800; font-display: swap; src: url('../../../../studio/node_modules/@fontsource/big-shoulders-display/files/big-shoulders-display-latin-800-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; font-display: swap; src: url('../../../../studio/node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 500; font-display: swap; src: url('../../../../studio/node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 600; font-display: swap; src: url('../../../../studio/node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') format('woff2'); }
+
+:root {
+  --sign: 'Big Shoulders Display', 'Barlow Semi Condensed', ui-sans-serif, system-ui, sans-serif;
+  --body: 'IBM Plex Sans', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  /* Day plates, as plates.css */
+  --panel: #eef0f2; --raise: #ffffff; --sunk: #dfe3e8; --line: #cdd3da; --line-strong: #99a2ad; --edge: #15181d;
+  --text: #15181d; --muted: #454d58; --dim: #66707c; --accent: #1746c9;
+  --go: #ffc61a; --go-ink: #15181d; --green: #0f7a43; --amber: #8f5600; --red: #c0271b; --blue: #1746c9;
+  --green-paint: #35d07f; --yellow-paint: #ffc61a; --red-paint: #ff5b4d;
+  --thick: 0 4px 0 var(--edge); --lift: 0 18px 30px -14px rgb(10 12 16 / 0.55);
+  /* New for Launch (DESIGN.md, "Tokens"): the tint of a row that waits for you, and its ink. */
+  --yours: #fff4cc; --yours-line: #e0a800; --yours-ink: #15181d;
+  color-scheme: light;
+}
+:root[data-plates='night'] {
+  --panel: #1c2026; --raise: #272c35; --sunk: #14171c; --line: #333a45; --line-strong: #5b6573; --edge: #05070a;
+  --text: #f2f4f6; --muted: #b1b9c4; --dim: #98a2af; --accent: #8fb3ff;
+  --green: #55dc92; --amber: #ffc61a; --red: #ff7a6e; --blue: #8fb3ff;
+  --lift: 0 18px 30px -14px rgb(0 0 0 / 0.8);
+  --yours: #2e2810; --yours-line: #ffc61a; --yours-ink: #fff3c4;
+  --field-edge: #768090;
+  color-scheme: dark;
+}
+
+html, body { margin: 0; height: 100%; overflow-x: clip; }
+body { font: 400 15px/1.45 var(--body); color: var(--text); background: #0d0f12; }
+::selection { background: var(--go); color: var(--go-ink); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+* { box-sizing: border-box; scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
+
+/* The shell, drawn plainly: only so the sheet sits where it sits in the studio. */
+.shell { position: fixed; inset: 0; background: var(--sunk); background-image: radial-gradient(var(--line) 1px, transparent 1.2px); background-size: 18px 18px; }
+:root[data-plates='night'] .shell { background-color: #101215; }
+.top { position: absolute; top: 12px; left: 14px; right: 14px; height: 52px; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 2px solid var(--edge); border-radius: 10px; box-shadow: var(--thick); overflow: hidden; }
+.top .mark { align-self: stretch; display: flex; align-items: center; padding: 0 18px 0 16px; background: var(--edge); color: #f2f4f6; font: 800 25px/1 var(--sign); letter-spacing: 0.02em; }
+.top .mark::before { content: ''; width: 15px; height: 17px; margin-right: 10px; background: radial-gradient(circle, #1d1e22 0 27%, #cc9200 28% 33%, var(--go) 34%); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.top .say { font-size: 14px; color: var(--muted); }
+.rail { position: absolute; top: 78px; left: 14px; width: 76px; bottom: 120px; background: var(--panel); border: 2px solid var(--edge); border-radius: 10px; box-shadow: var(--thick); padding: 6px; display: grid; align-content: start; gap: 3px; }
+.rail span { display: block; padding: 10px 0; text-align: center; font: 600 12px/1 var(--body); color: var(--muted); border-radius: 7px; }
+.rail span.on { background: var(--edge); color: #f2f4f6; }
+
+/* The sheet: on Launch it takes the whole deck, from the rail to the window's edge (DESIGN.md, "The sheet"). */
+.sheet { position: absolute; top: 78px; left: 104px; right: 14px; bottom: 14px; display: flex; flex-direction: column; background: var(--panel); border: 2px solid var(--edge); border-radius: 10px; box-shadow: var(--thick), var(--lift); overflow: hidden; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 14px; border: 2px solid var(--edge); border-radius: 7px; background: var(--raise); color: var(--text); font: 600 13px/1 var(--body); box-shadow: 0 2px 0 var(--edge); cursor: pointer; transition: transform 0.06s, box-shadow 0.06s, background-color 0.12s; white-space: nowrap; }
+.btn:hover { background: var(--sunk); }
+.btn:active { transform: translateY(2px); box-shadow: 0 0 0 var(--edge); }
+.btn.go { background: var(--go); color: var(--go-ink); }
+.btn.go:hover { background: color-mix(in srgb, var(--go) 86%, #fff); }
+.btn.icon { width: 36px; padding: 0; }
+.btn svg { width: 16px; height: 16px; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
+
+/* The state marks: a shape per state, so state is never colour alone. */
+.g { width: 12px; height: 12px; flex: none; }
+.g-ok { color: var(--green-paint); } .g-go { color: var(--blue); } .g-yours { color: var(--yellow-paint); } .g-bad { color: var(--red-paint); } .g-none { color: var(--dim); }
+
+/* Phone: the sheet is the whole screen under the sign; the rail waits behind it. */
+@media (max-width: 699px) {
+  .rail { display: none; }
+  .top { top: 0; left: 0; right: 0; border-radius: 0; border-width: 0 0 2px; box-shadow: none; height: 52px; }
+  .top .say { display: none; }
+  .sheet { top: 52px; left: 0; right: 0; bottom: 0; border: 0; border-radius: 0; box-shadow: none; }
+}
