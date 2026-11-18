@@ -431,9 +431,11 @@ export class Studio {
       // The owner's plate and the badge show one number: when the map's differs, the cards are read again.
       needsSeen: (n) => { if (this._needs && n !== waitingCount(this._needs) && Date.now() - (this._needsAt || 0) > 2000) this._loadNeeds() },
     })
-    this.brainMap = new BrainMap(this.root)
+    // Engram is opened by a click and sleeps when left: the page never starts on it, and after five idle minutes
+    // it hands the screen back to the yard.
+    this.brainMap = new BrainMap(this.root, { sleep: () => { if (this.home === 'brain') this.setHome('yard') } })
     let home = 'map'
-    try { home = ['yard', 'brain'].includes(localStorage.getItem('botyard.home')) ? localStorage.getItem('botyard.home') : 'map' } catch { /* storage off */ }
+    try { const kept = localStorage.getItem('botyard.home'); home = kept === 'yard' || kept === 'brain' ? 'yard' : 'map' } catch { /* storage off */ }
     this.setHome(home, { quiet: true })
   }
 

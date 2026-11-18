@@ -1,15 +1,15 @@
 /*
- * Engram, the Brain view: the owner's notes as a brain of light, in a dark observatory set into the board.
- * The field is always dark, by day too: light only reads as light on black. The bar, the note and the
- * controls are the same plates as the rest of the page. The one bold thing is the glowing field; everything
- * around it stays quiet.
+ * Engram, the Brain view: an instrument on the workshop wall. The board around it is the crew map's own board
+ * (dotted, light by day, dark by night); the brain sits in a recessed scope window framed like every other
+ * plate, with a dark edge and visible thickness. Light only reads as light on black, so the window is always
+ * dark; everything outside it (names, timeline, key) is plates and ink from the rest of the page.
  */
 
 .hud.studio .brainmap {
-  --bm-void: #020309;
-  --bm-ink: #dfe6f3;
+  --bm-void: #eef2f7;
+  --bm-board: #e4e7eb;
+  --bm-dot: #c3c9d1;
   --bm-quiet: #93a0b5;
-  --bm-line: #1a2232;
   position: absolute;
   top: 70px;
   left: 90px;
@@ -20,13 +20,15 @@
   grid-template-rows: auto 1fr auto auto;
   border: 2px solid var(--edge);
   border-radius: 10px;
-  background: var(--bm-void);
+  background-color: var(--bm-board);
+  background-image: radial-gradient(var(--bm-dot) 1px, transparent 1.2px);
+  background-size: 22px 22px;
   box-shadow: var(--thick);
   font-family: var(--body);
   color: var(--text);
   overflow: hidden;
 }
-.hud.studio[data-plates='night'] .brainmap { border-color: #3a414c; }
+.hud.studio[data-plates='night'] .brainmap { --bm-void: #020309; --bm-board: #121519; --bm-dot: #262c35; border-color: #3a414c; }
 .hud.studio .brainmap[hidden] { display: none; }
 .hud.studio-chatting .brainmap { right: 388px; }
 
@@ -50,8 +52,17 @@
 .brainmap .bm-stage {
   position: relative;
   min-height: 0;
+  margin: 14px 14px 0;
   overflow: hidden;
-  background: #020309;
+  border: 2px solid var(--edge);
+  border-radius: 10px;
+  background: var(--bm-void);
+  /* The window is set into the plate: its rim catches light at the top, its depth shades the inside edge. */
+  /* The window is set into the plate: the inside edge is shaded where the plate's thickness falls. */
+  box-shadow: inset 0 14px 30px -18px rgba(20, 30, 50, 0.45), var(--thick);
+}
+.hud.studio[data-plates='night'] .brainmap .bm-stage {
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px #0c1222, inset 0 18px 40px -18px rgba(0, 0, 0, 0.9), var(--thick);
 }
 .brainmap .bm-stage[hidden] { display: none; }
 .brainmap .bf-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
@@ -62,24 +73,25 @@
   left: 0;
   top: 0;
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 9px 4px;
-  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
-  border-radius: 999px;
-  background: rgba(2, 3, 9, 0.72);
-  color: var(--ink);
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px 4px 7px;
+  border: 2px solid var(--edge);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
   font: 700 13px/1.1 var(--sign);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--ink) 60%, transparent);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
   transition: opacity 160ms;
 }
-.brainmap .bf-label span { font: 600 11px/1 var(--body); color: var(--bm-quiet); text-shadow: none; }
+.brainmap .bf-label::before { content: ''; width: 4px; height: 14px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 8px var(--ink); }
+.brainmap .bf-label span { font: 600 11px/1 var(--body); color: var(--muted); font-variant-numeric: tabular-nums; }
 .brainmap .bf-label.dim { opacity: 0.25 !important; }
-.brainmap .bf-label:hover, .brainmap .bf-label:focus-visible { background: color-mix(in srgb, var(--ink) 18%, var(--bm-void)); }
+.brainmap .bf-label:hover { background: var(--raise); }
 .brainmap .bm-tip {
   position: absolute;
   left: 0;
@@ -87,20 +99,20 @@
   z-index: 2;
   max-width: 300px;
   padding: 7px 11px 8px;
-  border: 1px solid #2c3a55;
-  border-radius: 8px;
-  background: rgba(8, 12, 24, 0.92);
-  color: var(--bm-ink);
+  border: 2px solid var(--edge);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
   font: 600 13px/1.35 var(--body);
   pointer-events: none;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 }
-.brainmap .bm-tip span { display: block; font-weight: 500; font-size: 11.5px; color: var(--bm-quiet); }
-.brainmap .bm-hint { position: absolute; left: 16px; bottom: 10px; margin: 0; font-size: 12px; color: var(--bm-quiet); pointer-events: none; opacity: 0.8; }
+.brainmap .bm-tip span { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); }
+.brainmap .bm-hint { position: absolute; left: 14px; bottom: 10px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; opacity: 0.8; }
 
 /* ── the list ────────────────────────────────────────────────────────────────── */
 
-.brainmap .bm-list { overflow: auto; padding: 14px 18px 24px; background: var(--panel); columns: 300px auto; column-gap: 26px; }
+.brainmap .bm-list { overflow: auto; margin: 14px 14px 0; padding: 14px 18px 24px; border: 2px solid var(--edge); border-radius: 10px; background: var(--panel); box-shadow: var(--thick); columns: 300px auto; column-gap: 26px; }
 .brainmap .bm-list[hidden] { display: none; }
 .brainmap .bm-list section { break-inside: avoid; margin-bottom: 18px; }
 .brainmap .bm-list h2 { margin: 0 0 6px; padding-left: 10px; border-left: 4px solid var(--ink); font: 700 16px/1.2 var(--sign); }
@@ -114,21 +126,23 @@
 
 /* ── the timeline, on the dark ───────────────────────────────────────────────── */
 
-.brainmap .bm-time { position: relative; height: 54px; margin: 0 24px; border-top: 1px solid var(--bm-line); }
+.brainmap .bm-time { position: relative; height: 54px; margin: 6px 26px 0; }
 .brainmap .bm-hist { position: absolute; left: 0; right: 0; top: 4px; height: 20px; display: flex; align-items: flex-end; gap: 1px; pointer-events: none; }
 .brainmap .bm-hist i { flex: 1; display: flex; justify-content: center; }
-.brainmap .bm-hist i::after { content: ''; width: 2px; height: 100%; border-radius: 1px; background: #7f9cff; opacity: 0.65; box-shadow: 0 0 6px #7f9cff; }
+.brainmap .bm-hist i::after { content: ''; width: 3px; height: 100%; border-radius: 1px; background: var(--text); opacity: 0.55; }
 .brainmap .bm-scrub { position: absolute; left: -9px; right: -9px; top: 20px; width: calc(100% + 18px); height: 18px; margin: 0; background: none; cursor: ew-resize; -webkit-appearance: none; appearance: none; }
-.brainmap .bm-scrub::-webkit-slider-runnable-track { height: 2px; background: #2a3550; }
-.brainmap .bm-scrub::-moz-range-track { height: 2px; background: #2a3550; }
-.brainmap .bm-scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -7px; border: 2px solid #fff; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
-.brainmap .bm-scrub::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: var(--accent); }
-.brainmap .bm-ticks { position: absolute; left: 0; right: 0; bottom: 3px; height: 14px; font: 500 11px/1 var(--body); color: var(--bm-quiet); }
+.brainmap .bm-scrub::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--field-edge); }
+.brainmap .bm-scrub::-moz-range-track { height: 4px; border-radius: 2px; background: var(--field-edge); }
+.brainmap .bm-scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 22px; margin-top: -9px; border: 2px solid var(--edge); border-radius: 4px; background: var(--accent); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.brainmap .bm-scrub::-moz-range-thumb { width: 10px; height: 18px; border: 2px solid var(--edge); border-radius: 4px; background: var(--accent); }
+.brainmap .bm-ticks { position: absolute; left: 0; right: 0; bottom: 3px; height: 14px; font: 600 11px/1 var(--body); color: var(--muted); }
 .brainmap .bm-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.brainmap .bm-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 7px 16px 9px; border-top: 1px solid var(--bm-line); font-size: 12px; color: var(--bm-quiet); }
+.brainmap .bm-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 8px 16px 10px; border-top: 2px solid var(--edge); background: var(--panel); font-size: 12px; color: var(--muted); }
+/* The key's marks are lit samples of the window: each sits on a small dark lens. */
+.brainmap .bm-legend span::before { content: none; }
 .brainmap .bm-legend span { display: inline-flex; align-items: center; gap: 7px; }
-.brainmap .bm-legend .lg { width: 10px; height: 10px; border-radius: 50%; background: #6ea8ff; box-shadow: 0 0 8px #6ea8ff; }
+.brainmap .bm-legend .lg { outline: 4px solid var(--bm-void); outline-offset: 0; margin: 0 4px; width: 10px; height: 10px; border-radius: 50%; background: #6ea8ff; box-shadow: 0 0 8px #6ea8ff; }
 .brainmap .bm-legend .lg.dec { width: 12px; height: 12px; background: radial-gradient(#fff 0 25%, #6ea8ff 60%); box-shadow: 0 0 10px #6ea8ff; }
 .brainmap .bm-legend .lg.pref { width: 9px; height: 9px; }
 .brainmap .bm-legend .lg.fact { width: 6px; height: 6px; opacity: 0.8; }
@@ -205,3 +219,17 @@
   .brainmap .bm-said { margin: 0; font-size: 12px; }
   .brainmap .bm-find { flex: 1 1 100%; min-width: 0; }
 }
+
+/* Editing a note, and starting one: the same plates and fields as the rest of the page. */
+.brainmap .bm-new { height: 32px; padding: 0 12px; border: 2px solid var(--edge); border-radius: 7px; background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--body); cursor: pointer; }
+.brainmap .bm-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 18px 18px 0; }
+.brainmap .bm-acts span { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.brainmap .bm-btn { height: 34px; padding: 0 14px; border: 2px solid var(--field-edge); border-radius: 7px; background: var(--raise); color: var(--text); font: 700 13px/1 var(--body); cursor: pointer; }
+.brainmap .bm-btn.primary { border-color: var(--edge); background: var(--accent); color: var(--accent-ink); }
+.brainmap .bm-edit { display: block; margin: 14px 18px 0; }
+.brainmap .bm-edit textarea, .brainmap .bm-newform textarea, .brainmap .bm-newform input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid var(--field-edge); border-radius: 8px; background: var(--raise); color: var(--text); font: 400 13.5px/1.55 var(--body); }
+.brainmap .bm-edit textarea { min-height: 52vh; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.brainmap .bm-newform { display: grid; gap: 12px; margin: 14px 18px 0; }
+.brainmap .bm-newform label { display: grid; gap: 6px; font: 600 13px/1 var(--body); }
+.brainmap .bm-newform .bm-acts { margin: 0; }
+.brainmap .bm-edit-said { margin: 8px 18px 0; min-height: 1em; font-size: 13px; color: var(--muted); }

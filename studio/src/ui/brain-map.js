@@ -1,6 +1,6 @@
 import { DESCRIBE } from './describe.js'
 import { markdown } from './markdown.js'
-import { BrainField, INKS } from './brain-field.js'
+import { BrainField, DAY_INKS, INKS } from './brain-field.js'
 
 /**
  * Engram, the Brain view: the owner's notes vault as a brain. Each note is a neuron that glows in its area's
@@ -9,8 +9,10 @@ import { BrainField, INKS } from './brain-field.js'
  * the note. The timeline shows the brain as it stood on a past day; the search lights what matches. The List
  * says the same in words, for the keyboard and a screen reader.
  *
- * Read-only: editing stays in the files. It stands still: drawn when something changes or while it is moved.
+ * The owner can edit a note's text or start a new one (in inbox/) from here; bots never can, and nothing is deleted. While open it turns and its signals run; after five minutes with no
+ * hand on it, it goes to sleep and the page returns to the yard (the owner's rule, 18 Nov 2026).
  */
+const IDLE_MS = 5 * 60 * 1000
 
 const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
@@ -42,8 +44,12 @@ export function matches(notes, query) {
 }
 
 export class BrainMap {
-  /** @param {HTMLElement} host where the view sits */
-  constructor(host) {
+  /**
+   * @param {HTMLElement} host where the view sits
+   * @param {{ sleep?: () => void }} [acts] `sleep`: Engram has been left alone long enough; the page goes back to the yard
+   */
+  constructor(host, acts = {}) {
+    this.acts = acts
     this.el = document.createElement('section')
     this.el.className = 'brainmap'
     this.el.hidden = true
@@ -52,6 +58,7 @@ export class BrainMap {
         <h1 class="bm-title">Engram</h1>
         <p class="bm-sub"></p>
         <label class="bm-find"><span class="visually-hidden">Search the notes</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 11.2L14.5 14.5M12.4 7a5.4 5.4 0 1 1-10.8 0a5.4 5.4 0 1 1 10.8 0"/></svg><input type="search" placeholder="Search the notes" autocomplete="off" spellcheck="false"></label>
+        <button type="button" class="bm-new" data-act="new-note">New note</button>
         <div class="bm-seg" role="group" aria-label="Show as"><button type="button" data-mode="field" title="${DESCRIBE.brain.field}" aria-pressed="true">Brain</button><button type="button" data-mode="list" title="${DESCRIBE.brain.list}" aria-pressed="false">List</button></div>
         <p class="bm-said" role="status" aria-live="polite"></p>
       </div>
@@ -97,6 +104,7 @@ export class BrainMap {
     this.scrub.addEventListener('input', () => { this.asOf = Number(this.scrub.value) >= Number(this.scrub.max) ? Infinity : this._from + Number(this.scrub.value) * DAY_MS; this._draw() })
     this.el.addEventListener('click', (e) => this._click(e))
     this.el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.note.hidden) { e.stopPropagation(); this.close() } })
+    for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'input']) this.el.addEventListener(type, () => this._awake(), { passive: true })
   }
 
   /** The field is made the first time it is shown: a page that never opens Engram makes no WebGL. */
@@ -107,6 +115,11 @@ export class BrainMap {
         pick: (id) => this.open(id),
         hover: (id, x, y) => this._hover(id, x, y),
       })
+      // Day or night follows the page's plates, now and whenever they are switched.
+      const page = this.el.closest('[data-plates]') || document.querySelector('.hud.studio')
+      const follow = () => this.field?.setTheme(this._night())
+      follow()
+      if (page) new MutationObserver(follow).observe(page, { attributes: true, attributeFilter: ['data-plates'] })
     } catch {
       this.field = null
       this.mode = 'list'
@@ -115,9 +128,25 @@ export class BrainMap {
     return this.field
   }
 
+  /** Any hand on Engram keeps it awake for five more minutes. */
+  _awake() {
+    clearTimeout(this._idle)
+    if (this.on) this._idle = setTimeout(() => this.acts.sleep?.(), IDLE_MS)
+  }
+
+  _night() {
+    return (this.el.closest('[data-plates]') || document.querySelector('.hud.studio'))?.dataset.plates === 'night'
+  }
+
+  /** The area inks for the page around the field: deep by day, light by night. */
+  _inks() {
+    return this._night() ? INKS : DAY_INKS
+  }
+
   show(on) {
     this.on = on
     this.el.hidden = !on
+    this._awake()
     if (on) { this._field()?.show(this.mode === 'field'); this.refresh() } else this.field?.show(false)
   }
 
@@ -220,7 +249,7 @@ export class BrainMap {
     this.list.innerHTML = [...byArea].filter(([, ns]) => ns.length).map(([area, ns]) => {
       const a = this.brain.areas.find((x) => x.id === area)
       const slot = this.brain.areas.indexOf(a) % INKS.length
-      return `<section style="--ink:${INKS[slot]}"><h2>${esc(a.name)} <span>${ns.length}${a.private ? ', private' : ''}</span></h2><ul>${ns.map((n) => `<li><button type="button" data-note="${esc(n.id)}" class="${n.status === 'superseded' ? 'old' : ''}"><strong>${esc(n.title)}</strong><span>${esc(KIND_WORD[n.kind])}, ${short(dayOf(n.date))}${n.status === 'superseded' ? ', superseded' : ''}${n.imported ? ', to review' : ''}</span></button></li>`).join('')}</ul></section>`
+      return `<section style="--ink:${this._inks()[slot]}"><h2>${esc(a.name)} <span>${ns.length}${a.private ? ', private' : ''}</span></h2><ul>${ns.map((n) => `<li><button type="button" data-note="${esc(n.id)}" class="${n.status === 'superseded' ? 'old' : ''}"><strong>${esc(n.title)}</strong><span>${esc(KIND_WORD[n.kind])}, ${short(dayOf(n.date))}${n.status === 'superseded' ? ', superseded' : ''}${n.imported ? ', to review' : ''}</span></button></li>`).join('')}</ul></section>`
     }).join('') || '<p class="bm-none">No note matches.</p>'
   }
 
@@ -241,6 +270,10 @@ export class BrainMap {
     const id = e.target.closest('[data-note]')?.dataset.note
     if (id) return this.open(id)
     if (e.target.closest('[data-act="close-note"]')) return this.close()
+    if (e.target.closest('[data-act="edit-note"]')) return this._edit()
+    if (e.target.closest('[data-act="cancel-edit"]')) return this.open(this.chosen)
+    if (e.target.closest('[data-act="save-note"]')) return this._save()
+    if (e.target.closest('[data-act="new-note"]')) return this._new()
   }
 
   /** Open a note's text on the side, and turn the brain to it. */
@@ -256,9 +289,11 @@ export class BrainMap {
       const n = await res.json()
       if (!res.ok) throw new Error(n.error || `The note answered ${res.status}`)
       if (this.chosen !== id) return
+      this._open = n
       const byId = new Map(this.brain.notes.map((x) => [x.id, x]))
       const title = (x) => byId.get(x)?.title || x
-      const inkOf = (x) => INKS[this.brain.areas.findIndex((a) => a.id === byId.get(x)?.area) % INKS.length] || INKS[0]
+      const inks = this._inks()
+      const inkOf = (x) => inks[this.brain.areas.findIndex((a) => a.id === byId.get(x)?.area) % inks.length] || inks[0]
       const chip = (x) => `<button type="button" class="bm-chip" style="--ink:${inkOf(x)}" data-note="${esc(x)}">${esc(title(x))}</button>`
       // [[links]] in the text become buttons to the note they name.
       const body = markdown(n.text.replace(/^#\s+.*\n?/, '').replace(/\[\[([^\]|#]+)(?:[#|]([^\]]*))?\]\]/g, (_, t, label) => `⟦${t.trim()}⟧${label ? `⟪${label}⟫` : ''}`))
@@ -275,11 +310,67 @@ export class BrainMap {
         ${n.supersedes.length ? `<p class="bm-replaces">Replaces ${n.supersedes.map(chip).join(' ')}</p>` : ''}
         <div class="bm-text">${body}</div>
         ${backs.length ? `<div class="bm-backs"><h3>Named by</h3>${backs.map(chip).join('')}</div>` : ''}
-        <p class="bm-path">${esc(n.path)}. Edit it in the file; this view only reads.</p>`
+        <div class="bm-acts"><button type="button" class="bm-btn" data-act="edit-note">Edit note</button><span>${esc(n.path)}</span></div>`
       this.note.scrollTop = 0
     } catch (err) {
       this.note.innerHTML = `<p class="bm-loading">${esc(err.message)}</p><button type="button" class="bm-close" data-act="close-note" aria-label="Close the note">${CLOSE}</button>`
     }
+  }
+
+  /** The note's whole text, frontmatter included, in a field to edit. */
+  _edit() {
+    const n = this._open
+    if (!n) return
+    this.note.innerHTML = `<header class="bm-note-head" style="--ink:var(--accent)"><p class="bm-note-kind">Editing</p><h2>${esc(n.title)}</h2>
+        <button type="button" class="bm-close" data-act="close-note" aria-label="Close the note">${CLOSE}</button></header>
+      <label class="bm-edit"><span class="visually-hidden">The note's text</span><textarea spellcheck="true">${esc(n.raw)}</textarea></label>
+      <p class="bm-edit-said" role="status"></p>
+      <div class="bm-acts"><button type="button" class="bm-btn primary" data-act="save-note">Save note</button><button type="button" class="bm-btn" data-act="cancel-edit">Cancel</button><span>${esc(n.path)}</span></div>`
+    const area = this.note.querySelector('textarea')
+    area.focus()
+    area.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this._save() } })
+  }
+
+  async _save() {
+    const n = this._open
+    const area = this.note.querySelector('.bm-edit textarea')
+    if (!n || !area) return
+    const said = this.note.querySelector('.bm-edit-said')
+    said.textContent = 'Saving.'
+    const res = await fetch('/api/studio/brain/note', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: n.id, text: area.value, version: n.version }) })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) { said.textContent = body.error || 'The note could not be saved.'; return }
+    this.key = ''
+    await this.refresh()
+    this.open(n.id)
+  }
+
+  /** A new note: a title and a first line, filed in inbox/ until it is sorted. */
+  _new() {
+    this.chosen = ''
+    this._open = null
+    this.note.hidden = false
+    this.el.classList.add('reading')
+    this.note.innerHTML = `<header class="bm-note-head" style="--ink:var(--accent)"><p class="bm-note-kind">New note, filed in inbox/</p><h2>Write it down</h2>
+        <button type="button" class="bm-close" data-act="close-note" aria-label="Close">${CLOSE}</button></header>
+      <form class="bm-newform"><label>Title <input name="title" required maxlength="120" placeholder="What was decided"></label>
+        <label>Text <textarea name="text" rows="8" placeholder="The decision or the preference, and why."></textarea></label>
+        <p class="bm-edit-said" role="status"></p>
+        <div class="bm-acts"><button type="submit" class="bm-btn primary">Save note</button></div></form>`
+    const form = this.note.querySelector('form')
+    const title = form.querySelector('[name="title"]')
+    const text = form.querySelector('[name="text"]')
+    title.focus()
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const said = form.querySelector('.bm-edit-said')
+      const res = await fetch('/api/studio/brain/new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: title.value, text: text.value }) })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) { said.textContent = body.error || 'The note could not be saved.'; return }
+      this.key = ''
+      await this.refresh()
+      this.open(body.id)
+    })
   }
 
   close() {

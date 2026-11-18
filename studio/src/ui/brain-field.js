@@ -10,12 +10,17 @@ import { RADIUS, brainDust, fieldLayout } from './brain-layout.js'
 /**
  * Engram's field: the notes as neurons in a brain of dust. A note glows in its area's colour; a decision burns
  * brighter than a preference; the newest decisions are white-hot; a superseded note is ash with a grey fibre
- * to what replaced it; a link is a fibre bent through the brain. Drawn only when something changes or while
- * the owner moves it (and once, for a short glide in): never in a loop while nobody looks.
+ * to what replaced it; a link is a fibre bent through the brain. While it is open it turns slowly, its neurons
+ * breathe and signals run along the fibres (the owner's choice, 18 Nov 2026); hidden, in a background tab or with
+ * reduced motion asked for, it draws nothing until something changes.
  */
 
 /** Light inks on the dark field, one per area, in the order the areas come. */
 export const INKS = ['#6ea8ff', '#46f0cc', '#b98cff', '#ff9a5c', '#ff6fcf', '#9be564', '#ffd166', '#ff7a7a', '#6fd8ff', '#e7c99a']
+/** Ink on the pale day window: the same hues, deep enough to read on it (at least 3:1). */
+export const DAY_INKS = ['#1f5fbf', '#0b7a63', '#7a3fd1', '#b0461a', '#a3127a', '#4a7512', '#8a6000', '#b8261b', '#20698c', '#6b5838']
+const DAY_VOID = '#eef2f7'
+const AMBER = new THREE.Color('#e08a00')
 const ASH = new THREE.Color('#5d6676')
 const WHITE = new THREE.Color('#ffffff')
 
@@ -23,37 +28,79 @@ const NODE_VERT = `
 attribute float size;
 attribute float glow;
 attribute float ring;
+attribute float phase;
 attribute vec3 color;
 varying vec3 vColor;
 varying float vGlow;
 varying float vRing;
 uniform float scale;
+uniform float time;
+uniform float day;
 void main() {
-  vColor = color; vGlow = glow; vRing = ring;
+  float breath = 1.0 + 0.12 * sin(time * 1.3 + phase * 6.2831);
+  vColor = color; vGlow = glow * (0.9 + 0.1 * breath); vRing = ring;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = size * scale / -mv.z;
+  gl_PointSize = size * breath * (1.0 + 0.45 * day) * scale / -mv.z;
   gl_Position = projectionMatrix * mv;
 }`
 const NODE_FRAG = `
 varying vec3 vColor;
 varying float vGlow;
 varying float vRing;
+uniform float day;
 void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   if (d > 1.0) discard;
   float core = smoothstep(0.30, 0.0, d);
   float halo = exp(-d * d * 5.0) * 0.55;
   float ring = vRing * smoothstep(0.08, 0.0, abs(d - 0.78)) * 0.7;
-  vec3 c = mix(vColor, vec3(1.0), core * 0.55);
-  gl_FragColor = vec4(c * (core + halo + ring) * vGlow, 1.0);
+  if (day > 0.5) {
+    // By day a neuron is ink with a soft halo of its own colour, laid over the pale window.
+    float dot = smoothstep(0.34, 0.24, d);
+    float glow = exp(-d * d * 3.2) * 0.42;
+    float a = clamp((dot + glow + ring) * min(vGlow, 1.2), 0.0, 1.0);
+    gl_FragColor = vec4(mix(vColor, vColor * 0.7, dot), a);
+  } else {
+    vec3 c = mix(vColor, vec3(1.0), core * 0.55);
+    gl_FragColor = vec4(c * (core + halo + ring) * vGlow, 1.0);
+  }
 }`
 const DUST_FRAG = `
 varying vec3 vTint;
 uniform float strength;
+uniform float day;
 void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   if (d > 1.0) discard;
-  gl_FragColor = vec4(vTint * (1.0 - d) * strength, 1.0);
+  if (day > 0.5) gl_FragColor = vec4(vTint * 0.5, (1.0 - d) * 0.9);
+  else gl_FragColor = vec4(vTint * (1.0 - d) * strength, 1.0);
+}`
+
+const FIBRE_VERT = `
+attribute vec3 color;
+attribute float along;
+attribute float lane;
+varying vec3 vColor;
+varying float vAlong;
+varying float vLane;
+void main() { vColor = color; vAlong = along; vLane = lane; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`
+const FIBRE_FRAG = `
+varying vec3 vColor;
+varying float vAlong;
+varying float vLane;
+uniform float time;
+uniform float signals;
+uniform float day;
+void main() {
+  // A signal: a short bright pulse that travels the fibre, each fibre at its own time.
+  float head = fract(time * 0.22 + vLane);
+  float pulse = smoothstep(0.09, 0.0, abs(vAlong - head)) * signals;
+  if (day > 0.5) {
+    float m = max(max(vColor.r, vColor.g), vColor.b);
+    gl_FragColor = vec4(vColor / max(m, 0.001) * 0.85, clamp(m * 1.9 + pulse * 0.8, 0.0, 1.0));
+  } else {
+    gl_FragColor = vec4(vColor * (1.0 + pulse * 3.2), 1.0);
+  }
 }`
 
 /** A fibre between two neurons: bent towards the brain's middle, as nerve tracts are. */
@@ -101,6 +148,16 @@ export class BrainField {
     this.composer.addPass(this.bloom)
     this.composer.addPass(new OutputPass())
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.time = { value: 0 }
+    this.day = { value: 0 }
+    this.inks = INKS
+    this.signals = { value: this.reduced ? 0 : 1 }
+    this.controls.autoRotate = !this.reduced
+    this.controls.autoRotateSpeed = 0.45
+    // A hand on the brain stops the turning for a while; it starts again on its own.
+    this.controls.addEventListener('start', () => { this.controls.autoRotate = false; clearTimeout(this._resume) })
+    this.controls.addEventListener('end', () => { clearTimeout(this._resume); this._resume = setTimeout(() => { this.controls.autoRotate = !this.reduced; this.request() }, 6000) })
+    document.addEventListener('visibilitychange', () => this.request())
     this._dust()
     this.group = new THREE.Group()
     this.scene.add(this.group)
@@ -135,12 +192,32 @@ export class BrainField {
     }
     geo.setAttribute('tint', new THREE.BufferAttribute(tint, 3))
     const mat = new THREE.ShaderMaterial({
-      uniforms: { strength: { value: 0.5 }, scale: { value: 300 } },
+      uniforms: { strength: { value: 0.5 }, scale: { value: 300 }, day: this.day },
       vertexShader: 'attribute vec3 tint; varying vec3 vTint; uniform float scale; void main(){ vTint = tint; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = 1.7 * scale / -mv.z; gl_Position = projectionMatrix * mv; }',
       fragmentShader: DUST_FRAG, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
     })
     this.dust = new THREE.Points(geo, mat)
     this.scene.add(this.dust)
+  }
+
+  /**
+   * Day or night, from the page's plates. Night: light on black, added up, with bloom. Day: ink on a pale window,
+   * laid over, no bloom, so it reads like the rest of the page.
+   */
+  setTheme(night) {
+    const day = !night
+    if (this.day.value === (day ? 1 : 0) && this._themed) return
+    this._themed = true
+    this.day.value = day ? 1 : 0
+    this.inks = day ? DAY_INKS : INKS
+    const ground = new THREE.Color(day ? DAY_VOID : '#020309')
+    this.scene.background = ground
+    this.scene.fog.color = ground
+    this.bloom.enabled = !day
+    const blend = day ? THREE.NormalBlending : THREE.AdditiveBlending
+    for (const m of [this.dust.material, this.nodes?.material, this.linkLines?.material, this.replacedLines?.material]) if (m) { m.blending = blend; m.needsUpdate = true }
+    for (const el of this.labels.children) el.style.setProperty('--ink', this.inks[this.slot?.get(el.dataset.area) ?? 0])
+    this.paint()
   }
 
   show(on) {
@@ -181,8 +258,9 @@ export class BrainField {
     geo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(notes.length), 1))
     geo.setAttribute('glow', new THREE.BufferAttribute(new Float32Array(notes.length), 1))
     geo.setAttribute('ring', new THREE.BufferAttribute(new Float32Array(notes.length), 1))
+    geo.setAttribute('phase', new THREE.BufferAttribute(Float32Array.from(notes, (n) => (n.id.length * 0.137 + n.date.charCodeAt(9) * 0.071) % 1), 1))
     this.nodes = new THREE.Points(geo, new THREE.ShaderMaterial({
-      uniforms: { scale: { value: 600 } }, vertexShader: NODE_VERT, fragmentShader: NODE_FRAG,
+      uniforms: { scale: { value: 600 }, time: this.time, day: this.day }, vertexShader: NODE_VERT, fragmentShader: NODE_FRAG,
       blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
     }))
     this.group.add(this.nodes)
@@ -197,23 +275,28 @@ export class BrainField {
     this.replacedLines = this._lines(this.replaced, 1, true)
     this.group.add(this.linkLines, this.replacedLines)
     this.centres = centres
-    this.labels.innerHTML = brain.areas.map((a) => `<button type="button" class="bf-label" data-area="${a.id}" title="${DESCRIBE.brain.area}" style="--ink:${INKS[this.slot.get(a.id)]}">${a.name.replace(/[<>&]/g, '')}<span>${a.count}</span></button>`).join('')
-    this.paint()
+    this.labels.innerHTML = brain.areas.map((a) => `<button type="button" class="bf-label" data-area="${a.id}" title="${DESCRIBE.brain.area}" style="--ink:${this.inks[this.slot.get(a.id)]}">${a.name.replace(/[<>&]/g, '')}<span>${a.count}</span></button>`).join('')
+    if (this.day.value) { this._themed = false; this.setTheme(false) } else this.paint()
     if (!this._glided) this._glide()
   }
 
   _lines(pairs, segments, dashed = false) {
     const pts = []
+    const along = []
+    const lane = []
     this._steps = 18
-    for (const [a, b] of pairs) {
+    pairs.forEach(([a, b], k) => {
       const curve = fibre(this.at.get(a), this.at.get(b), this._steps)
-      for (let i = 0; i < curve.length - 1; i += 1) pts.push(curve[i], curve[i + 1])
-    }
+      const offset = (k * 0.618034) % 1
+      for (let i = 0; i < curve.length - 1; i += 1) { pts.push(curve[i], curve[i + 1]); along.push(i / this._steps, (i + 1) / this._steps); lane.push(offset, offset) }
+    })
     const geo = new THREE.BufferGeometry().setFromPoints(pts)
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3), 3))
+    geo.setAttribute('along', new THREE.BufferAttribute(Float32Array.from(along), 1))
+    geo.setAttribute('lane', new THREE.BufferAttribute(Float32Array.from(lane), 1))
     const mat = dashed
       ? new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 5, gapSize: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
-      : new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+      : new THREE.ShaderMaterial({ uniforms: { time: this.time, signals: this.signals, day: this.day }, vertexShader: FIBRE_VERT, fragmentShader: FIBRE_FRAG, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
     const line = new THREE.LineSegments(geo, mat)
     if (dashed) line.computeLineDistances()
     void segments
@@ -238,9 +321,9 @@ export class BrainField {
     notes.forEach((n, i) => {
       const old = n.status === 'superseded'
       const fresh = n.kind === 'decision' && !old && Date.parse(`${n.date}T12:00:00Z`) >= newest
-      c.set(INKS[this.slot.get(n.area) ?? 0])
+      c.set(this.inks[this.slot.get(n.area) ?? 0])
       if (old) c.copy(ASH)
-      if (fresh) c.lerp(WHITE, 0.3)
+      if (fresh) c.lerp(this.day.value ? AMBER : WHITE, 0.3)
       const base = (n.kind === 'decision' ? 21 : n.kind === 'preference' ? 16 : 12) + (n.pinned ? 6 : 0) + Math.min(6, n.links.length * 1.5) + (fresh ? 6 : 0)
       let g = old ? 0.5 : n.kind === 'decision' ? 1.1 : 0.9
       if (fresh) g = 1.45
@@ -267,8 +350,8 @@ export class BrainField {
     const b = new THREE.Color()
     const byId = new Map(this.brain.notes.map((n) => [n.id, n]))
     pairs.forEach(([from, to], k) => {
-      a.set(INKS[this.slot.get(byId.get(from)?.area) ?? 0])
-      b.set(INKS[this.slot.get(byId.get(to)?.area) ?? 0])
+      a.set(this.inks[this.slot.get(byId.get(from)?.area) ?? 0])
+      b.set(this.inks[this.slot.get(byId.get(to)?.area) ?? 0])
       if (ash) { a.copy(ASH); b.set('#c9d2e0') }
       const touched = this.state.chosen && (from === this.state.chosen || to === this.state.chosen)
       const s = strength * Math.min(this.light.get(from), this.light.get(to)) * (this.state.chosen ? (touched ? 2.4 : 0.25) : 1)
@@ -316,16 +399,23 @@ export class BrainField {
     this.request()
   }
 
-  /** One frame now, and more only while the camera is still moving. */
+  /** Alive: open, in a visible tab, with motion allowed. Asleep otherwise: not one frame is drawn. */
+  alive() {
+    return this.on && !document.hidden && !this.reduced
+  }
+
+  /** One frame now, and more while the camera moves or the brain is alive. */
   request() {
     if (this._frame || !this.on) return
     this._frame = requestAnimationFrame((now) => {
       this._frame = 0
       const tweening = this._moving ? this._moving(now) : false
+      const live = this.alive()
+      if (live) this.time.value = now / 1000
       const damping = this.controls.update()
       this.composer.render()
       this._place()
-      if (tweening || damping) this.request()
+      if (tweening || damping || live) this.request()
     })
   }
 

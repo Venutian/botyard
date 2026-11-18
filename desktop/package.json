@@ -1,7 +1,7 @@
 {
   "name": "botyard-desktop",
   "productName": "Botyard",
-  "version": "2.8.0",
+  "version": "2.9.1",
   "description": "Botyard's map and Botyard itself, in one window",
   "author": "Botyard contributors",
   "private": true,
@@ -65,7 +65,7 @@
         "deb"
       ],
       "category": "Development",
-      "icon": "../assets/icon.png",
+      "icon": "../assets/icon-desktop.png",
       "maintainer": "Botyard contributors <noreply@botyard.invalid>",
       "synopsis": "A crew of AI bots that works on your projects, on your own computer",
       "extraResources": [
@@ -89,7 +89,7 @@
           ]
         }
       ],
-      "icon": "../assets/icon.png"
+      "icon": "../assets/icon-desktop.png"
     },
     "nsis": {
       "oneClick": false,
@@ -110,7 +110,7 @@
         }
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "../assets/icon.png",
+      "icon": "../assets/icon-desktop.png",
       "identity": null,
       "extraResources": [
         {

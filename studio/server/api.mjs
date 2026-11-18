@@ -97,7 +97,7 @@ async function studioRoute(req, res, url) {
     // What only the phone app could do before: the map is now the whole studio on this machine.
     // Kept ten seconds and worked out again as soon as a job, a comment or a card moves: it took about 340 ms.
     // The owner's notes (lib/brain.mjs): never for a bot.
-    if (await brainRoute(req, res, { pathname: url.pathname, query: url.searchParams, base: '/api/studio/brain', send, readBody: (r) => readJsonBody(r, 16 * 1024), local: fromThisMachine(req), botBehind })) return
+    if (await brainRoute(req, res, { pathname: url.pathname, query: url.searchParams, base: '/api/studio/brain', send, readBody: (r) => readJsonBody(r, 300 * 1024), local: fromThisMachine(req), botBehind })) return
     if (url.pathname === '/api/studio/needs' && read) return send(res, 200, { needs: withCardState(await needsNow()) })
     // The crew map: who tells whom, from the store (lib/flow.mjs).
     if (url.pathname === '/api/studio/flow' && read) return send(res, 200, await crewFlow({ window: url.searchParams.get('window') || '24h', needs: async () => withCardState(await needsNow()) }))
