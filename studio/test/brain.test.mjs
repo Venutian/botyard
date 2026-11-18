@@ -8,7 +8,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DEMO_BRAIN, brainFolder, brainNote, brainRoute, frontmatter, readBrain, setBrainFolder } from '../server/lib/brain.mjs'
-import { layout, matches } from '../src/ui/brain-map.js'
+import { matches } from '../src/ui/brain-map.js'
+import { RADIUS, SHAPE, brainDust, fieldLayout } from '../src/ui/brain-layout.js'
 
 const demo = DEMO_BRAIN()
 
@@ -98,17 +99,22 @@ test('owner only: a bot\'s run, a script\'s key or a bot\'s pass is refused, on 
   }
 })
 
-test('the picture: every note inside its band and the plot; search matches every word', () => {
+test('the field: every note inside the brain, near its own lobe, the same every time; search matches every word', () => {
   const b = readBrain(demo)
-  for (const width of [1440, 700, 375]) {
-    const L = layout(b, { width, height: 600 })
-    for (const n of b.notes) {
-      const p = L.at.get(n.id)
-      const band = L.bands.find((x) => x.id === n.area)
-      assert.ok(p.y > band.y && p.y < band.y + band.h, `${n.id} in its band at ${width}`)
-      assert.ok(p.x >= L.left && p.x <= width - L.right + 12, `${n.id} in the plot at ${width}`)
-    }
+  const one = fieldLayout(b)
+  const two = fieldLayout(b)
+  assert.deepEqual([...one.at], [...two.at], 'seeded from the notes, never random')
+  for (const n of b.notes) {
+    const p = one.at.get(n.id)
+    const inside = Math.hypot(p.x / (RADIUS * SHAPE.x), p.y / (RADIUS * SHAPE.y), p.z / (RADIUS * SHAPE.z))
+    assert.ok(inside <= 0.91, `${n.id} inside the brain`)
+    const mine = one.centres.get(n.area)
+    const nearest = [...one.centres.values()].reduce((best, c) => Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) < Math.hypot(p.x - best.x, p.y - best.y, p.z - best.z) ? c : best)
+    assert.ok(Math.hypot(p.x - mine.x, p.y - mine.y, p.z - mine.z) < Math.hypot(p.x - nearest.x, p.y - nearest.y, p.z - nearest.z) + 60, `${n.id} near its lobe`)
   }
+  const dust = brainDust(3000)
+  assert.equal(dust.length, 9000)
+  for (let i = 0; i < Math.round(3000 * 0.8) * 3; i += 3) assert.ok(Math.abs(dust[i]) > 0.04 * RADIUS * 0.8 || dust[i + 1] < -0.2 * RADIUS, 'the fissure between the halves stays empty')
   assert.deepEqual([...matches(b.notes, 'release green')], ['2026-10-14-release-when-green'])
   assert.equal(matches(b.notes, '  '), null)
 })
