@@ -518,6 +518,12 @@ async function pollStep(store, step, row, { io, now }) {
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId)
     if (!job) return { verdict: 'fail', findings: 'The step\'s job is gone' }
     if (job.status === 'cancelled') return { verdict: 'fail', findings: `The step's job ${job.identifier} was cancelled` }
+    // A bot that stopped and marked its job blocked, with no question waiting for the owner, has failed the step:
+    // its last words are the findings, and the track's fail line decides what comes next.
+    if (job.status === 'blocked' && !store.row("SELECT id FROM cards WHERE job_id = ? AND status = 'pending' LIMIT 1", job.id)) {
+      const said = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]?.body
+      return { verdict: 'fail', leaves: {}, findings: words(said || `The step's job ${job.identifier} is blocked`, VALUE_CHARS) }
+    }
     if (job.status !== 'done') return null
     const docs = new Map(store.rows('SELECT jd.key AS key, d.body AS body FROM job_documents jd JOIN documents d ON d.id = jd.document_id WHERE jd.job_id = ?', job.id).map((d) => [d.key, d.body]))
     const last = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]
@@ -604,7 +610,17 @@ function goTo(store, trip, version, target, handoff, now) {
       putRow(store, { ...row, status: 'stale', staleAt: iso(now) }, now)
     }
   }
-  return { ...trip, current: target, handoff: { step: target, ...handoff } }
+  // A step that makes a commit goes on from the last one a passing try of it left, whoever sent the work back.
+  const step = version.steps.find((s) => s.id === target)
+  const base = !handoff.base && step?.leaves.includes('commit') ? baseOf(store, trip.id, target) : ''
+  return { ...trip, current: target, handoff: { step: target, ...handoff, ...(base ? { base } : {}) } }
+}
+
+/** The commit the newest passing try of a step left, read as its id, or ''. */
+export function baseOf(store, tripId, stepId) {
+  const tries = store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? ORDER BY created_at DESC, try_number DESC', tripId, stepId)
+  for (const row of tries) if (row.snapshot?.verdict === 'pass' && commitIn(row.snapshot?.leaves?.commit)) return commitIn(row.snapshot.leaves.commit)
+  return ''
 }
 
 /** Where a step's outcome sends the trip, and the trip after it. */
@@ -623,8 +639,9 @@ function route(store, trip, version, step, row, outcome, now) {
   if (!back) return goTo(store, trip, version, line.to, outcome === 'fail' ? { findings } : {}, now)
   const key = `${line.from}>${line.to}`
   const taken = trip.rounds?.[key] || 0
-  // The work the round continues: the commit the step being redone left last time.
-  const before = latestRow(store, trip.id, line.to)?.snapshot?.leaves?.commit || ''
+  // The work the round continues: the last commit a passing try of the step being redone left (a try that
+  // failed or stopped may name a commit that holds nothing new).
+  const before = baseOf(store, trip.id, line.to)
   if (taken < line.rounds) return goTo(store, { ...trip, rounds: { ...trip.rounds, [key]: taken + 1 } }, version, line.to, { findings, ...(before ? { base: before } : {}) }, now)
   return goTo(store, trip, version, line.then, { findings: `${findings}\n\n(${line.rounds} round${line.rounds === 1 ? '' : 's'} back to "${line.to}" used; this step decides.)`.trim() }, now)
 }

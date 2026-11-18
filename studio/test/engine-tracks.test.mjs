@@ -137,10 +137,10 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.match(job1.description, /A lighthouse on the hill/)
   assert.equal(store.object("SELECT raw FROM wakes WHERE agent_id = 'b1'").payload.issueId, build1, 'the bot is woken')
   store.put('runs', { id: 'r1', companyId: 'co', agentId: 'b1', issueId: build1, status: 'succeeded', usageJson: { costUsd: 1.25, inputTokens: 100, outputTokens: 10 } })
-  botDoes(store, build1, { commit: 'aaa111' }, T0)
+  botDoes(store, build1, { commit: 'aaa1111' }, T0)
   await tick(2)
   // Tests passed with the commit handed in; the checker got its job.
-  assert.equal(io.ran[0].env.BOTYARD_IN_COMMIT, 'aaa111')
+  assert.equal(io.ran[0].env.BOTYARD_IN_COMMIT, 'aaa1111')
   const check1 = workingJob(store, tripId, 'check')
   assert.ok(check1)
   store.put('runs', { id: 'r2', companyId: 'co', agentId: 'c1', issueId: check1, status: 'succeeded', usageJson: { costUsd: 0.5 } })
@@ -150,8 +150,8 @@ test('a request moves along its track: a failed check goes back with its finding
   const build2 = workingJob(store, tripId, 'build')
   const job2 = store.object('SELECT raw FROM jobs WHERE id = ?', build2)
   assert.match(job2.description, /the lamp does not turn/)
-  assert.match(job2.description, /Start from commit aaa111/)
-  assert.equal(job2.startFrom, 'aaa111')
+  assert.match(job2.description, /Start from commit aaa1111/)
+  assert.equal(job2.startFrom, 'aaa1111')
   assert.match(job2.title, /round 2/)
   let view = tripView(store, tripId)
   assert.deepEqual(view.rounds, { 'check>build': 1 })
@@ -159,17 +159,17 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(view.steps.find((s) => s.id === 'check').tries[0].status, 'stale', 'the failed check is kept, no longer read')
   assert.equal(view.steps.find((s) => s.id === 'check').tries[0].snapshot.verdict, 'fail')
   // Round 2 fails at the tests, round 3 at the check: both back-lines count their own rounds.
-  botDoes(store, build2, { commit: 'bbb222' }, T0)
+  botDoes(store, build2, { commit: 'bbb2222' }, T0)
   testsPass = false
   await tick(4)
   assert.deepEqual(tripView(store, tripId).rounds, { 'check>build': 1, 'tests>build': 1 })
   assert.match(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).description, /3 failed/)
   testsPass = true
-  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ccc333' }, T0)
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ccc3333' }, T0)
   await tick(5)
   botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL again' }, T0)
   await tick(6)
-  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ddd444' }, T0)
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ddd4444' }, T0)
   await tick(7)
   botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL a third time' }, T0)
   await tick(8)
@@ -185,7 +185,7 @@ test('a request moves along its track: a failed check goes back with its finding
   // Landed by the script, but not in main yet: not finished.
   view = tripView(store, tripId)
   assert.equal(view.status, 'not-in-main')
-  assert.equal(view.commit, 'ddd444-merged')
+  assert.equal(view.commit, 'ddd4444-merged')
   assert.equal(getRequest(store, request.id).status, 'not-in-main')
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
   landed = true
@@ -197,6 +197,36 @@ test('a request moves along its track: a failed check goes back with its finding
   // Cost is added up across every step and round of the request.
   assert.equal(shown.cost.usd, 1.75)
   assert.equal(shown.cost.inputTokens, 100)
+})
+
+test('a blocked step fails with its words, and the next round starts from the last commit a passing try left', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'run tests': () => ({ out: { verdict: 'pass' } }) })
+  startRequest(store, 'co', { track: 'crew', title: 'Add a lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  // The first build passes with a report line that names its branch after the commit.
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111 on LH-1-build' }, T0)
+  await tick(2)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL: no lamp' }, T0)
+  await tick(3)
+  // Round 2 starts from aaa1111, and its bot stops: blocked, nothing new built, no question for the owner.
+  const round2 = workingJob(store, tripId, 'build')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', round2).startFrom, 'aaa1111')
+  const { addComment } = await import('../server/engine/write.mjs')
+  addComment(store, round2, { body: 'Nothing built: the branch does not hold the work.\nCOMMIT: 1f36db3 (no new commit)' }, { now: T0, actor: { agent: 'b1' } })
+  store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', round2), status: 'blocked' })
+  await tick(4)
+  // Blocked is a fail: the build's own fail line is to the gate here, with the bot's words.
+  const view = tripView(store, tripId)
+  assert.equal(view.current, 'decide')
+  assert.match(store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /Nothing built/)
+  // Sent back to build by the owner: it starts from the commit the passing try left, not the blocked one.
+  answerGate(store, tripId, { action: 'back', to: 'build', note: 'go on from your first commit' }, { now: T0 + 5000, actor: OWNER })
+  await tick(6)
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'aaa1111')
 })
 
 test('a track that delivers a change and leaves no commit is stuck, never done', async () => {

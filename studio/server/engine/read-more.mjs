@@ -175,7 +175,8 @@ export function costSummary(store, jobRef) {
   if (!job) throw new Refused(404, 'Issue not found')
   const ids = [job.id]
   for (let n = 0; n < ids.length && ids.length < 500; n++) for (const child of store.rows('SELECT id FROM jobs WHERE parent_id = ?', ids[n])) if (!ids.includes(child.id)) ids.push(child.id)
-  const out = { issueId: job.id, issueCount: ids.length, includeDescendants: true, costCents: 0, costCentsExact: '0.0000000', inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, runCount: 0, runtimeMs: 0 }
+  // costUsd: what the tools said each run cost, added up over the job, every job under it and every round (a request's whole cost).
+  const out = { issueId: job.id, issueCount: ids.length, includeDescendants: true, costCents: 0, costCentsExact: '0.0000000', costUsd: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, runCount: 0, runtimeMs: 0 }
   for (const id of ids) {
     for (const run of store.rows('SELECT usage_json, started_at, finished_at FROM runs WHERE job_id = ?', id)) {
       let usage = {}
@@ -183,10 +184,12 @@ export function costSummary(store, jobRef) {
       out.inputTokens += Number(usage.inputTokens) || 0
       out.cachedInputTokens += Number(usage.cachedInputTokens) || 0
       out.outputTokens += Number(usage.outputTokens) || 0
+      out.costUsd += Number(usage.costUsd) || 0
       out.runCount += 1
       if (run.started_at && run.finished_at) out.runtimeMs += Math.max(0, Date.parse(run.finished_at) - Date.parse(run.started_at))
     }
   }
+  out.costUsd = Math.round(out.costUsd * 10_000) / 10_000
   return out
 }
 
