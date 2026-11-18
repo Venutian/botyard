@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch, direction A: yours first, then the board</title>
+<link rel="stylesheet" href="base.css">
+<style>
+/* Direction A. The steps that wait for you are a list of their own at the top, each with the one button that does
+   it; under it the board, products by channels, across the whole deck. */
+.head { display: flex; align-items: center; gap: 16px; padding: 14px 16px 14px 24px; border-bottom: 2px solid var(--edge); }
+.head h1 { margin: 0; font: 800 32px/1 var(--sign); letter-spacing: 0.01em; }
+.head .read { margin: 0 auto 0 4px; font-size: 14px; color: var(--muted); }
+.head .read b { font-weight: 600; color: var(--text); }
+.head { position: relative; }
+/* Checking: the one motion. A bar along the head's foot fills as channels are read (transform only). */
+.head .bar { position: absolute; left: 0; right: 0; bottom: -2px; height: 3px; background: var(--accent); transform-origin: left; transform: scaleX(var(--done, 0)); transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .head .bar { transition: none; } }
+.btn:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
+.btn:disabled:active { transform: none; }
+.empty-state { max-width: 62ch; margin: 56px auto; padding: 0 24px; }
+.empty-state h2 { margin: 0 0 10px; font: 800 26px/1.1 var(--sign); }
+.empty-state p { margin: 0 0 16px; font-size: 16px; line-height: 1.55; color: var(--muted); }
+.empty-state code { font: 500 15px/1 var(--body); color: var(--text); background: var(--raise); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; }
+.clear { margin: 20px 24px 0; padding: 14px 16px; border: 2px solid var(--line); border-radius: 10px; font-size: 15px; color: var(--muted); }
+.clear b { color: var(--text); font-weight: 600; }
+
+.yours { margin: 20px 24px 0; border: 2px solid var(--edge); border-radius: 10px; background: var(--yours); box-shadow: 0 3px 0 var(--edge); overflow: hidden; }
+.yours h2 { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 16px; background: var(--go); color: var(--go-ink); border-bottom: 2px solid var(--edge); font: 800 21px/1 var(--sign); letter-spacing: 0.02em; }
+.yours ol { list-style: none; margin: 0; padding: 0; }
+.yours li { display: grid; grid-template-columns: 200px 150px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 6px 8px 6px 16px; color: var(--yours-ink); }
+.yours li + li { border-top: 1px solid color-mix(in srgb, var(--yours-line) 45%, transparent); }
+.yours .p { font-weight: 600; font-size: 15px; }
+.yours li.same { border-top-style: dashed; }
+.yours li.same .p { visibility: hidden; }
+.yours .c { font-size: 14px; color: color-mix(in srgb, var(--yours-ink) 72%, var(--yours)); }
+.yours .s { font-size: 15px; }
+.yours .btn { min-width: 168px; min-height: 34px; }
+.yours .btn:hover { background: var(--go); color: var(--go-ink); }
+/* After dark the plate's edge is near-black, so a key on the yellow-tinted row takes the lit edge (plates.css --field-edge). */
+:root[data-plates='night'] .yours .btn { border-color: var(--field-edge); box-shadow: 0 2px 0 var(--edge); }
+
+.board-head { display: flex; align-items: baseline; gap: 12px; margin: 28px 24px 8px; }
+.board-head h2 { margin: 0; font: 800 21px/1 var(--sign); letter-spacing: 0.02em; }
+.board-head p { margin: 0; font-size: 13px; color: var(--muted); }
+.board-head .key { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.board-head .key span { display: inline-flex; align-items: center; gap: 6px; }
+
+table { width: calc(100% - 48px); margin: 0 24px 28px; border-collapse: collapse; table-layout: fixed; }
+th, td { text-align: left; vertical-align: top; }
+thead th { padding: 8px 10px; font: 600 13px/1.2 var(--body); color: var(--muted); border-bottom: 2px solid var(--edge); }
+thead th:first-child { width: 230px; padding-left: 12px; }
+tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
+tbody tr:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+tbody tr:hover { background: color-mix(in srgb, var(--raise) 70%, transparent); }
+tbody th { padding: 12px 10px 12px 12px; font-weight: 400; }
+tbody th b { display: block; font: 800 22px/1 var(--sign); letter-spacing: 0.01em; }
+tbody th small { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+tbody th .crew { margin-top: 6px; font-size: 13px; line-height: 1.4; color: var(--text); }
+tbody th .crew em { font-style: normal; color: var(--muted); }
+tbody th .yours-n { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; font-weight: 600; }
+td { padding: 13px 10px; font-size: 14px; line-height: 1.35; }
+td .st { display: flex; gap: 7px; align-items: baseline; }
+td .st .g { transform: translateY(1px); }
+td.none .st { color: var(--muted); }
+td.bad .st { color: var(--red); font-weight: 600; }
+td small { display: block; margin: 3px 0 0 19px; font-size: 13px; color: var(--muted); }
+td small.old { color: var(--amber); font-weight: 500; }
+
+/* Phone: no table. The list of yours stacks, and each product lists only the channels it is on. */
+@media (max-width: 699px) {
+  .head { padding: 12px 12px 12px 16px; flex-wrap: wrap; gap: 6px 10px; }
+  .head h1 { font-size: 28px; }
+  .head .read { order: 3; flex-basis: 100%; margin: 0; }
+  .head .btn.check { margin-left: auto; }
+  .yours { margin: 14px 12px 0; }
+  .yours li { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 14px; }
+  .yours .c { order: -1; }
+  .yours .btn { justify-self: start; margin-top: 6px; min-height: 44px; }
+  .board-head { margin: 22px 16px 6px; flex-wrap: wrap; }
+  .board-head .key { margin-left: 0; flex-basis: 100%; }
+  table, thead, tbody, tr, th, td { display: block; width: auto; }
+  table { margin: 0 12px 24px; }
+  thead { display: none; }
+  tbody tr { border: 2px solid var(--edge); border-radius: 10px; background: var(--raise); margin-bottom: 12px; overflow: hidden; }
+  td { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); }
+  td::before { content: attr(data-ch); font-size: 13px; color: var(--muted); }
+  td.empty { display: none; }
+  td small { grid-column: 2; margin-left: 19px; }
+  .board-head p.blank { display: none; }
+  .yours li.same .p { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="shell" aria-hidden="true"></div>
+<header class="top"><span class="mark">Botyard</span><span class="say">Lighthouse Labs</span></header>
+<nav class="rail" aria-label="Pages"><span>Needs you</span><span>Work</span><span>Projects</span><span>Crew</span><span>Runs</span><span class="on">Launch</span><span>Setup</span></nav>
+<main class="sheet" aria-labelledby="t">
+  <div class="head">
+    <h1 id="t">Launch</h1>
+    <p class="read" id="read"></p><span class="bar" aria-hidden="true"></span>
+    <button class="btn check" type="button">Check now</button>
+    <button class="btn icon" type="button" aria-label="Close"></button>
+  </div>
+  <div class="sheet-body" id="body"></div>
+</main>
+<script src="data.js"></script>
+<script src="glyphs.js"></script>
+<script>
+const L = window.LAUNCH
+document.querySelector('.check').innerHTML = `${ICON.check} Check now`
+document.querySelector('.btn.icon').innerHTML = ICON.close
+document.getElementById('read').innerHTML = `Read from each channel <b>${L.readMinutesAgo} minutes ago</b>`
+const chName = Object.fromEntries(L.channels.map((c) => [c.id, c.name]))
+const mine = []
+for (const r of L.rows) for (const [id, c] of Object.entries(r.cells)) if (c.waits === 'you') mine.push({ p: r.name, ch: chName[id], c })
+const state = new URLSearchParams(location.search).get('state') || ''
+const yoursHtml = `<section class="yours" aria-labelledby="y"><h2 id="y">${mine.length} ${mine.length === 1 ? 'step waits' : 'steps wait'} for you</h2><ol>${mine.map((m, i) => `<li class="${i && mine[i - 1].p === m.p ? 'same' : ''}"><span class="p">${esc(m.p)}</span><span class="c">${esc(m.ch)}</span><span class="s">${esc(m.c.next)}</span><button class="btn" type="button">${esc(m.c.act)}</button></li>`).join('')}</ol></section>`
+const cellHtml = (c, id) => {
+  if (!c) return `<td class="empty" data-ch="${esc(chName[id])}"></td>`
+  const k = markOf(c)
+  const cls = k === 'none' ? 'none' : k === 'bad' ? 'bad' : ''
+  const note = c.how === 'told' ? `<small class="${c.old ? 'old' : ''}">Told ${esc(c.age)} ago</small>` : c.since ? `<small>For ${esc(c.since)}</small>` : c.detail ? `<small>${esc(c.detail)}</small>` : ''
+  return `<td class="${cls}" data-ch="${esc(chName[id])}"><span class="st">${G[k]}<span>${esc(c.state)}</span></span>${note}</td>`
+}
+const rowHtml = (r) => {
+  const n = Object.values(r.cells).filter((c) => c.waits === 'you').length
+  const crew = Object.values(r.cells).find((c) => c.waits && c.waits !== 'you')
+  return `<tr tabindex="0"><th scope="row"><b>${esc(r.name)}</b><small>${esc(r.kind)}</small>${n ? `<span class="yours-n">${G.yours}${n} ${n === 1 ? 'step waits' : 'steps wait'} for you</span>` : ''}${crew ? `<p class="crew"><em>Waits for ${esc(crew.waits)}:</em> ${esc(crew.next)}</p>` : ''}</th>${L.channels.map((ch) => cellHtml(r.cells[ch.id], ch.id)).join('')}</tr>`
+}
+const key = `<p class="key"><span>${G.ok}Live</span><span>${G.yours}Your step</span><span>${G.bad}Down</span><span>${G.none}Not read</span></p>`
+const lead = state === 'clear' ? `<p class="clear"><b>Nothing waits for you.</b> The crew and the stores have the next steps.</p>` : yoursHtml
+document.getElementById('body').innerHTML = `${lead}<div class="board-head"><h2>Every product</h2><p class="blank">A blank cell: the product is not on that channel.</p>${key}</div>
+<table><thead><tr><th>Product</th>${L.channels.map((c) => `<th>${esc(c.name)}</th>`).join('')}</tr></thead><tbody>${L.rows.map(rowHtml).join('')}</tbody></table>`
+if (state === 'empty') {
+  document.getElementById('read').textContent = ''
+  document.querySelector('.check').disabled = true
+  document.getElementById('body').innerHTML = `<div class="empty-state"><h2>No launch plan yet</h2><p>Launch shows where each product stands on each store and channel. It needs a plan first: one file with each product and its id on each channel (its package name, bundle id, address or repository).</p><p>Write it at <code>~/.botyard/launch-plan.json</code>.</p><button class="btn" type="button">How to write the plan</button></div>`
+}
+if (state === 'checking') {
+  document.body.classList.add('checking')
+  document.getElementById('read').innerHTML = 'Reading each channel: <b>5 of 12 read</b>'
+  document.querySelector('.head').style.setProperty('--done', '0.42')
+  const b = document.querySelector('.check'); b.disabled = true; b.innerHTML = `${ICON.check} Checking`
+}
+if (state === 'focus') {
+  document.querySelector('tbody tr').focus()
+  document.querySelectorAll('tbody tr')[2].style.background = 'color-mix(in srgb, var(--raise) 70%, transparent)'
+}
+</script>
+</body>
+</html>
