@@ -247,8 +247,8 @@ class Routing(Lanes):
             return self.jobs[path.split('assigneeAgentId=')[1].split('&')[0]]
         return {}
 
-    def job(self, text='', title='Check NGE-1: x'):
-        return {'id': 'j1', 'identifier': 'NGE-2', 'title': title, 'createdAt': '2026-11-18T10:00:00Z', 'description': text}
+    def job(self, text='', title='Check TST-1: x'):
+        return {'id': 'j1', 'identifier': 'TST-2', 'title': title, 'createdAt': '2026-11-18T10:00:00Z', 'description': text}
 
     def test_a_check_waiting_while_free_models_rest_goes_to_the_first_lane(self):
         self.jobs['a-checker'] = [self.job()]
