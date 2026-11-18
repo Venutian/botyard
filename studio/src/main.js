@@ -57,7 +57,7 @@ studio = new Studio(shell.el, {
   refresh: () => ask(),
   toast: (text, kind) => shell.toast(text, kind),
   // The crew map is the home: the yard is not drawn under it, so an idle page draws no frames.
-  homeChanged: (mode) => { stage.pause(mode === 'map'); if (mode === 'yard') view.whole({ glide: false }) },
+  homeChanged: (mode) => { stage.pause(mode !== 'yard'); if (mode === 'yard') view.whole({ glide: false }) },
 })
 
 // ── settings ───────────────────────────────────────────────────────────────────────
@@ -112,6 +112,7 @@ async function ask() {
     }
     noticeCount()
     if (studio.home === 'map') studio.crewMap.refresh()
+    else if (studio.home === 'brain') studio.brainMap.refresh()
     else stage.redraw()
   } finally {
     asking = false
