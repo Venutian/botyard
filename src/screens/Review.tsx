@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, DraftMark, ReviewSources, getReviewSources, proofSource, sendReview } from '../api';
+import { Connection, DraftMark, ReviewSources, getReviewSources, holdInTray, proofSource, sendReview } from '../api';
 import { Nav } from '../crew';
 import { boxOf, linesOf, quoteOf, reviewOf, whereOf } from '../marks';
 import { alpha } from '../theme/color';
@@ -224,6 +224,17 @@ export function ReviewScreen({ job, bot, connection, nav }: { job?: string; bot?
             {error ? <Txt color={t.bad} accessibilityLiveRegion="polite">{error}</Txt> : null}
             <Button label={src.gate ? 'Send back with marks' : `Send to ${src.bot || 'the bot'}`} icon="send" busy={busy} disabled={!marks.length && !note.trim()} onPress={() => send('back')} />
             <Button label={src.gate ? 'Approve' : 'Approve and keep'} kind="quiet" icon="check" busy={busy} onPress={() => send('approve')} />
+            {src.gate ? null : (
+              <Button label="Hold in the tray, send with my other answers" kind="quiet" icon="save" busy={busy} disabled={!marks.length && !note.trim()} onPress={async () => {
+                setBusy(true);
+                try {
+                  await holdInTray(connection, { kind: 'review', jobId: src.jobId, title: 'Your review', job: `${src.ref} ${src.title}`.trim(), review: reviewOf(src, marks, note, 'back', current) });
+                  setMarks([]);
+                  setNote('');
+                  setSent('Held in the tray in Needs you.');
+                } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+              }} />
+            )}
           </>
         )}
       </ScrollView>

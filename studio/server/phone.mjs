@@ -46,6 +46,7 @@ import { artifactList, documentRevisions, jobList, jobPage, projectPage, restore
 import { liveSessions as readLiveSessions } from './lib/sessions.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
+import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
 
 const MIN_TOKEN = 32
 const MAX_BODY = 16 * 1024
@@ -553,6 +554,17 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       // Reviews: what can be marked on a job or in a chat, the send (the owner's only), and the kept record (lib/marks.mjs).
       if (pathname === '/v1/marks/sources' && req.method === 'GET') return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }, { picture: (id) => `/v1/proof/${id}`, ...options }))
       if (pathname === '/v1/marks' && req.method === 'GET') return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }, options))
+      // The answer tray beside Needs you, the same one the map holds (lib/tray.mjs).
+      if (pathname === '/v1/tray' && req.method === 'GET') return send(res, 200, { items: readTray() })
+      if (pathname === '/v1/tray/questions' && req.method === 'GET') return send(res, 200, await waitingQuestions({ job: q('job'), bot: q('bot') }, options))
+      if (pathname === '/v1/tray' && req.method === 'POST') {
+        if (process.env.BOTYARD_REFUSE_BOTS !== 'off' && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
+        const body = await readBody(req, MAX_LONG_BODY)
+        if (body.action === 'hold') return send(res, 200, holdItem(body.item || {}))
+        if (body.action === 'drop') return send(res, 200, dropItem(String(body.key || '')))
+        if (body.action === 'send') return send(res, 200, await sendTray({ keys: Array.isArray(body.keys) ? body.keys.map(String) : null, settle: (id, verb, extra) => settleHeld(id, verb, { ...extra, ...connectors.options }).catch(() => null), ...options }))
+        return send(res, 400, { error: 'Hold, drop or send' })
+      }
       if (pathname === '/v1/marks' && req.method === 'POST') {
         if (process.env.BOTYARD_REFUSE_BOTS !== 'off' && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
         return send(res, 201, await sendMarks(await readBody(req, MAX_LONG_BODY), options))

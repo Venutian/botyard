@@ -2,6 +2,7 @@ import './studio.css'
 import './plates.css'
 import './crew-map.css'
 import './marks.js'
+import './tray.js'
 import './tracks.css'
 import { CrewMap } from './crew-map.js'
 import { isDecision, waitingCount } from './needs-count.js'
@@ -413,6 +414,8 @@ export class Studio {
       if (bot) this.actions.pickBot(bot)
     })
     this._mountDeck()
+    // The tray and the review sheet (tray.js, marks.js) ask Needs you to read the cards again after a send.
+    window.botyardStudio = { refreshNeeds: () => this._loadNeeds() }
     this.crewMap = new CrewMap(this.root, {
       openBot: (id) => { this.openScreen('bots'); this._beside(() => this.openBot(id)) },
       openNeeds: () => this.show('attention'),
@@ -856,7 +859,7 @@ export class Studio {
     const live = all.filter((a) => !a.archived)
     const archived = all.filter((a) => a.archived)
     this._alsoHtml = ''
-    if (!all.length) return ''
+    if (!all.length) return '<div class="tray-slot" data-part="tray"></div>'
     const KIND = { approval: 'Wants your yes or no', question: 'Asks you', blocked: 'Blocked', review: 'To review', failed: 'Failed' }
     const card = (a) => {
       const n = all.indexOf(a)
@@ -881,7 +884,9 @@ export class Studio {
         : a.kind === 'failed' ? 'Open the job: its last runs and why they failed'
         : a.kind === 'review' ? 'Open the job to look at it' : ''
       const goLine = go ? `<small class="go">${esc(go)} →</small>` : ''
-      return `<div class="${cls}" data-card="${n}">${open ? `<button class="ask-open" ${open}>${label}${goLine}</button>` : `<div class="ask-open">${label}</div>`}${sort}</div>`
+      // A question is also answered right here, into the tray, to send with the others at once (tray.js).
+      const here = a.kind === 'question' && !a.archived && (a.id || a.botId) ? `<button class="btn small tray-here" data-act="tray-answer" ${a.botId ? `data-bot="${esc(a.botId)}"` : `data-job="${esc(a.id)}"`} data-title="${esc(a.title)}">Answer here</button>` : ''
+      return `<div class="${cls}" data-card="${n}">${open ? `<button class="ask-open" ${open}>${label}${goLine}</button>` : `<div class="ask-open">${label}</div>`}${here}${sort}</div>`
     }
     // "Needs you" holds only what waits for the owner's answer; the rest is news, listed under "Also going on".
     const decide = live.filter(isDecision)
@@ -894,7 +899,7 @@ export class Studio {
       const words = `<span class="state ${tone}">${esc(KIND[a.kind] || a.kind)}</span> ${esc(plainWords(a.title))}${a.times > 1 ? ` (${a.times} times)` : ''}`
       return open ? `<button type="button" class="also" data-card="${n}" ${open}>${words}</button>` : `<p class="also" data-card="${n}">${words}</p>`
     }).join('')
-    return decide.map(card).join('')
+    return '<div class="tray-slot" data-part="tray"></div>' + decide.map(card).join('')
       + (archived.length ? `<details class="archived-cards"><summary>Archived (${archived.length})</summary>${archived.map(card).join('')}</details>` : '')
   }
 
