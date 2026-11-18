@@ -258,20 +258,41 @@ function hold(store, wake, agent, job) {
   return {}
 }
 
+/** A run that cannot start because the folder it needs is not there. */
+export class FolderGone extends Error {}
+
+/** The folder a job's project names when it is not on disk (so the job would be worked in another folder), else ''. */
+function projectFolderMissing(store, job) {
+  if (!job.projectId) return ''
+  const project = store.object('SELECT raw FROM projects WHERE id = ?', job.projectId)
+  const root = (project?.primaryWorkspace || project?.workspaces?.[0])?.cwd
+    || store.row('SELECT cwd FROM project_workspaces WHERE project_id = ? ORDER BY is_primary DESC LIMIT 1', job.projectId)?.cwd
+  return root && !fs.existsSync(root) ? root : ''
+}
+
 /** Everything a run needs on disk, and its row in the store. @returns the run */
 export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now = Date.now(), env = process.env } = {}) {
   const agent = store.object('SELECT raw FROM agents WHERE id = ?', wake.agentId)
   const job = store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '')
   const company = store.object('SELECT raw FROM company LIMIT 1') || {}
+  // The session this bot left this job in is looked at before the folder is made: a folder that was removed and is cut again
+  // is a new checkout, and the conversation about the old one would talk of files that are not there.
+  const kept = store.objects('SELECT raw FROM sessions WHERE agent_id = ? AND task_key = ?', agent.id, job.id).at(-1)
+  const keptFolder = kept?.sessionParamsJson?.sessionId ? kept.sessionParamsJson.cwd || '' : ''
+  const sessionFolderGone = Boolean(keptFolder) && !fs.existsSync(keptFolder)
   const workspace = await workspaceFor(store, job, { io, now })
   const cwd = workspace?.cwd || agent.adapterConfig?.cwd || os.homedir()
+  const wrongBase = workspace ? '' : projectFolderMissing(store, job)
+  if (wrongBase) throw new FolderGone(`The project's folder does not exist: ${wrongBase}. The run did not start, so the bot is not left to work in another folder.`)
+  if (!fs.existsSync(cwd)) throw new FolderGone(`The folder this run would start in does not exist: ${cwd}.`)
   const config = agent.adapterConfig || {}
   const override = store.object('SELECT raw FROM jobs WHERE id = ?', job.id).assigneeAdapterOverrides || {}
   const model = override.model || config.model || ''
 
-  // The session this bot left this job in, unless a fresh one was asked for or the folder moved.
-  const kept = store.objects('SELECT raw FROM sessions WHERE agent_id = ? AND task_key = ?', agent.id, job.id).at(-1)
-  const session = !wake.payload?.forceFreshSession && kept?.sessionParamsJson?.sessionId && kept.sessionParamsJson.cwd === cwd && kept.adapterType === agent.adapterType ? kept.sessionParamsJson.sessionId : ''
+  // It is carried on unless a fresh one was asked for, the folder moved, or the folder it was in is gone: then the run starts a
+  // fresh session in the current folder and is told so.
+  const session = !wake.payload?.forceFreshSession && keptFolder && !sessionFolderGone && keptFolder === cwd && kept.adapterType === agent.adapterType ? kept.sessionParamsJson.sessionId : ''
+  const freshBecauseGone = sessionFolderGone && !wake.payload?.forceFreshSession ? keptFolder : ''
 
   const runId = randomUUID()
   const runDir = path.join(runsDir(dataDir), runId)
@@ -288,7 +309,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
   const names = new Map(store.rows('SELECT id, name FROM agents').map((a) => [a.id, a.name]))
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `botyard-run-${job.identifier.toLowerCase()}-`))
   const files = filesForRun(store, job, agent, comments, since, path.join(scratch, 'files'), { dataDir })
-  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, files, resumed: Boolean(session), inline: inlinesInstructions(agent), names })
+  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, files, resumed: Boolean(session), sessionFolderGone: freshBecauseGone, inline: inlinesInstructions(agent), names })
   const promptFile = path.join(runDir, 'prompt.txt')
   fs.writeFileSync(promptFile, prompt)
   const mcpConfig = path.join(runDir, 'mcp.json')

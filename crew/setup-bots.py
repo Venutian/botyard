@@ -407,12 +407,11 @@ def pc_skills():
 
 
 def skills_env(bot):
-    """Only this bot's skills of the PC's, when its file lists them; "all" hides none."""
+    """The bot's settings file for its AI: only its skills of the PC's when its file lists them ("all" hides none), and what no bot
+    may touch closed to every bot."""
     want = bot['spec'].get('skills', 'all')
-    if not isinstance(want, list):
-        return {}
-    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want), reads=bot['spec'].get('reads'),
-                                 own=(bot.get('config') or {}).get('cwd'))
+    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills() if isinstance(want, list) else [], want=set(want) if isinstance(want, list) else None,
+                                reads=bot['spec'].get('reads'), own=(bot.get('config') or {}).get('cwd'))
 
 
 def body_for(bot, path, existing, boss, dry=False):
