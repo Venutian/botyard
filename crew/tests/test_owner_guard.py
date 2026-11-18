@@ -52,11 +52,11 @@ class OwnerGuard(unittest.TestCase):
         for command in ['python3 ~/.botyard/crew/own/mail.py fetch', 'mail.py list --all']:
             self.assertIsNone(bash(command), command)
         for command in ['cat ~/.config/mail-keys/config.json', 'cp -r ~/.config/mail-keys /tmp/x',
-                        'python3 -c "print(open(\'/home/user/.config/mail-keys/config.json\').read())"']:
+                        'python3 -c "print(open(\'/srv/owner-data/.config/mail-keys/config.json\').read())"']:
             self.assertIn('mail.py only', bash(command) or '', command)
-        for tool, given in (('Read', {'file_path': '/home/user/.config/mail-keys/config.json'}),
-                            ('Write', {'file_path': '/home/user/.config/mail-keys/config.json', 'content': '{}'}),
-                            ('Grep', {'pattern': 'key', 'path': '/home/user/.config/mail-keys'})):
+        for tool, given in (('Read', {'file_path': '/srv/owner-data/.config/mail-keys/config.json'}),
+                            ('Write', {'file_path': '/srv/owner-data/.config/mail-keys/config.json', 'content': '{}'}),
+                            ('Grep', {'pattern': 'key', 'path': '/srv/owner-data/.config/mail-keys'})):
             self.assertIsNotNone(guard.check({'tool_name': tool, 'tool_input': given}), tool)
         # A script's own source names the folder; a builder's edit of it is an edit like any other.
         self.assertIsNone(guard.check({'tool_name': 'Edit', 'tool_input': {
