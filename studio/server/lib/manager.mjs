@@ -16,7 +16,7 @@ import { git } from './changes.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks, roleOf } from './looks.mjs'
 import { readRested } from './crew.mjs'
-import { EngineError, cancelJob, crewRecords, jobComments, plainTitle, refOf, stopJob, withRefs } from './engine.mjs'
+import { EngineError, call, cancelJob, companyId, crewRecords, jobComments, orElse, plainTitle, refOf, stopJob, withRefs } from './engine.mjs'
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
@@ -139,10 +139,46 @@ function checkStep(check, verdicts) {
  * Every piece of work as one line: Build, Check (the checker), the lead, Merged, Pushed. A line follows the
  * newest round that was not cancelled, and counts the rounds before it.
  */
-function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now }) {
+/** Dollars as a line says them. */
+const usd = (n) => (n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? '<$0.01' : '$0')
+
+/**
+ * A request on a track as one work line: where its trip stands and what it cost so far, across every step,
+ * round and rerun. Its steps' own jobs are not lines of their own.
+ */
+export function requestLine(r, issue, projectNames, now) {
+  const trip = r.trip || {}
+  const cost = Number(r.cost?.usd) || 0
+  const step = trip.currentTitle || ''
+  let stage = 'build'
+  let pill = ''
+  let note = ''
+  if (r.status === 'done') { stage = 'merged'; note = 'In main' }
+  else if (r.status === 'not-in-main' || trip.status === 'not-in-main') { stage = 'passed'; note = 'Done, not in main yet' }
+  else if (r.status === 'stopped' || trip.status === 'stopped') { stage = 'stopped'; note = 'Stopped' }
+  else if (trip.status === 'stuck') { stage = 'blocked'; note = `Stuck: ${trip.reason || 'see its trip'}` }
+  else if (trip.status === 'paused') { stage = 'queued'; note = `Paused at ${step}` }
+  else if (trip.currentKind === 'gate') { stage = 'queued'; pill = 'waits'; note = `Waits for you: ${step}` }
+  else if (/check|test|rul/i.test(`${trip.current} ${step}`)) { stage = 'check'; note = `${step} on its track` }
+  else { stage = 'build'; note = `${step || 'Starting'} on its track` }
+  const rounds = Object.values(trip.rounds || {}).reduce((a, b) => a + b, 0)
+  const at = Date.parse(r.updatedAt) || now
+  const state = (name) => ({ build: stage === 'build' ? 'now' : 'done', check: stage === 'check' ? 'now' : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
+  return {
+    id: issue?.id || r.jobId, ref: issue ? refOf(issue, projectNames) : r.jobCode, title: short(plainTitle(withRefs(r.title))), project: projectNames.get(r.projectId) || '', projectId: r.projectId || '',
+    bot: '', stage, pill: pill || stage, note: `${note}${cost > 0 ? `, ${usd(cost)} so far` : ''}`, steps: STEPS.map(state), fixes: rounds, since: at, late: false,
+    open: !['merged', 'stopped'].includes(stage), at, track: { tripId: trip.id || '', cost, costText: usd(cost), status: r.status },
+  }
+}
+
+function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now, requests = [] }) {
   const groups = new Map()
   const checks = new Map()
+  // Work moved by a track is the request's one line; its steps' jobs are left out here.
+  const onTrack = new Map(requests.map((r) => [r.jobId, r]))
+  const byId = new Map(issues.map((i) => [i.id, i]))
   for (const issue of issues) {
+    if (onTrack.has(issue.id) || onTrack.has(issue.parentId)) continue
     const what = kindOf(issue.title)
     if (what.kind === 'ruling') continue
     if (what.kind === 'check') {
@@ -239,6 +275,11 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
       open: !SETTLED.has(stage),
       at: touched,
     })
+  }
+  for (const r of requests) {
+    const at = Date.parse(r.updatedAt) || 0
+    if (['done', 'stopped'].includes(r.status) && now - at > DAY_MS) continue
+    lines.push(requestLine(r, byId.get(r.jobId), projectNames, now))
   }
   const rank = { build: 0, check: 0, ruling: 0, fix: 1, blocked: 1, queued: 2, passed: 3, built: 3, merged: 4, kept: 6, replaced: 6, stopped: 6, pushed: 6 }
   return lines.sort((a, b) => rank[a.stage] - rank[b.stage] || b.at - a.at).slice(0, SHOWN_LINES)
@@ -461,7 +502,7 @@ function stateLine({ working, trouble, lines }) {
 }
 
 /** The whole view from records already in hand. Pure, so the tests can feed it a studio. */
-export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), now = Date.now() }) {
+export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], now = Date.now() }) {
   const names = new Map(agents.map((a) => [a.id, a.name]))
   const projectNames = new Map(projects.map((p) => [p.id, p.name]))
   const byRef = new Map(issues.map((i) => [i.identifier, i]))
@@ -474,7 +515,7 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
   }
   const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
   const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, now })
-  const lines = workLines({ issues, names, roles: new Map(agents.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now })
+  const lines = workLines({ issues, names, roles: new Map(agents.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
   const bots = botRows({ agents, issues, projectNames, liveAgents, working, files, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
   return {
@@ -540,11 +581,13 @@ async function repoState(project, now) {
 export async function managerWithRecords({ folder = crewFolder(), now = Date.now(), ...options } = {}) {
   const records = await crewRecords(options)
   const files = readCrewFiles(folder)
-  const [verdicts, repos] = await Promise.all([
+  const [verdicts, repos, requests] = await Promise.all([
     readVerdicts(records.issues, options, now),
     Promise.all(records.projects.map(async (p) => [p.id, await repoState(p, now)])),
+    // Requests on tracks: an engine without tracks has none.
+    companyId(options).then((co) => orElse(call(`/companies/${co}/requests?limit=200`, options), [])),
   ])
-  return { manager: buildManager({ ...records, files, verdicts, repos: new Map(repos), now }), records }
+  return { manager: buildManager({ ...records, files, verdicts, repos: new Map(repos), requests, now }), records }
 }
 
 export const managerSummary = async (options) => (await managerWithRecords(options)).manager
