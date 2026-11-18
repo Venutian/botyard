@@ -247,7 +247,7 @@ test('a gate with nothing to land says so: its yes sends the work back from the 
     const tripId = store.row('SELECT id FROM trips').id
     // The build stops at once: the work it should go on from is on another commit.
     const build = workingJob(store, tripId, 'build')
-    const { addComment, settleCard } = await import('../server/engine/write.mjs')
+    const { addComment } = await import('../server/engine/write.mjs')
     addComment(store, build, { body: `Stopped: the fixes are in commit ${SHA}, which is not under this branch.` }, { now: T0, actor: { agent: 'b1' } })
     store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', build), status: 'blocked' })
     await tick(2)
@@ -261,7 +261,8 @@ test('a gate with nothing to land says so: its yes sends the work back from the 
     assert.match(card.payload.prompt, /from 44a585bf9bd6, the commit the findings name/)
     assert.match(card.payload.prompt, /Build starts again from 44a585bf9bd6.*There is nothing to land yet: no build passed/)
     assert.match(card.payload.prompt, /Stop it: The request stops here and nothing is merged/)
-    settleCard(store, request.jobId, card.id, answer, answer === 'reject' ? { reason: 'Not now' } : {}, { now: T0 + 3000, actor: OWNER })
+    // Answered as the card says, the way the tray answers it: yes or no, with an optional note for a stop.
+    answerGate(store, tripId, { action: 'answer', yes: answer === 'accept', note: answer === 'reject' ? 'Not now' : '' }, { now: T0 + 3000, actor: OWNER })
     await tick(4)
     if (answer === 'accept') {
       // Back to the build, from the named commit, with the findings as its note.
@@ -272,6 +273,7 @@ test('a gate with nothing to land says so: its yes sends the work back from the 
     } else {
       assert.equal(tripView(store, tripId).status, 'stopped')
       assert.equal(store.object('SELECT raw FROM requests WHERE id = ?', request.id).status, 'stopped')
+      assert.equal(tripView(store, tripId).reason, 'Not now')
     }
   }
 })

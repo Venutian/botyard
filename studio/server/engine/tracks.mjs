@@ -517,7 +517,8 @@ export function gateCard(version, step, row, trip, request, inputs) {
   const why = findings ? `It waits for you because a step failed. What it said:\n${findings}` : step.words || 'The steps before this one passed; the next one waits for your yes.'
   // What the work is: what the gate needs and what the step before it left, for the owner to judge.
   // A value that only repeats the findings (a ruling's verdict, say) is not said twice.
-  const same = (v) => findings && String(v).replace(/\s+/g, ' ').trim().toLowerCase().slice(8, 200) === String(findings).replace(/\s+/g, ' ').trim().toLowerCase().slice(8, 200)
+  const plain = (v) => String(v).replace(/^\s*verdict:\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const same = (v) => Boolean(findings) && plain(findings).includes(plain(v).slice(0, 160))
   const made = [...new Set([...step.needs, ...Object.keys(row.beforeLeaves || {})])].filter((n) => !['workdir', 'branch', 'findings'].includes(n) && inputs[n] !== undefined && !same(inputs[n]))
   const work = made.map((n) => `${n}: ${words(inputs[n], 600)}`).join('\n')
   const prompt = [why, work && `What there is to look at:\n${work}`, `${yes.label}: ${yesText}\n${no.label}: ${noText}`].filter(Boolean).join('\n\n')
@@ -894,12 +895,22 @@ export function answerGate(store, tripId, body = {}, { now = Date.now(), actor }
   if (!step || step.kind !== 'gate' || row?.status !== 'working') throw new Refused(409, 'This trip is not waiting at a gate')
   const request = requestOr404(store, trip.requestId)
   const order = version.steps.map((s) => s.id)
-  const action = String(body.action || '')
-  if (action === 'approve') {
+  let action = String(body.action || '')
+  if (action === 'approve' || (action === 'answer' && body.yes === true)) {
     settleCard(store, request.jobId, row.cardId, 'accept', {}, { now, actor })
     return tripOr404(store, tripId)
   }
-  if (action !== 'back' && action !== 'context') throw new Refused(400, 'At a gate: approve, back (to a step, with a note) or context (a note, and the step before the gate runs again)')
+  // The card's own answers, as its buttons say them: a no that stops the request needs no note.
+  if (action === 'answer') {
+    const card = store.object('SELECT raw FROM cards WHERE id = ?', row.cardId)
+    if (card?.payload?.no?.act === 'stop') {
+      settleCard(store, request.jobId, row.cardId, 'reject', { reason: words(body.note, VALUE_CHARS).trim() }, { now, actor })
+      return tripOr404(store, tripId)
+    }
+    body = { ...body, action: 'context' }
+    action = 'context'
+  }
+  if (action !== 'back' && action !== 'context') throw new Refused(400, 'At a gate: approve, answer (yes or no, as the card says), back (to a step, with a note) or context (a note, and the step before the gate runs again)')
   const said = words(body.note, VALUE_CHARS).trim()
   if (!said) throw new Refused(400, 'Say what to change: a note goes with the work')
   const to = action === 'context' ? body.to || order[order.indexOf(step.id) - 1] : body.to
