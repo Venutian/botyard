@@ -81,6 +81,28 @@ Five tables, each row with its whole object kept as JSON next to the columns tha
 | `trips` | one run of a track version for a request | id, request, track, version, status, parent trip and step |
 | `trip_steps` | one try of one step in a trip: its inputs, its snapshot, its job, its cost | id, trip, step, try, status |
 
+## Built in
+
+- **sample-check** — a script counts what is in the folder, then the owner looks. No bot, no key: the
+  demo yard runs it on start.
+- **build-check-land** — the crew's way. A brief check (the request's words, with the sections the
+  studio asks for; a lead bot writes the brief when they are missing), a build, the tests, a check by
+  another bot, back to the builder with the findings when a check fails (two rounds), a ruling by the
+  lead when the rounds are used, the owner when the ruling says no, and the landing in main. Its bots
+  are named by role: `$builder`, `$checker` and `$lead` are inputs, which a studio fills once as the
+  track's **defaults** (saved as its own copy) or a request names. A request may give `test_command`.
+
+A bot step's job ends with a line `TRACK STEP: <trip>/<step>/<try>`, so the crew's own scripts can
+leave such a job to its track. A bot leaves its results as documents on its job, or as `NAME: value`
+lines at the end of its last comment (`COMMIT: …`, `VERDICT: PASS`, `OUTCOME: MET`). A build that names
+no commit leaves the head of its own branch when it moved.
+
+Script steps may call the tools in `studio/server/engine/track-tools/` through `$BOTYARD_TRACK_TOOLS`:
+`brief.mjs [SECTION …]` and `land.mjs` (merge into main only after the repo's release check and the
+test command pass on the merged tree, apart from the project's folder; nothing is pushed). A script
+step is told the request's values as `BOTYARD_IN_<NAME>`, and `BOTYARD_PROJECT_FOLDER`, `BOTYARD_MAIN`,
+`BOTYARD_REQUEST_TITLE`, and writes its result as JSON to `BOTYARD_STEP_OUT`.
+
 ## How today's crew maps onto a track
 
 | Today | On a track |

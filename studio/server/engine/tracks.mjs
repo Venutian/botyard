@@ -31,6 +31,10 @@ export const GIVEN = ['title', 'words']
 /** What a step may be handed besides what it needs: the last check's findings, the owner's note, the work it continues. */
 export const HANDED = ['findings', 'note', 'base']
 const NAME = /^[a-z][a-z0-9_-]{0,39}$/
+/** The last line of every job a bot step makes: the crew's own scripts leave such a job to its track. */
+export const TRACK_MARK = 'TRACK STEP:'
+/** Small tools a track's script steps may call: `node "$BOTYARD_TRACK_TOOLS/land.mjs"`. */
+export const TRACK_TOOLS = path.join(here, 'track-tools')
 const MOST_STEPS = 40
 const MOST_ROUNDS = 20
 const VALUE_CHARS = 20_000
@@ -51,6 +55,10 @@ export const trackIo = {
     try { process.kill(pid, 0); return true } catch { return false }
   },
   stop(pid) { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } },
+  /** The commit a folder's checkout is at. */
+  async head(cwd) {
+    return (await exec('git', ['-C', cwd, 'rev-parse', 'HEAD'], { timeout: 30_000 })).stdout.trim()
+  },
   /** true when `commit` is in `branch` of the repo, false when it is not, null when git cannot say. */
   async inMain(repo, commit, branch) {
     try {
@@ -83,6 +91,14 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   if (!Array.isArray(body.steps) || !body.steps.length) throw new Refused(400, 'A track needs at least one step')
   if (body.steps.length > MOST_STEPS) throw new Refused(400, `A track has at most ${MOST_STEPS} steps`)
   const inputs = names(body.inputs, 'The track\'s inputs')
+  // Values a studio fills in once for the track (which bot builds, which checks): a request may say otherwise.
+  const defaults = {}
+  if (body.defaults !== undefined && (typeof body.defaults !== 'object' || Array.isArray(body.defaults) || body.defaults === null)) throw new Refused(400, 'A track\'s defaults are names and their values')
+  for (const [name, value] of Object.entries(body.defaults || {})) {
+    if (!NAME.test(name)) throw new Refused(400, `Default "${String(name).slice(0, 40)}" is not a name`)
+    if (!inputs.includes(name)) throw new Refused(400, `Default "${name}" is not one of the track's inputs`)
+    defaults[name] = words(value, 4000)
+  }
   const steps = body.steps.map((raw, index) => {
     const step = raw && typeof raw === 'object' ? raw : {}
     const id = String(step.id || '')
@@ -147,6 +163,8 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   steps.forEach((s, n) => {
     const before = new Set([...GIVEN, ...inputs, ...HANDED, ...steps.slice(0, n).flatMap((e) => e.leaves)])
     for (const need of s.needs) if (!before.has(need)) throw new Refused(400, `Step "${s.id}" needs "${need}", which no earlier step leaves and the request does not give`)
+    // A bot named as $name is the bot the request (or the track's default) names under that input.
+    if (s.kind === 'bot' && s.bot.startsWith('$') && !inputs.includes(s.bot.slice(1))) throw new Refused(400, `Step "${s.id}" takes its bot from "${s.bot.slice(1)}", which is not one of the track's inputs`)
   })
   // Every step can be reached from the first.
   const reached = new Set([steps[0].id])
@@ -160,7 +178,7 @@ export function checkTrack(body = {}, { trackKeys = [], selfKey = '' } = {}) {
   if (lost.length) throw new Refused(400, `No line reaches ${lost.map((id) => `"${id}"`).join(', ')}`)
   const delivers = body.delivers === 'nothing' ? 'nothing' : 'change'
   const main = /^[\w][\w./-]{0,99}$/.test(String(body.main || '')) ? String(body.main) : 'main'
-  return { title: words(body.title, 200), description: words(body.description, 4000), inputs, delivers, main, steps, lines }
+  return { title: words(body.title, 200), description: words(body.description, 4000), inputs, defaults, delivers, main, steps, lines }
 }
 
 const sameShape = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -216,12 +234,47 @@ export const SAMPLE_TRACK = {
   ],
 }
 
+/**
+ * The crew's way, built in: brief, build, tests, a check by another bot, back to the builder with the
+ * findings when a check fails, a ruling when the rounds are used, the owner when the ruling says no, and
+ * the landing in main. The studio says which bots by the track's defaults (`builder`, `checker`, `lead`)
+ * or each request does; the request's words are the brief. Saved again with other defaults, sections or
+ * rounds, it is the studio's own.
+ */
+export const BUILD_TRACK = {
+  key: 'build-check-land',
+  title: 'Build, check, land',
+  description: 'A bot builds, the tests run, another bot checks; a failed check goes back to the builder with its findings; the work is finished when it is in main.',
+  inputs: ['builder', 'checker', 'lead'],
+  steps: [
+    { id: 'brief', kind: 'script', title: 'Brief check', command: 'node "$BOTYARD_TRACK_TOOLS/brief.mjs"', leaves: ['brief'], timeoutSec: 60 },
+    { id: 'write-brief', kind: 'bot', bot: '$lead', title: 'Write the brief', needs: ['words'], leaves: ['brief'], words: 'Turn this request into a brief the builder can work from, with every section the brief check named in its findings. Save it as the document `brief`.' },
+    { id: 'build', kind: 'bot', bot: '$builder', title: 'Build', needs: ['brief'], leaves: ['commit', 'report'], words: 'Build what the brief asks, commit it on this job\'s branch, and end your report with COMMIT: <sha> and OUTCOME: MET or NOT MET.' },
+    { id: 'tests', kind: 'script', title: 'Tests', needs: ['commit'], command: 'sh -c "${BOTYARD_IN_TEST_COMMAND:-echo No test command is set for this project.}"', timeoutSec: 1800 },
+    { id: 'check', kind: 'bot', bot: '$checker', title: 'Check', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'Check the build against the brief: run what proves it, read the change. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, what must change.' },
+    { id: 'rule', kind: 'bot', bot: '$lead', title: 'Ruling', ruling: true, needs: ['brief'], leaves: ['verdict'], words: 'The rounds back to the builder are used. Read the findings and the work, and rule: VERDICT: PASS lands it as it is, VERDICT: FAIL hands it to the owner with what you would do.' },
+    { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The crew could not finish this on its own. Approve to land it as it is, or send it back to a step with a note.' },
+    { id: 'land', kind: 'script', title: 'Land in main', needs: ['commit'], leaves: ['commit'], command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"', timeoutSec: 3600 },
+  ],
+  lines: [
+    { from: 'brief', to: 'build', on: 'pass' }, { from: 'brief', to: 'write-brief', on: 'fail' },
+    { from: 'write-brief', to: 'build', on: 'pass' }, { from: 'write-brief', to: 'owner', on: 'fail' },
+    { from: 'build', to: 'tests', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'tests', to: 'check', on: 'pass' }, { from: 'tests', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    { from: 'check', to: 'land', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    { from: 'rule', to: 'land', on: 'pass' }, { from: 'rule', to: 'owner', on: 'fail' },
+    { from: 'owner', to: 'land', on: 'pass' },
+    { from: 'land', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+  ],
+}
+
+const BUILT_IN = [SAMPLE_TRACK, BUILD_TRACK]
 const seeded = new WeakSet()
 /** The built-in tracks, saved once in every studio that does not have them yet. */
 export function ensureBuiltIns(store, { now = Date.now() } = {}) {
   if (seeded.has(store)) return
   for (const company of store.rows('SELECT id FROM company')) {
-    if (!trackOf(store, company.id, SAMPLE_TRACK.key)) saveTrack(store, company.id, SAMPLE_TRACK, { now, builtIn: true })
+    for (const track of BUILT_IN) if (!trackOf(store, company.id, track.key)) saveTrack(store, company.id, track, { now, builtIn: true })
   }
   seeded.add(store)
 }
@@ -264,7 +317,8 @@ export function startRequest(store, companyId, body = {}, { now = Date.now(), ac
   if (!track || track.status !== 'active') throw new Refused(400, 'Say which saved track this request runs on')
   const version = versionOf(store, track.id, track.version)
   const given = body.inputs && typeof body.inputs === 'object' && !Array.isArray(body.inputs) ? body.inputs : {}
-  const missing = version.inputs.filter((name) => given[name] === undefined || given[name] === '')
+  const filled = { ...(version.defaults || {}), ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined && v !== null && v !== '')) }
+  const missing = version.inputs.filter((name) => filled[name] === undefined || filled[name] === '')
   if (missing.length) throw new Refused(400, `This track needs ${missing.join(', ')} from the request`)
   let job = body.jobId ? store.object('SELECT raw FROM jobs WHERE id = ? OR identifier = ?', body.jobId, body.jobId) : null
   if (body.jobId && !job) throw new Refused(400, 'That job does not exist')
@@ -274,7 +328,7 @@ export function startRequest(store, companyId, body = {}, { now = Date.now(), ac
   if (!job) job = createJob(store, companyId, { title: words(body.title, 500) || track.title, description: words(body.words, 40_000), projectId, status: 'in_progress' }, { now, actor })
   const request = {
     id: randomUUID(), companyId, projectId, jobId: job.id, jobCode: job.identifier, trackId: track.id, trackKey: track.key, version: version.version,
-    title: job.title, words: job.description || '', inputs: Object.fromEntries(Object.entries(given).map(([k, v]) => [k, words(v, VALUE_CHARS)])),
+    title: job.title, words: job.description || '', inputs: Object.fromEntries(Object.entries(filled).map(([k, v]) => [k, words(v, VALUE_CHARS)])),
     status: 'working', askedBy: actor?.agent ? { agent: actor.agent } : { user: actor?.user || 'local-board' }, createdAt: iso(now), updatedAt: iso(now), finishedAt: null,
   }
   store.tx(() => {
@@ -328,7 +382,7 @@ export function botJobText(step, inputs) {
 export function verdictOf(text) {
   const t = String(text || '').trim()
   if (/^(fail|failed|not met|rejected|no go|no-go|not approved)\b/i.test(t)) return 'fail'
-  if (/^(pass|passed|met|approved|go|ok)\b/i.test(t)) return 'pass'
+  if (/^(pass|passed|met|approved|go|ok|report only)\b/i.test(t)) return 'pass'
   return null
 }
 
@@ -379,10 +433,11 @@ const envName = (name) => `BOTYARD_IN_${name.toUpperCase().replace(/[^A-Z0-9]/g,
 async function startStep(store, trip, request, version, step, row, values, { dataDir, io, now }) {
   const inputs = { ...values, ...(row.inputs || {}) }
   if (step.kind === 'bot') {
-    const bot = botOf(store, request.companyId, step.bot)
-    if (!bot) return { stuck: `Step "${step.id}" asks for a bot called "${step.bot}", and there is none` }
+    const named = step.bot.startsWith('$') ? String(inputs[step.bot.slice(1)] || '') : step.bot
+    const bot = named && botOf(store, request.companyId, named)
+    if (!bot) return { stuck: `Step "${step.id}" asks for a bot called "${named || step.bot}", and there is none` }
     const job = createJob(store, request.companyId, {
-      title: `${request.title} · ${step.title}${row.try > 1 ? ` (round ${row.try})` : ''}`.slice(0, 500), description: botJobText(step, inputs),
+      title: `${request.title} · ${step.title}${row.try > 1 ? ` (round ${row.try})` : ''}`.slice(0, 500), description: `${botJobText(step, inputs)}\n\n${TRACK_MARK} ${trip.id}/${step.id}/${row.try}`,
       projectId: request.projectId, parentId: request.jobId, assigneeAgentId: bot.id, status: 'todo',
       ...(step.model ? { assigneeAdapterOverrides: { model: step.model } } : {}),
       ...(/^[\w][\w./-]{0,199}$/.test(String(inputs.base || '')) ? { baseRef: String(inputs.base) } : {}),
@@ -393,7 +448,10 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     const dir = path.join(dataDir, 'trips', trip.id, row.id)
     fs.mkdirSync(dir, { recursive: true })
     const cwd = [inputs.workdir, projectFolder(store, request.projectId)].find((d) => d && fs.existsSync(d)) || dir
-    const env = { ...process.env, BOTYARD_STEP_OUT: path.join(dir, 'out.json'), BOTYARD_TRIP_ID: trip.id, BOTYARD_REQUEST_JOB: request.jobCode || request.jobId, BOTYARD_STEP_ID: step.id }
+    const env = {
+      ...process.env, BOTYARD_STEP_OUT: path.join(dir, 'out.json'), BOTYARD_TRIP_ID: trip.id, BOTYARD_REQUEST_JOB: request.jobCode || request.jobId, BOTYARD_STEP_ID: step.id,
+      BOTYARD_TRACK_TOOLS: TRACK_TOOLS, BOTYARD_PROJECT_FOLDER: projectFolder(store, request.projectId), BOTYARD_MAIN: version.main, BOTYARD_REQUEST_TITLE: request.title,
+    }
     for (const [name, value] of Object.entries(inputs)) if (NAME.test(name) && typeof value !== 'object') env[envName(name)] = String(value).slice(0, VALUE_CHARS)
     const { command, args } = shellOf(step.command)
     const spec = { runId: row.id, command, args, cwd, env, promptFile: '', logFile: path.join(dir, 'log.ndjson'), resultFile: path.join(dir, 'result.json'), pidFile: path.join(dir, 'pid.json'), timeoutSec: step.timeoutSec, graceSec: 10 }
@@ -438,25 +496,48 @@ function tailOf(logFile, stream, most = 1500) {
   return text.slice(-most).trim()
 }
 
+/**
+ * What a bot left on its job for each name: a document with that key, or else a `NAME: value` line in
+ * its last comment (the crew's reports end with `COMMIT: …`, `VERDICT: …`, `OUTCOME: MET`).
+ */
+export function botLeft(docs, lastComment = '') {
+  const lines = new Map()
+  for (const line of String(lastComment || '').split('\n')) {
+    const found = /^\s*[*_`]*([A-Z][A-Z _-]{1,30}?)[*_`]*\s*:\s*(.+?)\s*$/.exec(line)
+    if (found) lines.set(found[1].trim().toLowerCase().replace(/[ -]+/g, '_'), found[2].replace(/^[*_`]+\s*/, '').replace(/[*_`]+$/, '').trim())
+  }
+  return (name) => (docs.has(name) ? docs.get(name) : lines.get(name))
+}
+
 /** The outcome of a working step, or null while it is still going. */
-function pollStep(store, step, row, { io, now }) {
+async function pollStep(store, step, row, { io, now }) {
   if (step.kind === 'bot') {
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId)
     if (!job) return { verdict: 'fail', findings: 'The step\'s job is gone' }
     if (job.status === 'cancelled') return { verdict: 'fail', findings: `The step's job ${job.identifier} was cancelled` }
     if (job.status !== 'done') return null
     const docs = new Map(store.rows('SELECT jd.key AS key, d.body AS body FROM job_documents jd JOIN documents d ON d.id = jd.document_id WHERE jd.job_id = ?', job.id).map((d) => [d.key, d.body]))
-    const said = docs.get('verdict')
+    const last = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]
+    const left = botLeft(docs, last?.body)
+    // The verdict: a PASS or FAIL it said, or else its report's OUTCOME (MET or NOT MET), or else a closed job passes
+    // unless the step asks for a verdict.
+    const said = left('verdict') || left('outcome')
     const verdict = said ? verdictOf(said) || 'fail' : step.ruling || step.leaves.includes('verdict') ? 'fail' : 'pass'
     const leaves = {}
-    for (const name of step.leaves) if (docs.has(name)) leaves[name] = words(docs.get(name), VALUE_CHARS)
+    for (const name of step.leaves) { const value = left(name); if (value !== undefined && value !== '') leaves[name] = words(value, VALUE_CHARS) }
     if (said) leaves.verdict = words(said, VALUE_CHARS)
-    const place = store.object('SELECT raw FROM workspaces WHERE job_id = ? ORDER BY updated_at DESC LIMIT 1', job.id)
+    if (last?.body && step.leaves.includes('report') && !leaves.report) leaves.report = words(last.body, VALUE_CHARS)
+    const place = store.object('SELECT raw FROM workspaces WHERE id = ? OR job_id = ? ORDER BY updated_at DESC LIMIT 1', job.executionWorkspaceId || '', job.id)
     if (place?.cwd && !leaves.workdir) leaves.workdir = place.cwd
     if (place?.branchName && !leaves.branch) leaves.branch = place.branchName
-    const missing = said && verdict === 'pass' ? step.leaves.filter((n) => n !== 'verdict' && leaves[n] === undefined) : []
-    if (missing.length) return { verdict: 'fail', leaves, findings: `The step passed but did not leave ${missing.join(', ')}` }
-    return { verdict, leaves, findings: verdict === 'fail' ? words(said || `The job ${job.identifier} closed without a verdict`, VALUE_CHARS) : '' }
+    // A commit it made but did not name: the head of its own branch, when that moved past where it started.
+    if (step.leaves.includes('commit') && !leaves.commit && place?.branchName && io.head) {
+      const head = await io.head(place.cwd).catch(() => '')
+      if (head && !(place.baseRef && head.startsWith(place.baseRef))) leaves.commit = head
+    }
+    const missing = verdict === 'pass' ? step.leaves.filter((n) => n !== 'verdict' && n !== 'report' && leaves[n] === undefined) : []
+    if (missing.length) return { verdict: 'fail', leaves, findings: `The step's job ${job.identifier} closed but did not leave ${missing.join(', ')}` }
+    return { verdict, leaves, findings: verdict === 'fail' ? words(docs.get('verdict') || last?.body || said || `The job ${job.identifier} closed without a verdict`, VALUE_CHARS) : '' }
   }
   if (step.kind === 'script') {
     const result = readJson(path.join(row.folder, 'result.json'))
@@ -614,7 +695,7 @@ async function moveTrip(store, tripId, ctx) {
     return true
   }
   if (row.status === 'working') {
-    const result = pollStep(store, step, row, ctx)
+    const result = await pollStep(store, step, row, ctx)
     if (!result) return false
     const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}) }
     row = { ...row, status: result.verdict === 'pass' ? 'passed' : 'failed', snapshot, finishedAt: iso(now) }

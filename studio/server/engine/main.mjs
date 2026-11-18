@@ -33,6 +33,7 @@ const MAX_BODY = 12 * 1024 * 1024
  * @param {string} options.dataDir  where the store, the run logs and the runs' folders live
  * @param {number|null} [options.port]  a port of this computer to listen on (0 picks a free one); none when left out
  * @param {boolean} [options.runs]  false answers calls but starts no bot and no routine
+ * @param {boolean} [options.tracks]  move trips along their tracks (with runs, unless asked: the demo moves its sample trip with no bot)
  * @param {(line: string) => void} [options.log]
  * @param {string} [options.apiUrl]  the address a bot's run is told to call; needed when the engine has no port of its own
  * @param {number} [options.tickMs]
@@ -40,7 +41,7 @@ const MAX_BODY = 12 * 1024 * 1024
  * @param {'log'|'enforce'} [options.keyMode]  a call with no pass and no key: still the owner and written down, or refused (caller.mjs)
  * @returns {Promise<{ store, server: http.Server|null, apiUrl: string, handle: (req) => Promise<object>, turn: () => Promise<void>, stop: () => Promise<void> }>}
  */
-export async function startEngine({ dataDir, port = null, runs = true, log = console.log, apiUrl = '', tickMs = TICK_MS, keysDir = '', keyMode = modeFromEnv() } = {}) {
+export async function startEngine({ dataDir, port = null, runs = true, tracks = runs, log = console.log, apiUrl = '', tickMs = TICK_MS, keysDir = '', keyMode = modeFromEnv() } = {}) {
   if (!dataDir) throw new Error('The engine needs its data folder')
   const dir = path.resolve(dataDir)
   const store = openStore(storeFile(dir))
@@ -121,15 +122,17 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
   let ticking = false
   let stopped = false
   /** One turn of the engine's own work: routines whose time has come, runs that ended, wakes that may start. */
-  const turn = async () => {
+  const turn = async ({ bots = true } = {}) => {
     if (ticking || stopped) return
     ticking = true
     try {
-      for (const run of tickRoutines(store)) log(`[engine] routine ${run.routineId}: ${run.status}`)
-      const report = await tick(store, { dataDir: dir, apiUrl: address })
-      for (const run of report.started) log(`[engine] started ${run.id} for ${run.agentId} on ${run.issueId}`)
-      for (const run of report.finished) log(`[engine] ${run.status} ${run.id}${run.error ? `: ${run.error}` : ''}`)
-      for (const skip of report.skipped) log(`[engine] wake ${skip.id} not started: ${skip.why}`)
+      if (bots) {
+        for (const run of tickRoutines(store)) log(`[engine] routine ${run.routineId}: ${run.status}`)
+        const report = await tick(store, { dataDir: dir, apiUrl: address })
+        for (const run of report.started) log(`[engine] started ${run.id} for ${run.agentId} on ${run.issueId}`)
+        for (const run of report.finished) log(`[engine] ${run.status} ${run.id}${run.error ? `: ${run.error}` : ''}`)
+        for (const skip of report.skipped) log(`[engine] wake ${skip.id} not started: ${skip.why}`)
+      }
       // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
       for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
     } catch (err) {
@@ -138,10 +141,12 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
     ticking = false
   }
   let timer = null
-  if (runs) {
-    if (!address) log('[engine] no address was given for the bots to call back: runs will start without one')
-    turn()
-    timer = setInterval(turn, tickMs)
+  if (runs || tracks) {
+    if (runs && !address) log('[engine] no address was given for the bots to call back: runs will start without one')
+    // With runs off, the timer moves only the tracks: no bot and no routine is started.
+    const own = () => turn({ bots: runs })
+    own()
+    timer = setInterval(own, tickMs)
     timer.unref?.()
   }
 

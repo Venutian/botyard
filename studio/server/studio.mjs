@@ -234,7 +234,8 @@ export async function createStudio({ env = process.env, demo = false, engine = t
       const data = dataDir(env)
       const why = env.BOTYARD_ENGINE_RUNS === 'off' ? 'BOTYARD_ENGINE_RUNS is off' : anotherEngine(data, enginePort)
       if (why) log(`[botyard] The engine answers calls but starts no bot: ${why}.`)
-      const started = await startEngine({ dataDir: data, port: enginePort, runs: !why, log, keysDir: keysDir(env) })
+      // The demo starts no bot, but its sample trip (a script and a gate) moves; a second engine moves nothing.
+      const started = await startEngine({ dataDir: data, port: enginePort, runs: !why, tracks: !why || demo, log, keysDir: keysDir(env) })
       closers.push(async () => {
         await started.stop()
         if (!why) fs.rmSync(path.join(data, 'engine.lock'), { force: true })

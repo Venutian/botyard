@@ -480,7 +480,11 @@ export async function fillSampleYard({ store }, { dataDir, now = Date.now(), cre
   }))
   fs.writeFileSync(path.join(dataDir, 'timetable-state.json'), JSON.stringify({ jobs: {}, last }, null, 1))
 
-  return { studio: { id: studio.id, ...STUDIO }, projects: project, bots: bot, jobs, routines, runs: runs.length, connectors: 2, helpers: helpers.length }
+  // ── a request on the built-in sample track: a script counts, then the owner looks ───
+  // It needs no bot and no key, so the demo shows a whole trip: the engine moves it on its next turn.
+  const request = call('POST', `/companies/${studio.id}/requests`, { track: 'sample-check', title: 'Count what is in the site\'s folder', projectId: project.site }, { ago: 1 })
+
+  return { studio: { id: studio.id, ...STUDIO }, projects: project, bots: bot, jobs, routines, runs: runs.length, connectors: 2, helpers: helpers.length, requests: [request.id] }
 }
 
 // Run by hand: fill the home folder named on the command line.
