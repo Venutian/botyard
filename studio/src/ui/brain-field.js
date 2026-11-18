@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
 import { RADIUS, brainDust, fieldLayout } from './brain-layout.js'
 
 /**
@@ -24,6 +25,33 @@ const DAY_VOID = '#b9c2ce'
 const AMBER = new THREE.Color('#e08a00')
 const ASH = new THREE.Color('#5d6676')
 const WHITE = new THREE.Color('#ffffff')
+/** How close the camera is: 0 far off, 1 right inside the brain. */
+export function zoomFactor(dist) { return Math.max(0, Math.min(1, (ZOOM_START - dist) / (ZOOM_START - ZOOM_FULL))) }
+
+/** The nearest note to the camera, skipping notes dimmed by search or area. */
+export function nearestNote(at, order, cam, light) {
+  let best = ''
+  let bestD = Infinity
+  for (const id of order) {
+    if ((light?.get(id) ?? 1) <= 0.5) continue
+    const p = at.get(id)
+    if (!p) continue
+    const d = p.distanceTo(cam)
+    if (d < bestD) { bestD = d; best = id }
+  }
+  return best
+}
+
+/** Under this camera distance the brain turns immersive: labels, depth and eased aim. */
+const ZOOM_IN = 300
+/** Labels begin to fade in at this distance, full at ZOOM_FULL. */
+const ZOOM_START = 360
+const ZOOM_FULL = 140
+/** At most this many neuron labels are drawn at once, nearest first. */
+const LABEL_MAX = 12
+/** How much faster the nearest note's signals run, and how much brighter its links. */
+const NEAR_SPEED = 2.2
+const NEAR_BRIGHT = 1.5
 
 const NODE_VERT = `
 attribute float size;
@@ -37,11 +65,12 @@ varying float vRing;
 uniform float scale;
 uniform float time;
 uniform float day;
+uniform float nodeZoom;
 void main() {
   float breath = 1.0 + 0.12 * sin(time * 1.3 + phase * 6.2831);
   vColor = color; vGlow = glow * (0.9 + 0.1 * breath); vRing = ring;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = size * breath * (1.0 + 0.45 * day) * scale / -mv.z;
+  gl_PointSize = size * breath * (1.0 + 0.45 * day) * (1.0 + 1.5 * nodeZoom) * scale / -mv.z;
   gl_Position = projectionMatrix * mv;
 }`
 const NODE_FRAG = `
@@ -82,20 +111,23 @@ const FIBRE_VERT = `
 attribute vec3 color;
 attribute float along;
 attribute float lane;
+attribute float speed;
 varying vec3 vColor;
 varying float vAlong;
 varying float vLane;
-void main() { vColor = color; vAlong = along; vLane = lane; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`
+varying float vSpeed;
+void main() { vColor = color; vAlong = along; vLane = lane; vSpeed = speed; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`
 const FIBRE_FRAG = `
 varying vec3 vColor;
 varying float vAlong;
 varying float vLane;
+varying float vSpeed;
 uniform float time;
 uniform float signals;
 uniform float day;
 void main() {
   // A signal: a short bright pulse that travels the fibre, each fibre at its own time.
-  float head = fract(time * 0.22 + vLane);
+  float head = fract(time * 0.22 * vSpeed + vLane);
   float pulse = smoothstep(0.09, 0.0, abs(vAlong - head)) * signals;
   if (day > 0.5) {
     float m = max(max(vColor.r, vColor.g), vColor.b);
@@ -148,12 +180,40 @@ export class BrainField {
     this.composer.addPass(new RenderPass(this.scene, this.camera))
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.95, 0.32, 0.42)
     this.composer.addPass(this.bloom)
+    // Depth of field: focus on the orbit target, mild and night-only while zoomed in.
+    this.bokeh = new BokehPass(this.scene, this.camera, { focus: 300, aperture: 0.02, maxblur: 0.008, width: 1, height: 1 })
+    this.bokeh.enabled = false
+    this.composer.addPass(this.bokeh)
     this.composer.addPass(new OutputPass())
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     this.time = { value: 0 }
     this.day = { value: 0 }
     this.inks = INKS
     this.signals = { value: this.reduced ? 0 : 1 }
+    this.zoom = 0
+    this.nearNote = ''
+    this._easeT = 0
+    this.labels = document.createElement('div')
+    this.labels.className = 'bf-labels'
+    host.append(this.labels)
+    this.overlays = document.createElement('div')
+    this.overlays.className = 'bf-overlays'
+    this.overlays.style.position = 'absolute'
+    this.overlays.style.inset = '0'
+    this.overlays.style.pointerEvents = 'none'
+    host.append(this.overlays)
+    this.labelPool = []
+    for (let i = 0; i < LABEL_MAX; i += 1) {
+      const el = document.createElement('div')
+      el.className = 'bf-node-label'
+      el.hidden = true
+      this.overlays.append(el)
+      this.labelPool.push(el)
+    }
+    this.excerptPlate = document.createElement('div')
+    this.excerptPlate.className = 'bf-excerpt'
+    this.excerptPlate.hidden = true
+    this.overlays.append(this.excerptPlate)
     this.controls.autoRotate = !this.reduced
     this.controls.autoRotateSpeed = 0.45
     // A hand on the brain stops the turning for a while; it starts again on its own.
@@ -241,6 +301,7 @@ export class BrainField {
     const scale = h * this.renderer.getPixelRatio() * 0.9
     this.nodes && (this.nodes.material.uniforms.scale.value = scale)
     this.dust.material.uniforms.scale.value = scale
+    this.bokeh && this.bokeh.setSize(w, h)
     this.request()
   }
 
@@ -253,6 +314,7 @@ export class BrainField {
     this.slot = new Map(brain.areas.map((a, i) => [a.id, i % INKS.length]))
     const notes = brain.notes
     this.order = notes.map((n) => n.id)
+    this.byId = new Map(notes.map((n) => [n.id, n]))
     const pos = new Float32Array(notes.length * 3)
     notes.forEach((n, i) => { const p = this.at.get(n.id); pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z })
     const geo = new THREE.BufferGeometry()
@@ -263,7 +325,7 @@ export class BrainField {
     geo.setAttribute('ring', new THREE.BufferAttribute(new Float32Array(notes.length), 1))
     geo.setAttribute('phase', new THREE.BufferAttribute(Float32Array.from(notes, (n) => (n.id.length * 0.137 + n.date.charCodeAt(9) * 0.071) % 1), 1))
     this.nodes = new THREE.Points(geo, new THREE.ShaderMaterial({
-      uniforms: { scale: { value: 600 }, time: this.time, day: this.day }, vertexShader: NODE_VERT, fragmentShader: NODE_FRAG,
+      uniforms: { scale: { value: 600 }, time: this.time, day: this.day, nodeZoom: { value: 0 } }, vertexShader: NODE_VERT, fragmentShader: NODE_FRAG,
       blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
     }))
     this.group.add(this.nodes)
@@ -297,6 +359,7 @@ export class BrainField {
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3), 3))
     geo.setAttribute('along', new THREE.BufferAttribute(Float32Array.from(along), 1))
     geo.setAttribute('lane', new THREE.BufferAttribute(Float32Array.from(lane), 1))
+    geo.setAttribute('speed', new Float32Array(pts.length).fill(1), 1)
     const mat = dashed
       ? new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 5, gapSize: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
       : new THREE.ShaderMaterial({ uniforms: { time: this.time, signals: this.signals, day: this.day }, vertexShader: FIBRE_VERT, fragmentShader: FIBRE_FRAG, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
@@ -308,10 +371,11 @@ export class BrainField {
 
   /**
    * Colour, size and brightness from the state: `dim(id)` says a note is out of the search, the scrub or the
-   * chosen area; `chosen` and `near` light one note and its neighbours.
+   * chosen area; `chosen` and `near` light one note and its neighbours. `zoom` and `nearNote` come from the
+   * frame loop while the camera is close; they are merged in so a repaint from the map never clears them.
    */
-  paint(state = this.state) {
-    this.state = state
+  paint(state = {}) {
+    this.state = { ...this.state, ...state }
     if (!this.brain) return
     const notes = this.brain.notes
     const col = this.nodes.geometry.attributes.color
@@ -348,24 +412,30 @@ export class BrainField {
 
   _paintLines(line, pairs, strength, ash = false) {
     const col = line.geometry.attributes.color
+    const speed = line.geometry.attributes.speed
     const per = this._steps * 2
     const a = new THREE.Color()
     const b = new THREE.Color()
     const byId = new Map(this.brain.notes.map((n) => [n.id, n]))
+    const near = this.state.nearNote
+    const isLinks = line === this.linkLines
     pairs.forEach(([from, to], k) => {
       a.set(this.inks[this.slot.get(byId.get(from)?.area) ?? 0])
       b.set(this.inks[this.slot.get(byId.get(to)?.area) ?? 0])
       if (ash) { a.copy(ASH); b.set('#c9d2e0') }
       const touched = this.state.chosen && (from === this.state.chosen || to === this.state.chosen)
-      const s = strength * Math.min(this.light.get(from), this.light.get(to)) * (this.state.chosen ? (touched ? 2.4 : 0.25) : 1)
+      const nearTouch = isLinks && near && (from === near || to === near)
+      const s = strength * Math.min(this.light.get(from), this.light.get(to)) * (this.state.chosen ? (touched ? 2.4 : 0.25) : 1) * (nearTouch ? NEAR_BRIGHT : 1)
       for (let i = 0; i < per; i += 1) {
         const t = Math.floor(i / 2 + (i % 2)) / this._steps
         // Brightest in the middle of the fibre: it reads as light travelling, not a wire.
         const lift = s * (0.55 + Math.sin(t * Math.PI) * 0.6)
         col.setXYZ(k * per + i, (a.r + (b.r - a.r) * t) * lift, (a.g + (b.g - a.g) * t) * lift, (a.b + (b.b - a.b) * t) * lift)
+        if (isLinks) speed.setX(k * per + i, nearTouch ? NEAR_SPEED : 1)
       }
     })
     col.needsUpdate = true
+    if (isLinks) speed.needsUpdate = true
   }
 
   /** Turn to a note: the camera moves round so it is in front, then everything stands still. */
@@ -407,6 +477,27 @@ export class BrainField {
     return this.on && !document.hidden && !this.reduced
   }
 
+  _zoom(dist) { return zoomFactor(dist) }
+
+  _nearestNote() { if (!this.at || !this.order) return ''; return nearestNote(this.at, this.order, this.camera.position, this.light) }
+
+  /** While the camera is close and idle, ease the orbit target into the nearest lobe with an exponential ease-out. */
+  _easeTarget(now) {
+    if (!this._easeT) this._easeT = now
+    const dt = Math.min(0.05, (now - this._easeT) / 1000)
+    this._easeT = now
+    let nearest = null
+    let bestD = Infinity
+    const target = this.controls.target
+    for (const c of this.centres.values()) {
+      const d = target.distanceTo(c)
+      if (d < bestD) { bestD = d; nearest = c }
+    }
+    if (!nearest) return
+    const k = 1 - Math.exp(-3 * dt)
+    target.lerpVectors(target, nearest, k)
+  }
+
   /** One frame now, and more while the camera moves or the brain is alive. */
   request() {
     if (this._frame || !this.on) return
@@ -416,8 +507,20 @@ export class BrainField {
       const live = this.alive()
       if (live) this.time.value = now / 1000
       const damping = this.controls.update()
+      const dist = this.camera.position.distanceTo(this.controls.target)
+      this.zoom = this._zoom(dist)
+      const nearNote = this._nearestNote()
+      if (nearNote !== this.nearNote) this.nearNote = nearNote
+      this.paint({ zoom: this.zoom, nearNote: this.nearNote })
+      if (live && dist < ZOOM_IN && this.controls.state === -1 && this.centres) this._easeTarget(now)
+      if (this.bokeh) {
+        this.bokeh.enabled = !this.day.value && this.zoom > 0.25
+        this.bokeh.uniforms.focus.value = dist
+      }
+      this.nodes && (this.nodes.material.uniforms.nodeZoom.value = this.zoom)
       this.composer.render()
       this._place()
+      this._placeNodes()
       if (tweening || damping || live) this.request()
     })
   }
@@ -449,13 +552,91 @@ export class BrainField {
     }
   }
 
+  /** Hide the pooled node labels and the excerpt plate. */
+  _dropLabels() {
+    for (const el of this.labelPool) el.hidden = true
+    this.excerptPlate.hidden = true
+  }
+
+  /** The nearest neuron's excerpt, shown beside it in a small plate. */
+  _placeExcerpt() {
+    const e = this.excerptPlate
+    const near = this.nearNote
+    if (!near || this.zoom <= 0) { e.hidden = true; return }
+    const n = this.byId.get(near)
+    const p = this.at?.get(near)
+    if (!n || !p) { e.hidden = true; return }
+    const v = new THREE.Vector3().set(p.x, p.y, p.z).project(this.camera)
+    if (v.z > 1) { e.hidden = true; return }
+    const w = this.host.clientWidth
+    const h = this.host.clientHeight
+    e.textContent = n.excerpt || n.title
+    e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
+    e.style.transform = `translate(${(v.x + 1) / 2 * w + 16}px, ${(1 - v.y) / 2 * h + 14}px)`
+    e.hidden = false
+  }
+
+  /** Pooled title labels for the nearest neurons: at most LABEL_MAX, nearest first, none overlapping. */
+  _placeNodes() {
+    const zoom = this.zoom
+    const w = this.host.clientWidth
+    const h = this.host.clientHeight
+    if (!w || !h || zoom <= 0 || !this.order) { this._dropLabels(); return }
+    const cam = this.camera.position
+    const v = new THREE.Vector3()
+    const list = []
+    for (const id of this.order) {
+      if ((this.light?.get(id) ?? 1) <= 0.5) continue
+      const p = this.at.get(id)
+      if (!p) continue
+      v.set(p.x, p.y, p.z).project(this.camera)
+      if (v.z > 1) continue
+      list.push({ id, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, d: p.distanceTo(cam) })
+    }
+    list.sort((a, b) => a.d - b.d)
+    const shown = []
+    const placed = []
+    const slot = this.slot
+    const inks = this.inks
+    for (const item of list) {
+      if (shown.length >= LABEL_MAX) break
+      const n = this.byId.get(item.id)
+      if (!n) continue
+      const half = Math.min(200, Math.max(44, n.title.length * 6.5 + 20))
+      let x = item.x
+      let y = item.y
+      let ok = true
+      for (let t = 0; t < 6; t += 1) {
+        const hit = placed.find((p) => Math.abs(p.x - x) < p.half + half + 6 && Math.abs(p.y - y) < 26)
+        if (!hit) break
+        y += 28
+        if (y > h - 14) { ok = false; break }
+      }
+      if (!ok) continue
+      shown.push({ ...item, half, x, y, ink: inks[(slot?.get(n.area) ?? 0) % inks.length] })
+      placed.push({ x, y, half })
+    }
+    for (let i = 0; i < LABEL_MAX; i += 1) {
+      const el = this.labelPool[i]
+      if (i < shown.length) {
+        const s = shown[i]
+        const n = this.byId.get(s.id)
+        el.textContent = n.title
+        el.style.setProperty('--ink', s.ink)
+        el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%)`
+        el.hidden = false
+      } else el.hidden = true
+    }
+    this._placeExcerpt()
+  }
+
   /** Which note is under the pointer, if any. */
   _hit(e) {
     if (!this.nodes) return ''
     const r = this.renderer.domElement.getBoundingClientRect()
     this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
     this.ray.setFromCamera(this.mouse, this.camera)
-    this.ray.params.Points.threshold = 7 * (this.camera.position.distanceTo(this.controls.target) / 520)
+    this.ray.params.Points.threshold = 7 * Math.max(0.5, this.camera.position.distanceTo(this.controls.target) / 520)
     const hits = this.ray.intersectObject(this.nodes).filter((h) => (this.light?.get(this.order[h.index]) ?? 1) > 0.5)
     return hits.length ? this.order[hits[0].index] : ''
   }
