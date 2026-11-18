@@ -19,16 +19,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { EngineError } from './engine.mjs'
+// The same browser the picture tool finds (or BOTYARD_BROWSER).
+import { findBrowser } from '../../tools/shots.mjs'
+
+export { findBrowser }
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.localhost)$/i
 const IDLE_MS = 30 * 60 * 1000
 const KIT_PATH = '/__botyard-look.js'
-const BROWSERS = [
-  '/usr/bin/brave-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium', '/usr/bin/microsoft-edge',
-  '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-]
-export const findBrowser = (env = process.env, exists = fs.existsSync) => [env.BOTYARD_BROWSER, ...BROWSERS].find((file) => file && exists(file)) || ''
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** A page address on this computer, made plain; anything else is refused. */
@@ -127,7 +125,7 @@ export async function openLook(address) {
 /** A screenshot of a local page at a given size and scroll, by a headless browser. PNG bytes. */
 export async function pageShot(address, { width = 1280, height = 800, scrollX = 0, scrollY = 0, browser = findBrowser(), waitMs = 1500 } = {}) {
   const at = localPage(address)
-  if (!browser) throw new EngineError(501, 'No browser for screenshots on this computer: install Chrome, Chromium, Brave or Edge, or set BOTYARD_BROWSER')
+  if (!browser) throw new EngineError(501, 'No browser for screenshots on this computer: install a Chromium-family browser, or set BOTYARD_BROWSER to one')
   const w = Math.max(200, Math.min(3840, Math.round(width)))
   const h = Math.max(200, Math.min(2400, Math.round(height)))
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'botyard-look-'))

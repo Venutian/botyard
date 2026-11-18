@@ -95,8 +95,8 @@ export function chaptersOf(files = []) {
 
 /**
  * The command that writes overviews: the prompt goes in on stdin, the words come out on stdout.
- * `BOTYARD_OVERVIEW_COMMAND` names one, or the settings folder's `overview-command` file; otherwise Claude
- * Code's smallest model when it is installed.
+ * `BOTYARD_OVERVIEW_COMMAND` names one, or the settings folder's `overview-command` file; otherwise the
+ * smallest model of the `claude` command that Botyard's own bots run on, when it is installed.
  * Empty means none, and the script's overviews stand.
  */
 export function overviewCommand(env = process.env) {
