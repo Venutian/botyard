@@ -158,7 +158,7 @@ export function readBrain(folder = brainFolder()) {
   for (const n of notes) for (const s of n.supersedes) { const old = byId.get(s); if (old && !old.supersededBy.includes(n.id)) old.supersededBy.push(n.id) }
   for (const n of notes) if (n.supersededBy.length && n.status === 'accepted') n.status = 'superseded'
   const areaIds = [...folders, ...chosen, ...['inbox', 'other'].filter((a) => notes.some((n) => n.area === a))]
-  const areas = areaIds.map((id) => ({ id, name: id.replace(/-/g, ' '), count: notes.filter((n) => n.area === id).length, private: folders.includes(id) && notes.filter((n) => n.area === id).every((n) => n.private) }))
+  const areas = areaIds.map((id) => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '), count: notes.filter((n) => n.area === id).length, private: folders.includes(id) && notes.filter((n) => n.area === id).every((n) => n.private) }))
   const dates = notes.map((n) => n.date).sort()
   const value = { on: true, folder, name: path.basename(folder), notes: notes.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), areas, from: dates[0] || '', to: dates.at(-1) || '' }
   cache = { key, value }

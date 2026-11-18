@@ -109,7 +109,7 @@
 .brainmap .bm-band-name:hover .bm-band-hit, .brainmap .bm-band-name[aria-pressed='true'] .bm-band-hit { fill: var(--panel); }
 .brainmap .bm-band-name:focus-visible .bm-band-hit { stroke: var(--accent); stroke-width: 2; }
 .brainmap .bm-swatch { fill: var(--a); }
-.brainmap .bm-band-text { font: 700 14px/1 var(--sign); letter-spacing: 0.02em; fill: var(--bm-ink); dominant-baseline: middle; text-transform: capitalize; }
+.brainmap .bm-band-text { font: 700 14px/1 var(--sign); letter-spacing: 0.02em; fill: var(--bm-ink); dominant-baseline: middle; }
 .brainmap .bm-band-text.small { font-size: 12px; dominant-baseline: middle; }
 .brainmap .bm-band-count.small { font: 600 11px var(--body); text-anchor: start; }
 .brainmap .bm-band-count { font: 600 12px/1 var(--body); fill: var(--bm-ink); opacity: 0.7; dominant-baseline: middle; text-anchor: end; font-variant-numeric: tabular-nums; }
