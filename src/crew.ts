@@ -44,9 +44,9 @@ export type Route =
   | { name: 'routines' }
   | { name: 'models' }
   | { name: 'improvements' }
-  /** Senth: the owner's notes, read-only. */
-  | { name: 'senth' }
-  | { name: 'senthNote'; id: string }
+  /** Engram: the owner's notes, read-only. */
+  | { name: 'engram' }
+  | { name: 'engramNote'; id: string }
   | { name: 'devices' }
   | { name: 'new' }
   | { name: 'bot'; botId: string }

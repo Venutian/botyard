@@ -1,5 +1,5 @@
 /*
- * Senth, the Brain view: the owner's notes as strata on the same board as the crew map. Each area is a band
+ * Engram, the Brain view: the owner's notes as strata on the same board as the crew map. Each area is a band
  * with its own ink; a note is a mark at the day it was made; decisions are diamonds, preferences squares,
  * facts and notes circles. The one bold thing is the halo on the newest decisions; everything else is quiet.
  *
@@ -235,7 +235,7 @@
 }
 .brainmap .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* At a phone's width the top bar keeps the three home buttons, smaller, so Senth can be reached. */
+/* At a phone's width the top bar keeps the three home buttons, smaller, so Engram can be reached. */
 @media (max-width: 600px) {
   .hud.studio .home-seg { display: inline-flex; }
   .hud.studio .home-seg button { min-height: 28px; padding: 0 7px; font-size: 12px; }

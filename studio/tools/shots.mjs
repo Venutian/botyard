@@ -56,12 +56,12 @@ export const SHOTS = [
   { name: 'crew', file: 'crew-editor.png', what: 'the crew editor: one bot\'s settings', view: 'bot-edit', clicks: [['[data-tab="bots"]'], ['[data-act="open-bot"] >> Hands out the work', '[data-act="open-bot"]'], ['[data-act="bot-edit"]']], needs: 150 },
   { name: 'rules', file: 'instructions.png', what: 'a bot\'s instructions, with their earlier versions', view: 'bot-rules', clicks: [['[data-tab="bots"]'], ['[data-act="open-bot"] >> Hands out the work', '[data-act="open-bot"]'], ['[data-act="bot-rules"]']], needs: 150 },
   { name: 'setup', file: 'setup.png', what: 'Setup: what is signed in and how to fix what is not', view: 'setup', clicks: [['[data-tab="setup"]']], needs: 200 },
-  // Senth, the Brain view, on the demo yard's made-up vault: at 1440 and at a phone's 375, day and night.
-  { name: 'senth', file: 'senth.png', what: 'Senth: the notes vault as strata of areas over time', view: 'senth', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200 },
-  { name: 'senth-note', file: 'senth-note.png', what: 'Senth with a note open on the side', view: 'senth-note', clicks: [['[data-home="brain"]'], ['.bm-n[data-note*="release-when-green"]']], needs: 0, fewer: true, pause: 1500 },
-  { name: 'senth-night', file: 'senth-night.png', what: 'Senth after dark', view: 'senth-night', clicks: [['[data-act="shift"]'], ['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800 },
-  { name: 'senth-375', file: 'senth-phone.png', what: 'Senth at a phone\'s width', view: 'senth-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
-  { name: 'senth-375-night', file: 'senth-phone-night.png', what: 'Senth at a phone\'s width after dark', view: 'senth-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },
+  // Engram, the Brain view, on the demo yard's made-up vault: at 1440 and at a phone's 375, day and night.
+  { name: 'engram', file: 'engram.png', what: 'Engram: the notes vault as strata of areas over time', view: 'engram', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200 },
+  { name: 'engram-note', file: 'engram-note.png', what: 'Engram with a note open on the side', view: 'engram-note', clicks: [['[data-home="brain"]'], ['.bm-n[data-note*="release-when-green"]']], needs: 0, fewer: true, pause: 1500 },
+  { name: 'engram-night', file: 'engram-night.png', what: 'Engram after dark', view: 'engram-night', clicks: [['[data-act="shift"]'], ['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800 },
+  { name: 'engram-375', file: 'engram-phone.png', what: 'Engram at a phone\'s width', view: 'engram-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
+  { name: 'engram-375-night', file: 'engram-phone-night.png', what: 'Engram at a phone\'s width after dark', view: 'engram-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },
   // Night is switched to on the page, as a person would: the map's light follows the switch.
   { name: 'night', file: 'map-night.png', what: 'the map at night, with the work in hand open', view: 'night', clicks: [['[data-act="shift"]'], ['[data-tab="work"]']], needs: 200, pause: 3500 },
   // The phone app is another program (`npm run web` in the top folder): taken only when its address is given.

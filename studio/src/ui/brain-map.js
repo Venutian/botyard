@@ -90,7 +90,7 @@ export class BrainMap {
     this.el.hidden = true
     this.el.setAttribute('aria-label', 'Brain')
     this.el.innerHTML = `<div class="bm-bar">
-        <h1 class="bm-title">Senth</h1>
+        <h1 class="bm-title">Engram</h1>
         <p class="bm-sub"></p>
         <label class="bm-find"><span class="visually-hidden">Search the notes</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 11.2L14.5 14.5M12.4 7a5.4 5.4 0 1 1-10.8 0a5.4 5.4 0 1 1 10.8 0"/></svg><input type="search" placeholder="Search the notes" autocomplete="off" spellcheck="false"></label>
         <p class="bm-said" role="status" aria-live="polite"></p>
@@ -190,7 +190,7 @@ export class BrainMap {
   _empty(why, canSet = false) {
     this.svg.innerHTML = ''
     this.empty.hidden = false
-    this.empty.innerHTML = `<h2>Your notes go here</h2><p>${esc(why)}</p>${canSet ? `<p>Senth reads any folder of markdown notes, such as an Obsidian vault. It only reads; you edit the notes in their files.</p>
+    this.empty.innerHTML = `<h2>Your notes go here</h2><p>${esc(why)}</p>${canSet ? `<p>Engram reads any folder of markdown notes, such as an Obsidian vault. It only reads; you edit the notes in their files.</p>
       <form class="bm-set"><label>Notes folder <input name="folder" placeholder="~/Documents/notes" required></label><button type="submit">Read this folder</button></form><p class="bm-set-said" role="status"></p>` : ''}`
     this.empty.querySelector('form')?.addEventListener('submit', async (e) => {
       e.preventDefault()

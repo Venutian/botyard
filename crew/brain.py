@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owner's notes (Senth), read-only, for the bots: search them, read one. No AI.
+"""The owner's notes (Engram), read-only, for the bots: search them, read one. No AI.
 
     python3 brain.py search <words>     the notes whose title, area, tags or text hold every word
     python3 brain.py read <note>        one note's text (its file name without .md, or a path in the vault)
