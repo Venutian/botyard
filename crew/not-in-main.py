@@ -95,7 +95,7 @@ def done_at(job):
         return None
 
 
-def measure(projects, jobs, hours=6, now=None, scan=left_behind):
+def measure(projects, jobs, hours=6, now=None, scan=left_behind, bots=None):
     """The rows to list: done jobs, done at least `hours` ago, with a branch whose code is not in main."""
     now = now or dt.datetime.now(dt.timezone.utc)
     by_code = {j.get('identifier'): j for j in jobs}
@@ -110,7 +110,8 @@ def measure(projects, jobs, hours=6, now=None, scan=left_behind):
                 continue
             rows.append({'job': code, 'id': job.get('id'), 'title': (job.get('title') or '')[:140], 'repo': repo,
                          'branch': branch, 'commits': commits, 'files': len(files), 'sample': files[:5],
-                         'doneAt': when.isoformat() if when else None})
+                         'doneAt': when.isoformat() if when else None,
+                         'bot': (bots or {}).get(job.get('assigneeAgentId'), '')})
     rows.sort(key=lambda r: (r['doneAt'] or '', r['job']))
     return rows
 
@@ -129,7 +130,8 @@ def main(argv=None):
     if not studio:
         print('Botyard is not running: nothing measured')
         return 0
-    rows = measure(call(f'/companies/{studio}/projects'), call(f'/companies/{studio}/issues?limit=100000'), hours=args.hours)
+    bots = {a['id']: a.get('name', '') for a in call(f'/companies/{studio}/agents')}
+    rows = measure(call(f'/companies/{studio}/projects'), call(f'/companies/{studio}/issues?limit=100000'), hours=args.hours, bots=bots)
     out = {'at': dt.datetime.now(dt.timezone.utc).isoformat(), 'hours': args.hours, 'jobs': rows}
     path = botyard_home.state(OUT)
     with open(path + '.tmp', 'w', encoding='utf8') as f:

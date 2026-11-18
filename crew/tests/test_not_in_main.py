@@ -53,14 +53,15 @@ class NotInMain(unittest.TestCase):
     def test_only_done_jobs_done_long_enough_ago_are_listed(self):
         now = dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc)
         projects = [{'workspaces': [{'cwd': self.repo}]}, {'archivedAt': '2026-11-01', 'workspaces': [{'cwd': '/nowhere'}]}]
-        jobs = [{'identifier': 'LH-1', 'id': 'a', 'status': 'done', 'completedAt': '2026-11-18T01:00:00Z', 'title': 'Old'},
+        jobs = [{'identifier': 'LH-1', 'id': 'a', 'status': 'done', 'completedAt': '2026-11-18T01:00:00Z', 'title': 'Old', 'assigneeAgentId': 'b1'},
                 {'identifier': 'LH-2', 'id': 'b', 'status': 'done', 'completedAt': '2026-11-18T10:00:00Z', 'title': 'Fresh'},
                 {'identifier': 'LH-3', 'id': 'c', 'status': 'in_progress', 'title': 'Open'},
                 {'identifier': 'LH-4', 'id': 'd', 'status': 'cancelled', 'title': 'Dropped'}]
         scan = lambda repo: [(code, f'{code}-x', 1, ['a.js']) for code in ('LH-1', 'LH-2', 'LH-3', 'LH-4', 'LH-9')]
-        rows = nim.measure(projects, jobs, hours=6, now=now, scan=scan)
+        rows = nim.measure(projects, jobs, hours=6, now=now, scan=scan, bots={'b1': 'Builder'})
         self.assertEqual([r['job'] for r in rows], ['LH-1'])
         self.assertEqual(rows[0]['repo'], os.path.realpath(self.repo))
+        self.assertEqual(rows[0]['bot'], 'Builder')
 
     def test_what_counts_as_code(self):
         for path in ('src/a.ts', 'crew/x.py', 'data/goods.json', 'notes.mdx'):
