@@ -238,6 +238,7 @@ function drawTray() {
     <div class="mk-send">
       <button type="button" class="btn primary" data-mk="send" data-verdict="back" ${marks.length || state.note.trim() ? '' : 'disabled'}>${gate ? 'Send back with marks' : `Send to ${esc(state.bot || 'the bot')}`}</button>
       <button type="button" class="btn ghost" data-mk="send" data-verdict="approve">${gate ? 'Approve' : 'Approve and keep'}</button>
+      ${gate ? '' : `<button type="button" class="btn ghost" data-mk="hold" ${marks.length || state.note.trim() ? '' : 'disabled'} title="Keep it in the tray in Needs you, to send with your other answers">Hold in the tray</button>`}
     </div>
     <p class="mk-foot">${marks.length ? `${marks.length} mark${marks.length === 1 ? '' : 's'} ${marks.length === 1 ? 'goes' : 'go'} as one message.` : ''} Ctrl+Enter sends.</p>`
 }
@@ -258,10 +259,24 @@ async function send(verdict) {
     close({ force: true })
     toast(verdict === 'approve' ? 'Approved and kept' : `Sent: ${review.marks?.length || 0} mark${review.marks?.length === 1 ? '' : 's'} in one message`)
     done?.(review)
+    window.botyardStudio?.refreshNeeds?.()
   } catch (err) {
     toast(err.message, true)
     drawTray()
   }
+}
+
+/** Keep the review in the tray in Needs you, to go with the owner's other answers in one press. */
+async function holdReview() {
+  if (state.pending) addPending()
+  try {
+    await window.botyardTray.hold({ kind: 'review', jobId: state.jobId, title: 'Your review', job: `${state.ref ? `${state.ref} ` : ''}${state.title}`.trim(), review: payloadOf(state, 'back') })
+    kept.write(state.jobId, null)
+    state.marks = []
+    state.note = ''
+    close({ force: true })
+    toast('Held in the tray in Needs you')
+  } catch (err) { toast(err.message, true) }
 }
 
 function toast(text, bad = false) {
@@ -291,6 +306,7 @@ function onClick(e) {
     return
   }
   if (act === 'send') return send(el.dataset.verdict)
+  if (act === 'hold') return holdReview()
 }
 
 function onInput(e) {

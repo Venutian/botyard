@@ -242,3 +242,40 @@ test('the bot\'s next run is shown the marks: the review in its news, the cut co
   assert.match(prompt, /The owner, .*:\n[\s\S]*Comment: Brighter sky/)
   assert.match(prompt, /picture attached: .*mark-1-harbour\.png \(image\/png/)
 })
+
+// ── the answer tray beside Needs you (lib/tray.mjs) ────────────────────────────────
+
+test('answers held in the tray go at one press, each to the job that asked; one that fails stays with why; the tray is the owner\'s alone', async () => {
+  const { createCard } = await import('../server/engine/write.mjs')
+  const { dropItem, holdItem, readTray, sendTray, waitingQuestions } = await import('../server/lib/tray.mjs')
+  const { store, dataDir, job } = yard()
+  const other = createJob(store, 'co', { title: 'Pick a colour', assigneeAgentId: 'b1', status: 'in_progress' }, { now: T0, actor: OWNER })
+  const ask = createCard(store, job.id, { kind: 'ask_user_questions', title: 'Which size?', payload: { questions: [{ id: 'size', prompt: 'Which size ships first?', options: [{ id: 's', label: 'Small' }, { id: 'l', label: 'Large' }] }] } }, { now: T0, actor: BOT })
+  const yes = createCard(store, other.id, { kind: 'request_confirmation', title: 'Ship it?' }, { now: T0, actor: BOT })
+  const fetcher = engineFetch(store, dataDir)
+  const file = path.join(dataDir, 'tray.json')
+
+  const waiting = await waitingQuestions({ job: job.id }, { fetcher })
+  assert.deepEqual(waiting.questions.map((q) => [q.kind, q.title, q.items[0].options.map((o) => o.label)]), [['choice', 'Which size?', ['Small', 'Large']]])
+  holdItem({ kind: 'answer', jobId: job.id, cardId: ask.id, title: 'Which size?', answers: [{ questionId: 'size', optionIds: ['s'] }], said: 'Small' }, { file })
+  holdItem({ kind: 'accept', jobId: other.id, cardId: yes.id, title: 'Ship it?' }, { file })
+  holdItem({ kind: 'review', jobId: job.id, review: { piece: { kind: 'brief' }, marks: [{ kind: 'text', quote: 'ferry', comment: 'Name it' }] } }, { file })
+  // A second answer to the same question takes the first one's place.
+  holdItem({ kind: 'answer', jobId: job.id, cardId: ask.id, title: 'Which size?', answers: [{ questionId: 'size', optionIds: ['l'] }], said: 'Large' }, { file })
+  assert.equal(readTray(file).length, 3)
+  assert.throws(() => holdItem({ kind: 'answer', jobId: job.id, cardId: ask.id, answers: [] }, { file }), /Answer the question first/)
+  holdItem({ kind: 'reject', jobId: other.id, cardId: '00000000-0000-4000-8000-000000000000', title: 'Gone' }, { file })
+
+  const settled = []
+  const out = await sendTray({ file, fetcher, settle: async (id, verb) => settled.push([id, verb]) })
+  assert.equal(out.sent, 3)
+  assert.equal(out.failed, 1)
+  assert.deepEqual(out.items.map((i) => i.title), ['Gone'])
+  assert.ok(out.items[0].error)
+  assert.equal(store.object('SELECT raw FROM cards WHERE id = ?', ask.id).status, 'answered')
+  assert.deepEqual(store.object('SELECT raw FROM cards WHERE id = ?', ask.id).result.answers[0].optionIds, ['l'])
+  assert.equal(store.object('SELECT raw FROM cards WHERE id = ?', yes.id).status, 'accepted')
+  assert.deepEqual(settled, [[yes.id, 'accept']])
+  assert.equal(store.objects('SELECT raw FROM reviews WHERE job_id = ?', job.id).length, 1)
+  assert.deepEqual(dropItem(out.items[0].key, { file }).items, [])
+})

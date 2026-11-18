@@ -37,6 +37,8 @@ export type Route =
   | { name: 'changes'; id: string }
   /** Mark exact places in a job's work, or in what a bot said in its chat, and send every mark at once. */
   | { name: 'review'; job?: string; bot?: string }
+  /** Answer several waiting questions, hold each, and send them all at once. */
+  | { name: 'tray' }
   | { name: 'routines' }
   | { name: 'models' }
   | { name: 'improvements' }

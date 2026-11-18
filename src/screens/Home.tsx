@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, WorkLine } from '../api';
+import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getTray, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
@@ -13,6 +13,7 @@ import { Button, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../
 import { Tag } from '../ui/page';
 import { clock } from '../ui/time';
 import { NeedsYouCard } from './Studio';
+import { TrayBar } from './Tray';
 
 const REFRESH_MS = 15_000;
 /** The last answer, kept on the phone so the screen is full the moment the app opens. */
@@ -99,6 +100,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   const { t } = useLook();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<Manager | null>(null);
+  const [tray, setTray] = useState<TrayItem[]>([]);
+  const [traySaid, setTraySaid] = useState('');
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [allFeed, setAllFeed] = useState(false);
@@ -123,6 +126,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       setError(next.error || '');
       // The crew map rides on the same poll; a studio without one answers null and the plain crew shows.
       getFlow(connection, windowRef.current).then(setFlow);
+      // The answers held in the tray, the same ones the PC map holds.
+      getTray(connection).then((tray) => setTray(tray.items)).catch(() => undefined);
       AsyncStorage.setItem(STORE_KEY, JSON.stringify(next)).catch(() => undefined);
     } catch (err) {
       setError((err as Error).message);
@@ -228,6 +233,9 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
         <Label style={styles.firstLabel}>{`Needs you (${waiting})`}</Label>
       </View>
       {calm ? <Txt color={t.ink2} style={styles.indent}>Nothing right now.</Txt> : null}
+      {traySaid ? <Txt size={14} weight={600} color={t.good} accessibilityLiveRegion="polite">{traySaid}</Txt> : null}
+      <TrayBar connection={connection} items={tray} onChange={(next, words) => { setTray(next); if (words) { setTraySaid(words); load(); } }} />
+      {decisions.some((d) => d.kind === 'question') ? <Button label="Answer several, send once" kind="quiet" icon="check" onPress={() => nav.push({ name: 'tray' })} /> : null}
       <View style={styles.stack}>
         {unread.filter(isDecision).length > 1 ? (
           <Pressable accessibilityRole="button" onPress={() => mark(unread.filter(isDecision), { read: true })} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>

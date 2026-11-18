@@ -683,3 +683,21 @@ export const sendReview = (c: Connection, review: ReviewSend) => call<SentReview
 /** The kept record: what was approved or sent back, for a job or a project. */
 export const getReviews = (c: Connection, which: { job?: string; project?: string }) =>
   call<{ reviews: SentReview[] }>(c, `/marks?${which.job ? `job=${encodeURIComponent(which.job)}` : which.project ? `project=${encodeURIComponent(which.project)}` : ''}`);
+
+// ── the answer tray beside Needs you: answers held to send at once ───────────────
+
+export type TrayQuestion =
+  | { id: string; kind: 'choice'; title: string; at?: string; items: { id: string; prompt: string; multiple: boolean; required: boolean; options: { id: string; label: string; hint: string }[] }[] }
+  | { id: string; kind: 'confirm'; title: string; at?: string; prompt: string; accept: string; reject: string };
+export type TrayAnswer = { questionId: string; optionIds: string[]; otherText?: string };
+export type TrayItem = {
+  key: string; kind: 'answer' | 'accept' | 'reject' | 'review'; jobId: string; cardId?: string; botId?: string; title: string; job: string;
+  answers?: TrayAnswer[]; said?: string; reason?: string; review?: ReviewSend; heldAt: number; error?: string;
+};
+export type TrayHold = Omit<TrayItem, 'key' | 'heldAt' | 'error'>;
+export const getTray = (c: Connection) => call<{ items: TrayItem[] }>(c, '/tray');
+export const getTrayQuestions = (c: Connection, which: { job?: string; bot?: string }) =>
+  call<{ jobId: string; job: string; questions: TrayQuestion[] }>(c, `/tray/questions?${which.bot ? `bot=${encodeURIComponent(which.bot)}` : `job=${encodeURIComponent(which.job || '')}`}`);
+export const holdInTray = (c: Connection, item: TrayHold) => call<{ items: TrayItem[] }>(c, '/tray', 'POST', { action: 'hold', item });
+export const dropFromTray = (c: Connection, key: string) => call<{ items: TrayItem[] }>(c, '/tray', 'POST', { action: 'drop', key });
+export const sendTrayNow = (c: Connection) => call<{ sent: number; failed: number; items: TrayItem[] }>(c, '/tray', 'POST', { action: 'send' });
