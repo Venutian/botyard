@@ -102,6 +102,21 @@
       "on": true
     },
     {
+      "name": "sandbox-roots",
+      "kind": "timer",
+      "what": "Takes out of the Codex bots' sandbox config any folder that no longer exists (a retired or moved repository), which would otherwise make every sandboxed shell command fail. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/sandbox-roots.py",
+        "--fix"
+      ],
+      "every": "5m",
+      "after": "finish",
+      "first": "1m",
+      "limit": "1m",
+      "on": true
+    },
+    {
       "name": "github-projects",
       "kind": "timer",
       "what": "Adds a Botyard project for each of your GitHub repos that looks like a real project (rules: github-project-rules.json). Read-only on GitHub, never clones. Uses no AI.",
