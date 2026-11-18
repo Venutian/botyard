@@ -10,7 +10,7 @@ const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&am
 
 export const LEVELS = ['none', 'light', 'medium', 'heavy', 'full']
 export const NAMES = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
-export const CONFIRM = 'Pause all heavy work and stop new builds? Tony and checks keep running. You can resume any time.'
+export const CONFIRM = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.'
 const STOP = '<svg class="ld-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
 const HINTS = {
   none: 'None: the crew uses the PC freely', light: 'Light: a little work at a time', medium: 'Medium: half the usual work',

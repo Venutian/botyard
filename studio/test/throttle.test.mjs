@@ -93,7 +93,7 @@ test('a yard that names no tool has no control: the state says so and a change i
   assert.deepEqual(await throttleState({ settingsFile, env }), { configured: false, levels: LEVELS })
   assert.equal((await throttleAct({ level: 'none' }, { settingsFile, env }))[0], 404)
   // A relative name, a folder or a file that cannot be run is no tool either.
-  for (const tool of ['ngen-throttle', dir, settingsFile]) {
+  for (const tool of ['pc-throttle', dir, settingsFile]) {
     fs.writeFileSync(settingsFile, JSON.stringify({ tool }))
     assert.equal(throttleTool({ settingsFile, env }), '', tool)
   }

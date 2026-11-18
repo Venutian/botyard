@@ -9,7 +9,7 @@ const NAMES: Record<LoadLevel, string> = { none: 'None', light: 'Light', medium:
 const LEVELS: LoadLevel[] = ['none', 'light', 'medium', 'heavy', 'full'];
 const SCOPES = [{ id: 'both', name: 'Day and night' }, { id: 'day', name: 'Day only' }, { id: 'night', name: 'Night only' }] as const;
 type Scope = (typeof SCOPES)[number]['id'];
-export const FULL_QUESTION = 'Pause all heavy work and stop new builds? Tony and checks keep running. You can resume any time.';
+export const FULL_QUESTION = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.';
 
 /**
  * How hard the crew may work the PC, set from the phone as the owner: None, Light, Medium, Heavy, Full.
