@@ -77,6 +77,19 @@ function readLog(file) {
   }).filter(Boolean)
 }
 
+/**
+ * Short lines a crew script leaves for the owner (crew/owner-notes.jsonl, {"at", "text"} per line): shown under "Also
+ * going on" for two days, never as a card. For news the owner should see but not answer (a ruling that landed).
+ */
+const NOTE_DAYS = 2
+function readOwnerNotes(file, now = Date.now()) {
+  let text = ''
+  try { text = fs.readFileSync(file, 'utf8') } catch { return [] }
+  return text.split('\n').slice(-200).map((line) => { try { return JSON.parse(line) } catch { return null } })
+    .filter((n) => n && typeof n.text === 'string' && Date.parse(n.at) > now - NOTE_DAYS * 86_400_000)
+    .slice(-6).map((n) => ({ at: Date.parse(n.at), text: n.text.replace(/[\u0000-\u001f]/g, ' ').slice(0, 240) }))
+}
+
 /** What the crew's scripts wrote down, read once per answer. Every file may be missing. */
 export function readCrewFiles(folder = crewFolder()) {
   const at = (name) => path.join(folder, name)
@@ -89,6 +102,7 @@ export function readCrewFiles(folder = crewFolder()) {
     freeOut: readJson(at('free-out.json'), {}),
     freeOk: readJson(at('free-ok.json'), {}),
     notInMain: readJson(at('not-in-main.json'), {}),
+    ownerNotes: readOwnerNotes(at('owner-notes.jsonl')),
     rested: readRested(folder),
   }
 }
@@ -479,6 +493,7 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
     const named = [...new Set(left.map((j) => (byCode.has(j.job) ? refOf(byCode.get(j.job), projectNames) : j.job)))]
     out.push({ level: 'bad', text: `${plural(named.length, 'job is', 'jobs are')} marked done but ${named.length === 1 ? 'its' : 'their'} code is not in main: ${named.slice(0, 4).join(', ')}${named.length > 4 ? ' and more' : ''}` })
   }
+  for (const note of files.ownerNotes || []) out.push({ level: 'info', text: note.text })
   const unpushed = lines.filter((l) => l.stage === 'merged').length
   if (unpushed) out.push({ level: 'info', text: `${plural(unpushed, 'finished piece', 'finished pieces')} of work ${unpushed === 1 ? 'is' : 'are'} merged but not pushed` })
   const rank = { bad: 0, warn: 1, info: 2 }
