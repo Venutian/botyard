@@ -8,7 +8,9 @@
  * environment values, so every reader keeps only what a screen shows. Reads are kept a few seconds
  * on the real server (see `cached`), and every write names exactly what it changes.
  */
+import fs from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import { EngineError, SCHEDULES, call, companyId, crewOf, jobDetail, jobWorkspace, orElse, plainTitle, refOf, timetableOf, withRefs } from './engine.mjs'
 import { planOf as timePlan, wordsOf } from './timeplan.mjs'
 import { cached, cut, forgetReads, jobNames, runRow } from './crew.mjs'
@@ -18,6 +20,7 @@ import { randomUUID } from 'node:crypto'
 import { leadOf } from './looks.mjs'
 import { PREVIEW_PORT, listPreviews, previewRoot } from './previews.mjs'
 import { pcSkill, pcSkillFile, pcSkillRow, pcSkills } from './pc-skills.mjs'
+import { crewFolder } from './models.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** The engine's own job number, LH-580: what links in the crew's messages carry. */
@@ -63,8 +66,19 @@ async function names(id, options) {
       bots: new Map(agents.map((a) => [a.id, a.name])),
       projects: new Map(projects.map((p) => [p.id, p.name])),
       chats: new Set(chats.map((c) => c.id)),
+      notInMain: notInMainOf(options),
     }
   })
+}
+
+/**
+ * The codes of done jobs whose code is not in main, as crew/not-in-main.py last measured them. A test that brings its
+ * own fetcher reads none of the PC's files unless it names one (`options.notInMainFile`).
+ */
+function notInMainOf(options = {}) {
+  const file = options.notInMainFile ?? (options.fetcher ? '' : path.join(crewFolder(), 'not-in-main.json'))
+  if (!file) return new Set()
+  try { return new Set((JSON.parse(fs.readFileSync(file, 'utf8')).jobs || []).map((j) => j.job).filter(Boolean)) } catch { return new Set() }
 }
 
 const jobRow = (issue, n, snippet = '') => ({
@@ -72,7 +86,8 @@ const jobRow = (issue, n, snippet = '') => ({
   ref: refOf(issue, n.projects),
   title: cut(plainTitle(withRefs(issue.title || '')), 140),
   status: issue.status,
-  state: STATE_WORDS[issue.status] || issue.status,
+  state: issue.status === 'done' && n.notInMain?.has(issue.identifier) ? 'Done, not in main' : STATE_WORDS[issue.status] || issue.status,
+  ...(issue.status === 'done' && n.notInMain?.has(issue.identifier) ? { notInMain: true } : {}),
   priority: issue.priority || 'medium',
   bot: n.bots.get(issue.assigneeAgentId) || '',
   project: n.projects.get(issue.projectId) || '',
