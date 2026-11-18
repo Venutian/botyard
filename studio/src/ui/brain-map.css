@@ -1,28 +1,15 @@
 /*
- * Engram, the Brain view: the owner's notes as strata on the same board as the crew map. Each area is a band
- * with its own ink; a note is a mark at the day it was made; decisions are diamonds, preferences squares,
- * facts and notes circles. The one bold thing is the halo on the newest decisions; everything else is quiet.
- *
- * Every ink is at least 3:1 on the board and every word at least 4.5:1, day and night.
+ * Engram, the Brain view: the owner's notes as a brain of light, in a dark observatory set into the board.
+ * The field is always dark, by day too: light only reads as light on black. The bar, the note and the
+ * controls are the same plates as the rest of the page. The one bold thing is the glowing field; everything
+ * around it stays quiet.
  */
 
 .hud.studio .brainmap {
-  --bm-board: #e4e7eb;
-  --bm-band: #dde1e6;
-  --bm-ink: #1c232c;
-  --bm-faint: 0.16;
-  --bm-arrow: #4a5360;
-  --bm-glow: #ffb020;
-  --a0: #1f5fbf;
-  --a1: #0b7a63;
-  --a2: #7a3fd1;
-  --a3: #b0461a;
-  --a4: #a3127a;
-  --a5: #4a7512;
-  --a6: #8a6000;
-  --a7: #b8261b;
-  --a8: #20698c;
-  --a9: #6b5838;
+  --bm-void: #020309;
+  --bm-ink: #dfe6f3;
+  --bm-quiet: #93a0b5;
+  --bm-line: #1a2232;
   position: absolute;
   top: 70px;
   left: 90px;
@@ -33,150 +20,122 @@
   grid-template-rows: auto 1fr auto auto;
   border: 2px solid var(--edge);
   border-radius: 10px;
-  background: var(--bm-board);
+  background: var(--bm-void);
   box-shadow: var(--thick);
   font-family: var(--body);
   color: var(--text);
   overflow: hidden;
 }
-.hud.studio[data-plates='night'] .brainmap {
-  --bm-board: #111418;
-  --bm-band: #171b21;
-  --bm-ink: #e9edf2;
-  --bm-faint: 0.2;
-  --bm-arrow: #b7c0cc;
-  --bm-glow: #ffc04d;
-  --a0: #7fb2ff;
-  --a1: #4fd1bd;
-  --a2: #c3a3ff;
-  --a3: #ff9f6b;
-  --a4: #ff7ad9;
-  --a5: #a8dc5a;
-  --a6: #ffd166;
-  --a7: #ff8a80;
-  --a8: #7fd3f0;
-  --a9: #d9c29a;
-  border-color: #3a414c;
-}
+.hud.studio[data-plates='night'] .brainmap { border-color: #3a414c; }
 .hud.studio .brainmap[hidden] { display: none; }
 .hud.studio-chatting .brainmap { right: 388px; }
-.brainmap .a0 { --a: var(--a0); } .brainmap .a1 { --a: var(--a1); } .brainmap .a2 { --a: var(--a2); }
-.brainmap .a3 { --a: var(--a3); } .brainmap .a4 { --a: var(--a4); } .brainmap .a5 { --a: var(--a5); }
-.brainmap .a6 { --a: var(--a6); } .brainmap .a7 { --a: var(--a7); } .brainmap .a8 { --a: var(--a8); }
-.brainmap .a9 { --a: var(--a9); }
 
 /* ── the bar ─────────────────────────────────────────────────────────────────── */
 
-.brainmap .bm-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  padding: 10px 14px 9px 16px;
-  border-bottom: 2px solid var(--edge);
-  background: var(--panel);
-}
-.brainmap .bm-title { margin: 0; font: 800 26px/1 var(--sign); letter-spacing: 0.06em; }
+.brainmap .bm-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 10px 14px 9px 16px; border-bottom: 2px solid var(--edge); background: var(--panel); position: relative; z-index: 3; }
+.brainmap .bm-title { margin: 0; font: 800 26px/1 var(--sign); letter-spacing: 0.05em; }
 .brainmap .bm-sub { margin: 0; font-size: 13px; color: var(--muted); }
-.brainmap .bm-find {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 220px;
-  flex: 0 1 300px;
-  height: 32px;
-  padding: 0 10px;
-  border: 2px solid var(--field-edge);
-  border-radius: 7px;
-  background: var(--raise);
-}
+.brainmap .bm-find { display: flex; align-items: center; gap: 7px; min-width: 200px; flex: 0 1 300px; height: 32px; padding: 0 10px; border: 2px solid var(--field-edge); border-radius: 7px; background: var(--raise); }
 .brainmap .bm-find svg { width: 15px; height: 15px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; flex: none; }
 .brainmap .bm-find input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: 500 14px/1 var(--body); outline: none; }
 .brainmap .bm-find:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.brainmap .bm-seg { display: inline-flex; border: 2px solid var(--field-edge); border-radius: 7px; overflow: hidden; }
+.brainmap .bm-seg button { min-height: 28px; padding: 0 12px; border: 0; background: var(--raise); color: var(--text); font: 600 13px/1 var(--body); cursor: pointer; }
+.brainmap .bm-seg button + button { border-left: 2px solid var(--field-edge); }
+.brainmap .bm-seg button[aria-pressed='true'] { background: var(--text); color: var(--panel); }
 .brainmap .bm-said { margin: 0 0 0 auto; font-size: 13px; color: var(--muted); }
 
-/* ── the strata ──────────────────────────────────────────────────────────────── */
+/* ── the field ───────────────────────────────────────────────────────────────── */
 
-.brainmap .bm-stage { position: relative; min-height: 0; overflow: hidden; contain: strict; }
-.brainmap .bm-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.brainmap .bm-band-fill { fill: var(--a); opacity: 0.055; }
-.brainmap .bm-band:nth-child(odd) .bm-band-fill { opacity: 0.09; }
-.brainmap .bm-band-rule { stroke: var(--bm-ink); stroke-opacity: 0.1; }
-.brainmap .bm-band.dim { opacity: 0.45; }
-.brainmap .bm-hatch-ink { fill: var(--a); opacity: 0.13; }
-.brainmap .bm-band-name { cursor: pointer; outline: none; }
-.brainmap .bm-band-hit { fill: transparent; }
-.brainmap .bm-band-name:hover .bm-band-hit, .brainmap .bm-band-name[aria-pressed='true'] .bm-band-hit { fill: var(--panel); }
-.brainmap .bm-band-name:focus-visible .bm-band-hit { stroke: var(--accent); stroke-width: 2; }
-.brainmap .bm-swatch { fill: var(--a); }
-.brainmap .bm-band-text { font: 700 14px/1 var(--sign); letter-spacing: 0.02em; fill: var(--bm-ink); dominant-baseline: middle; }
-.brainmap .bm-band-text.small { font-size: 12px; dominant-baseline: middle; }
-.brainmap .bm-band-count.small { font: 600 11px var(--body); text-anchor: start; }
-.brainmap .bm-band-count { font: 600 12px/1 var(--body); fill: var(--bm-ink); opacity: 0.7; dominant-baseline: middle; text-anchor: end; font-variant-numeric: tabular-nums; }
-.brainmap .bm-now { stroke: var(--bm-ink); stroke-width: 1.5; stroke-dasharray: 3 4; }
-.brainmap .bm-later { fill: var(--bm-board); opacity: 0.55; }
-
-.brainmap .bm-link { fill: none; stroke: var(--a); stroke-width: 1.4; opacity: 0.5; }
-.brainmap .bm-link.strong { stroke-width: 2.4; opacity: 0.95; }
-.brainmap .bm-link.faint { opacity: 0.08; }
-.brainmap .bm-replaced { fill: none; stroke: var(--bm-arrow); stroke-width: 2; stroke-dasharray: 5 3; }
-.brainmap .bm-week { stroke: var(--bm-ink); stroke-opacity: 0.07; }
-.brainmap .bm-replaced.faint { opacity: 0.15; }
-.brainmap .bm-arrow-ink { fill: var(--bm-arrow); }
-
-.brainmap .bm-n { cursor: pointer; outline: none; }
-.brainmap .bm-n > path, .brainmap .bm-n > rect, .brainmap .bm-n > circle:not(.bm-hit):not(.bm-halo):not(.bm-ring) { fill: var(--a); stroke: var(--bm-board); stroke-width: 1.6; }
-.brainmap .bm-n.hollow > circle:not(.bm-hit):not(.bm-halo):not(.bm-ring) { fill: var(--bm-board); stroke: var(--a); stroke-width: 2; }
-.brainmap .bm-n.old > path, .brainmap .bm-n.old > rect, .brainmap .bm-n.old > circle:not(.bm-hit):not(.bm-halo):not(.bm-ring) { fill: var(--bm-board); stroke: var(--a); stroke-width: 1.4; stroke-dasharray: 2 2; opacity: 0.75; }
-.brainmap .bm-hit { fill: transparent; }
-.brainmap .bm-halo { fill: url(#bm-glow); }
-.brainmap .bm-glow-in { stop-color: var(--bm-glow); stop-opacity: 0.85; }
-.brainmap .bm-glow-out { stop-color: var(--bm-glow); stop-opacity: 0; }
-.brainmap .bm-ring { fill: none; stroke: var(--a); stroke-width: 1.2; stroke-dasharray: 1.5 2.2; }
-.brainmap .bm-n.faint { opacity: var(--bm-faint); }
-.brainmap .bm-n:hover > :not(.bm-hit):not(.bm-halo), .brainmap .bm-n:focus-visible > :not(.bm-hit):not(.bm-halo) { stroke: var(--bm-ink); stroke-width: 2.2; }
-.brainmap .bm-n.chosen > :not(.bm-hit):not(.bm-halo):not(.bm-ring) { stroke: var(--bm-ink); stroke-width: 2.6; }
-.brainmap .bm-tip-box { fill: var(--panel); stroke: var(--edge); stroke-width: 1.5; }
-.brainmap .bm-tip-text { font: 600 13px/1 var(--body); fill: var(--text); }
-.brainmap .bm-tip-day { fill: var(--muted); font-weight: 500; }
-
-/* ── the timeline ────────────────────────────────────────────────────────────── */
-
-.brainmap .bm-time {
+.brainmap .bm-stage {
   position: relative;
-  height: 58px;
-  margin: 0 28px 0 168px;
-  border-top: 1px solid color-mix(in srgb, var(--bm-ink) 14%, transparent);
+  min-height: 0;
+  overflow: hidden;
+  background: #020309;
 }
+.brainmap .bm-stage[hidden] { display: none; }
+.brainmap .bf-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.brainmap .bf-canvas:active { cursor: grabbing; }
+.brainmap .bf-labels { position: absolute; inset: 0; pointer-events: none; }
+.brainmap .bf-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  border-radius: 999px;
+  background: rgba(2, 3, 9, 0.72);
+  color: var(--ink);
+  font: 700 13px/1.1 var(--sign);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--ink) 60%, transparent);
+  transition: opacity 160ms;
+}
+.brainmap .bf-label span { font: 600 11px/1 var(--body); color: var(--bm-quiet); text-shadow: none; }
+.brainmap .bf-label.dim { opacity: 0.25 !important; }
+.brainmap .bf-label:hover, .brainmap .bf-label:focus-visible { background: color-mix(in srgb, var(--ink) 18%, var(--bm-void)); }
+.brainmap .bm-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  max-width: 300px;
+  padding: 7px 11px 8px;
+  border: 1px solid #2c3a55;
+  border-radius: 8px;
+  background: rgba(8, 12, 24, 0.92);
+  color: var(--bm-ink);
+  font: 600 13px/1.35 var(--body);
+  pointer-events: none;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.brainmap .bm-tip span { display: block; font-weight: 500; font-size: 11.5px; color: var(--bm-quiet); }
+.brainmap .bm-hint { position: absolute; left: 16px; bottom: 10px; margin: 0; font-size: 12px; color: var(--bm-quiet); pointer-events: none; opacity: 0.8; }
+
+/* ── the list ────────────────────────────────────────────────────────────────── */
+
+.brainmap .bm-list { overflow: auto; padding: 14px 18px 24px; background: var(--panel); columns: 300px auto; column-gap: 26px; }
+.brainmap .bm-list[hidden] { display: none; }
+.brainmap .bm-list section { break-inside: avoid; margin-bottom: 18px; }
+.brainmap .bm-list h2 { margin: 0 0 6px; padding-left: 10px; border-left: 4px solid var(--ink); font: 700 16px/1.2 var(--sign); }
+.brainmap .bm-list h2 span { font: 500 12px var(--body); color: var(--muted); }
+.brainmap .bm-list ul { list-style: none; margin: 0; padding: 0; }
+.brainmap .bm-list button { display: grid; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: var(--text); text-align: left; cursor: pointer; font: 600 14px/1.3 var(--body); }
+.brainmap .bm-list button span { font-weight: 400; font-size: 12px; color: var(--muted); }
+.brainmap .bm-list button.old strong { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.brainmap .bm-list button:hover { background: var(--raise); }
+.brainmap .bm-none { color: var(--muted); }
+
+/* ── the timeline, on the dark ───────────────────────────────────────────────── */
+
+.brainmap .bm-time { position: relative; height: 54px; margin: 0 24px; border-top: 1px solid var(--bm-line); }
 .brainmap .bm-hist { position: absolute; left: 0; right: 0; top: 4px; height: 20px; display: flex; align-items: flex-end; gap: 1px; pointer-events: none; }
 .brainmap .bm-hist i { flex: 1; display: flex; justify-content: center; }
-.brainmap .bm-hist i::after { content: ''; width: 2px; height: 100%; border-radius: 1px; background: var(--bm-ink); opacity: 0.5; }
-.brainmap .bm-scrub { position: absolute; left: -9px; right: -9px; top: 22px; width: calc(100% + 18px); height: 18px; margin: 0; background: none; cursor: ew-resize; -webkit-appearance: none; appearance: none; }
-.brainmap .bm-scrub::-webkit-slider-runnable-track { height: 2px; background: color-mix(in srgb, var(--bm-ink) 35%, transparent); }
-.brainmap .bm-scrub::-moz-range-track { height: 2px; background: color-mix(in srgb, var(--bm-ink) 35%, transparent); }
-.brainmap .bm-scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -8px; border: 2px solid var(--edge); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bm-board); }
-.brainmap .bm-scrub::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid var(--edge); border-radius: 50%; background: var(--accent); }
-.brainmap .bm-ticks { position: absolute; left: 0; right: 0; bottom: 4px; height: 14px; font: 500 11px/1 var(--body); color: var(--muted); }
+.brainmap .bm-hist i::after { content: ''; width: 2px; height: 100%; border-radius: 1px; background: #7f9cff; opacity: 0.65; box-shadow: 0 0 6px #7f9cff; }
+.brainmap .bm-scrub { position: absolute; left: -9px; right: -9px; top: 20px; width: calc(100% + 18px); height: 18px; margin: 0; background: none; cursor: ew-resize; -webkit-appearance: none; appearance: none; }
+.brainmap .bm-scrub::-webkit-slider-runnable-track { height: 2px; background: #2a3550; }
+.brainmap .bm-scrub::-moz-range-track { height: 2px; background: #2a3550; }
+.brainmap .bm-scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -7px; border: 2px solid #fff; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.brainmap .bm-scrub::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: var(--accent); }
+.brainmap .bm-ticks { position: absolute; left: 0; right: 0; bottom: 3px; height: 14px; font: 500 11px/1 var(--body); color: var(--bm-quiet); }
 .brainmap .bm-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.brainmap .bm-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  padding: 7px 16px 9px;
-  border-top: 2px solid var(--edge);
-  background: var(--panel);
-  font-size: 12px;
-  color: var(--muted);
-}
-.brainmap .bm-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.brainmap .bm-legend svg { width: 16px; height: 16px; }
-.brainmap .bm-legend .lg { fill: var(--muted); }
-.brainmap .bm-legend .lg.big { fill: var(--text); }
-.brainmap .bm-legend .lg.halo { fill: var(--bm-glow); opacity: 0.55; }
-.brainmap .bm-legend .lg.old { fill: none; stroke: var(--muted); stroke-dasharray: 2 2; stroke-width: 1.4; }
-.brainmap .bm-legend .lg.ring { fill: none; stroke: var(--muted); stroke-dasharray: 1.5 2; stroke-width: 1.2; }
-.brainmap .bm-legend .lg.hatch { fill: none; stroke: var(--muted); stroke-width: 1; }
+.brainmap .bm-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 7px 16px 9px; border-top: 1px solid var(--bm-line); font-size: 12px; color: var(--bm-quiet); }
+.brainmap .bm-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.brainmap .bm-legend .lg { width: 10px; height: 10px; border-radius: 50%; background: #6ea8ff; box-shadow: 0 0 8px #6ea8ff; }
+.brainmap .bm-legend .lg.dec { width: 12px; height: 12px; background: radial-gradient(#fff 0 25%, #6ea8ff 60%); box-shadow: 0 0 10px #6ea8ff; }
+.brainmap .bm-legend .lg.pref { width: 9px; height: 9px; }
+.brainmap .bm-legend .lg.fact { width: 6px; height: 6px; opacity: 0.8; }
+.brainmap .bm-legend .lg.hot { width: 13px; height: 13px; background: radial-gradient(#fff 0 40%, #ffe8b0 70%); box-shadow: 0 0 14px #fff, 0 0 4px #ffd166; }
+.brainmap .bm-legend .lg.ash { background: #5d6676; box-shadow: none; }
+.brainmap .bm-legend .lg.ring { width: 6px; height: 6px; outline: 1px dashed #6ea8ff; outline-offset: 3px; }
+.brainmap .bm-legend .lg.fib { width: 18px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, #6ea8ff, #ff6fcf); box-shadow: 0 0 6px #b98cff; }
 
 /* ── the note on the side ────────────────────────────────────────────────────── */
 
@@ -195,7 +154,7 @@
   box-shadow: var(--thick);
 }
 .brainmap .bm-note[hidden] { display: none; }
-.brainmap .bm-note-head { position: relative; padding: 16px 48px 12px 18px; border-bottom: 2px solid var(--line); border-left: 6px solid var(--a); }
+.brainmap .bm-note-head { position: relative; padding: 16px 48px 12px 18px; border-bottom: 2px solid var(--line); border-left: 6px solid var(--ink, var(--accent)); }
 .brainmap .bm-note-kind { margin: 0 0 6px; font: 600 12px/1.2 var(--body); color: var(--muted); }
 .brainmap .bm-note-head h2 { margin: 0; font: 700 20px/1.25 var(--sign); letter-spacing: 0.01em; text-wrap: balance; }
 .brainmap .bm-note-meta { margin: 7px 0 0; font-size: 13px; color: var(--muted); }
@@ -211,7 +170,7 @@
 .brainmap .bm-text code { font-size: 13px; padding: 1px 4px; border-radius: 4px; background: var(--raise); }
 .brainmap .bm-wl, .brainmap .bm-chip { display: inline; padding: 0 3px; border: 0; border-bottom: 2px solid var(--accent); border-radius: 3px 3px 0 0; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .brainmap .bm-wl.missing { border-bottom-style: dotted; border-bottom-color: var(--muted); color: var(--muted); cursor: default; }
-.brainmap .bm-chip { display: inline-block; margin: 4px 6px 0 0; padding: 4px 8px; border: 2px solid var(--a); border-radius: 6px; font-size: 13px; line-height: 1.25; }
+.brainmap .bm-chip { display: inline-block; margin: 4px 6px 0 0; padding: 4px 8px; border: 2px solid var(--ink, var(--accent)); border-radius: 6px; font-size: 13px; line-height: 1.25; }
 .brainmap .bm-wl:hover, .brainmap .bm-chip:hover { background: var(--raise); }
 .brainmap .bm-backs { margin: 16px 18px 0; }
 .brainmap .bm-backs h3 { margin: 0 0 4px; font: 600 13px/1 var(--body); color: var(--muted); }
@@ -226,15 +185,17 @@
 .brainmap .bm-set label { display: grid; gap: 5px; font: 600 13px/1 var(--body); flex: 1 1 260px; }
 .brainmap .bm-set input { height: 36px; padding: 0 10px; border: 2px solid var(--field-edge); border-radius: 7px; background: var(--raise); color: var(--text); font: 500 14px var(--body); }
 .brainmap .bm-set button { height: 36px; padding: 0 14px; border: 2px solid var(--edge); border-radius: 7px; background: var(--text); color: var(--panel); font: 700 14px var(--body); cursor: pointer; }
-
+.brainmap .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.brainmap .bm-note-head { border-left-color: var(--ink, var(--accent)); }
+.brainmap .bm-chip { border-color: var(--ink, var(--accent)); }
+.brainmap.reading .bm-hint { display: none; }
 .brainmap :is(button, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (max-width: 760px) {
-  .brainmap .bm-note { left: 8px; right: 8px; width: auto; }
+  .brainmap .bm-note { left: 8px; right: 8px; width: auto; top: auto; max-height: 62%; }
   .brainmap .bm-legend { display: none; }
+  .brainmap .bm-hint { display: none; }
 }
-.brainmap .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
 /* At a phone's width the top bar keeps the three home buttons, smaller, so Engram can be reached. */
 @media (max-width: 600px) {
   .hud.studio .home-seg { display: inline-flex; }
