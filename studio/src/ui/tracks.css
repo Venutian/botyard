@@ -51,3 +51,6 @@
   .studio-sheet label.inline select { flex: 1 1 160px; max-width: 100%; min-width: 0; }
   .studio-sheet .gate-card { padding: 10px 10px 12px; }
 }
+
+/* The gate's question in the card's own words: why it waits, what there is to look at, what each answer does. */
+.gate-card .gate-ask { white-space: pre-line; margin: 4px 0 10px; color: var(--muted); font-size: 13px; line-height: 1.45; }

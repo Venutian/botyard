@@ -131,8 +131,9 @@ function gateHtml(gate, workJob = '') {
   const before = gate.backTo.at(-1)
   return `<section class="gate-card" data-part="gate">
     <h3>Waits for you: ${esc(gate.title)}</h3>
+    ${gate.ask?.prompt ? `<p class="gate-ask">${esc(gate.ask.prompt)}</p>` : ''}
     <div class="gate-acts">
-      <button class="btn primary" data-act="trip-gate" data-do="approve">Approve</button>
+      <button class="btn primary" data-act="trip-gate" data-do="approve">${esc(gate.ask?.accept || 'Approve')}</button>
       ${workJob ? `<button class="btn" data-act="review" data-job="${esc(workJob)}" title="Mark exact places in the work; your marks go back as the note">Mark exact places…</button>` : ''}
     </div>
     <form class="fields" data-part="gate-note">

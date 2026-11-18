@@ -97,3 +97,16 @@ test('the screens draw a track, list what waits for the owner, and give the gate
   assert.match(trip, /Your note:<\/b> shorter/)
   assert.match(trip, /\$0\.50 for the request/)
 })
+
+test('a request waiting at its gate says so on its job page, names who has it and opens its trip; never "Working, nobody yet"', async () => {
+  const { jobScreen } = await import('../src/ui/studio-work.js')
+  const job = { id: 'j', ref: 'WEB-1', status: 'in_progress', priority: 'medium', bot: '', children: [], documents: [], files: [], products: [], runs: [], comments: [], said: [] }
+  const line = { track: { tripId: 't1' }, pill: 'waits', stage: 'queued', bot: '', note: 'Waiting for you: the owner decides, $12.72 so far', steps: ['done', 'wait', 'wait', 'wait', 'wait'] }
+  const page = jobScreen(job, { line, steps: ['Build', 'Check', 'Final check', 'Merge', 'Push'] })
+  assert.match(page, /Waits for you/)
+  assert.match(page, /data-act="open-trip" data-id="t1"/)
+  assert.doesNotMatch(page, /Nobody yet|>Working</)
+  const building = jobScreen(job, { line: { ...line, pill: 'build', stage: 'build', bot: 'Bob The Builder', note: 'Bob The Builder is building it, on its track' }, steps: ['Build', 'Check', 'Final check', 'Merge', 'Push'] })
+  assert.match(building, /On its track/)
+  assert.match(building, /Bob The Builder/)
+})

@@ -344,7 +344,7 @@ export type TripStep = TrackStep & {
 export type Trip = {
   id: string; status: string; state: string; reason: string; current: string; rounds: Record<string, number>; commit: string;
   track: { key: string; version: number; title: string; delivers: string; main: string }; lines: TrackLine[]; steps: TripStep[]; cost: string; costUsd: number;
-  request: RequestRow; gate: { step: string; title: string; backTo: { id: string; title: string }[] } | null;
+  request: RequestRow; gate: { step: string; title: string; ask?: { prompt: string; accept: string; reject: string } | null; backTo: { id: string; title: string }[] } | null;
   can: { pause: boolean; resume: boolean; stop: boolean; rerun: string[] };
 };
 export type TripAction = 'approve' | 'back' | 'context' | 'rerun' | 'pause' | 'resume' | 'stop';

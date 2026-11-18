@@ -52,7 +52,8 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
           {gate ? (
             <View style={[styles.gate, { borderColor: t.warn, backgroundColor: t.card }]}>
               <Txt size={16} weight={700}>{`Waits for you: ${gate.title}`}</Txt>
-              <Button label="Approve" hint={DESCRIBE.act['Approve step']} busy={busy === 'approve'} disabled={Boolean(busy)} onPress={() => { act('approve'); }} />
+              {gate.ask?.prompt ? <Txt size={14} color={t.ink2}>{gate.ask.prompt}</Txt> : null}
+              <Button label={gate.ask?.accept || 'Approve'} hint={DESCRIBE.act['Approve step']} busy={busy === 'approve'} disabled={Boolean(busy)} onPress={() => { act('approve'); }} />
               {workJob ? <Button label="Mark exact places in the work" kind="quiet" icon="pin" hint={DESCRIBE.act['Mark exact places']} disabled={Boolean(busy)} onPress={() => nav.push({ name: 'review', job: workJob })} /> : null}
               <Field label="Note for the work" value={note} onChangeText={setNote} multiline tall maxLength={4000} placeholder="What to change, or what the step should know" />
               {before ? <Button label={`Add this and run “${before.title}” again`} kind="quiet" hint={DESCRIBE.act['Add note and run again']} busy={busy === 'context'} disabled={needNote || Boolean(busy)} onPress={() => { act('context', { note }); }} /> : null}

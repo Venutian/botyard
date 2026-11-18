@@ -400,7 +400,8 @@ export function questionView(interaction) {
       id,
       kind: 'confirm',
       title: title || 'A bot wants a yes or no',
-      prompt: payload?.prompt || '',
+      // A card that keeps its words in its summary still says them: a yes or no is never asked blind.
+      prompt: payload?.prompt || interaction.summary || '',
       accept: payload?.acceptLabel || 'Yes',
       reject: payload?.rejectLabel || 'No',
     }
