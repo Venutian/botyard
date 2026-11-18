@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { DatabaseSync } from 'node:sqlite'
+import { TRACK_TABLES, TRACK_WHOLE_NUMBERS } from './track-tables.mjs'
 
 export const SCHEMA_VERSION = 1
 
@@ -230,9 +231,11 @@ export const TABLES = {
     cols: { id: col('id'), project_id: col('projectId'), job_id: col('sourceIssueId'), name: col('name'), status: col('status'), cwd: col('cwd'), branch: col('branchName'), base_ref: col('baseRef'), updated_at: col('updatedAt', stamp) },
     indexes: [['job_id'], ['project_id']],
   },
+  // Tracks: saved ways for work to move, their requests, trips and steps (docs/tracks.md).
+  ...TRACK_TABLES,
 }
 
-const WHOLE_NUMBERS = new Set(['issue_number', 'issue_counter', 'position', 'latest_revision_number', 'revision_number', 'byte_size', 'log_bytes', 'exit_code', 'input_tokens', 'cached_input_tokens', 'output_tokens', 'is_primary', 'enabled'])
+const WHOLE_NUMBERS = new Set(['issue_number', 'issue_counter', 'position', 'latest_revision_number', 'revision_number', 'byte_size', 'log_bytes', 'exit_code', 'input_tokens', 'cached_input_tokens', 'output_tokens', 'is_primary', 'enabled', ...TRACK_WHOLE_NUMBERS])
 const sqlType = (name) => (WHOLE_NUMBERS.has(name) ? 'INTEGER' : 'TEXT')
 
 function createSql(name, table) {
