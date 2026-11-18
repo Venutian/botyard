@@ -22,6 +22,7 @@ import { addWorkspace, archiveProject, createProject, patchWorkspace, removeWork
 import { addTrigger, createRoutine, patchRoutine, patchTrigger, removeRoutine, removeTrigger, runRoutine } from './routines.mjs'
 import { createCompany, isSetUp, patchCompany } from './studio.mjs'
 import { cancelRun, whoHolds } from './runner.mjs'
+import { TRACK_WRITES, readTracks } from './tracks.mjs'
 import { Refused, addComment, createCard, createJob, openChat, patchJob, patchProject, putAgent, resetSessions, putDocument, restoreDocument, setPaused, settleCard, wake } from './write.mjs'
 import { runLogsDir } from './names.mjs'
 
@@ -85,6 +86,8 @@ const WRITES = [
     if (!cancelRun(s, p[0], c)) throw new Refused(409, 'That run is not one this engine has going')
     return [200, { ok: true }]
   }),
+  // Tracks: saved ways for work to move, requests on them and their trips (docs/tracks.md).
+  ...TRACK_WRITES,
 ]
 
 /** A run's log, a piece at a time, as `{ content, nextOffset }`. */
@@ -158,6 +161,8 @@ function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, 
       if (content) return { status: 200, file: fileOf(store, content[1], ctx) }
       const log = new RegExp(`^/heartbeat-runs/${one}/log$`).exec(where)
       if (log) return { status: 200, body: runLog(store, log[1], at.searchParams, ctx) }
+      const track = readTracks(store, where, Object.fromEntries(at.searchParams))
+      if (track) return track
       const extra = more(store, where, Object.fromEntries(at.searchParams), ctx)
       if (extra) return extra
       return handle(store, 'GET', url, { now })

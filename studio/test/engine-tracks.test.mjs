@@ -1,0 +1,362 @@
+/** Tracks in Botyard's engine (docs/tracks.md): saved as data, run step by step, back-lines with rounds, gates, snapshots, rerun, and "finished means in main". */
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { openStore } from '../server/engine/store.mjs'
+import { putDocument } from '../server/engine/write.mjs'
+import {
+  SAMPLE_TRACK, answerGate, checkTrack, getRequest, pauseTrip, rerunTrip, resumeTrip, saveTrack, startRequest, stopTrip, tickTracks, trackIo, tripView, verdictOf,
+} from '../server/engine/tracks.mjs'
+
+const OWNER = { user: 'local-board' }
+const T0 = Date.parse('2026-11-18T12:00:00Z')
+
+function yard() {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-tracks-'))
+  const repo = path.join(dataDir, 'repo')
+  fs.mkdirSync(repo)
+  const store = openStore(':memory:')
+  store.put('company', { id: 'co', name: 'Lighthouse Works', issuePrefix: 'LH', issueCounter: 0 })
+  for (const [id, name] of [['b1', 'Builder'], ['c1', 'Checker'], ['j1', 'Judge']]) store.put('agents', { id, companyId: 'co', name, status: 'idle', adapterType: 'claude_local', adapterConfig: {} })
+  store.put('projects', { id: 'p1', companyId: 'co', name: 'Harbour', status: 'in_progress' }, { position: 0 })
+  store.put('project_workspaces', { id: 'w1', projectId: 'p1', name: 'main', cwd: repo, isPrimary: true })
+  return { store, dataDir, repo }
+}
+
+/** A stand-in for the outside world: scripts answer from a table, git answers from a flag. */
+function fakeIo(scripts = {}, { inMain = async () => true } = {}) {
+  const ran = []
+  return {
+    ran,
+    startKeeper(specFile) {
+      const spec = JSON.parse(fs.readFileSync(specFile, 'utf8'))
+      const line = spec.args.at(-1)
+      ran.push({ line, env: spec.env, cwd: spec.cwd })
+      const act = scripts[line]
+      if (!act) throw new Error(`no fake for ${line}`)
+      const { exitCode = 0, out = null, stdout = '' } = act(spec) || {}
+      if (out) fs.writeFileSync(spec.env.BOTYARD_STEP_OUT, JSON.stringify(out))
+      fs.writeFileSync(spec.logFile, stdout ? `${JSON.stringify({ stream: 'stdout', chunk: stdout })}\n` : '')
+      fs.writeFileSync(spec.resultFile, JSON.stringify({ exitCode, timedOut: false }))
+      return 1
+    },
+    alive: () => false,
+    inMain,
+  }
+}
+
+/** A bot finishing its step's job: documents it leaves, then the job is done. */
+function botDoes(store, jobId, docs, now) {
+  for (const [key, body] of Object.entries(docs)) putDocument(store, jobId, key, { body }, { now, actor: { agent: 'x' } })
+  const job = store.object('SELECT raw FROM jobs WHERE id = ?', jobId)
+  store.put('jobs', { ...job, status: 'done' })
+}
+const workingJob = (store, tripId, stepId) => store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? AND status = 'working'", tripId, stepId)[0]?.jobId
+
+const CREW = {
+  key: 'crew', title: 'Build, check, land', inputs: ['brief'],
+  steps: [
+    { id: 'build', kind: 'bot', bot: 'Builder', words: 'Build what the brief asks.', needs: ['brief'], leaves: ['commit'] },
+    { id: 'tests', kind: 'script', command: 'run tests', needs: ['commit'], leaves: ['tests'] },
+    { id: 'check', kind: 'bot', bot: 'Checker', words: 'Check the build against the brief.', needs: ['brief', 'commit'], leaves: ['verdict'] },
+    { id: 'decide', kind: 'gate', title: 'Owner decides' },
+    { id: 'land', kind: 'script', command: 'land it', needs: ['commit'], leaves: ['commit'] },
+  ],
+  lines: [
+    { from: 'build', to: 'tests', on: 'pass' }, { from: 'build', to: 'decide', on: 'fail' },
+    { from: 'tests', to: 'check', on: 'pass' }, { from: 'tests', to: 'build', on: 'fail', rounds: 2, then: 'decide' },
+    { from: 'check', to: 'land', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 2, then: 'decide' },
+    { from: 'decide', to: 'land', on: 'pass' },
+    { from: 'land', to: 'decide', on: 'fail' },
+  ],
+}
+
+test('a track is refused unless every rule holds', () => {
+  const ok = checkTrack(CREW, { selfKey: 'crew' })
+  assert.equal(ok.steps.length, 5)
+  assert.equal(ok.delivers, 'change')
+  const bad = (change, why) => assert.throws(() => checkTrack(change(structuredClone(CREW)), { selfKey: 'crew' }), (err) => why.test(err.message), why)
+  bad((t) => { t.lines = t.lines.filter((l) => !(l.from === 'land' && l.on === 'fail')); return t }, /"land" can fail and has nothing after a fail/)
+  bad((t) => { delete t.lines.find((l) => l.from === 'check' && l.on === 'fail').rounds; return t }, /needs its rounds/)
+  bad((t) => { delete t.lines.find((l) => l.from === 'check' && l.on === 'fail').then; return t }, /needs a "then"/)
+  bad((t) => { t.lines.find((l) => l.from === 'check' && l.on === 'fail').then = 'tests'; return t }, /a gate or a ruling step/)
+  bad((t) => { t.steps[2].needs.push('plan'); return t }, /needs "plan", which no earlier step leaves/)
+  bad((t) => { t.lines.push({ from: 'build', to: 'check', on: 'pass' }); return t }, /two ways on for a pass/)
+  bad((t) => { t.lines.push({ from: 'land', to: 'build', on: 'pass' }); return t }, /A pass goes forward/)
+  bad((t) => { t.steps.push({ id: 'lost', kind: 'gate' }); return t }, /No line reaches "lost"/)
+  bad((t) => { t.steps.push({ id: 'twice', kind: 'track', track: 'crew' }); return t }, /cannot run the track it is in/)
+  bad((t) => { t.steps.push({ id: 'other', kind: 'track', track: 'nowhere' }); return t }, /not saved here/)
+  bad((t) => { t.steps[0].id = 'Build Step'; return t }, /needs an id/)
+  bad((t) => { t.steps[1].kind = 'robot'; return t }, /one of: bot, script, gate, track/)
+  // A ruling step may take the work when the rounds are used.
+  const ruled = structuredClone(CREW)
+  ruled.steps.splice(3, 0, { id: 'rule', kind: 'bot', bot: 'Judge', ruling: true, leaves: ['verdict'] })
+  ruled.lines.find((l) => l.from === 'check' && l.on === 'fail').then = 'rule'
+  ruled.lines.push({ from: 'rule', to: 'land', on: 'pass' }, { from: 'rule', to: 'decide', on: 'fail' })
+  assert.equal(checkTrack(ruled, { selfKey: 'crew' }).steps[3].ruling, true)
+})
+
+test('saving keeps versions, and the same track saved again is not a new version; bots may not save one', () => {
+  const { store } = yard()
+  const first = saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  assert.equal(first.version, 1)
+  assert.equal(saveTrack(store, 'co', CREW, { now: T0 + 1, actor: OWNER }).unchanged, true)
+  const second = saveTrack(store, 'co', { ...CREW, steps: CREW.steps.map((s) => (s.id === 'build' ? { ...s, model: 'big' } : s)) }, { now: T0 + 2, actor: OWNER })
+  assert.equal(second.version, 2)
+  assert.equal(store.count('track_versions'), 2)
+  assert.throws(() => saveTrack(store, 'co', CREW, { actor: { agent: 'b1' } }), /Only the owner/)
+})
+
+test('verdicts are read in the crew\'s words', () => {
+  for (const t of ['PASS', 'pass: all good', 'MET', 'Approved']) assert.equal(verdictOf(t), 'pass', t)
+  for (const t of ['FAIL', 'NOT MET: two rows', 'Rejected']) assert.equal(verdictOf(t), 'fail', t)
+  assert.equal(verdictOf('looks fine'), null)
+})
+
+test('a request moves along its track: a failed check goes back with its findings, rounds are counted, the gate decides, and it is finished only in main', async () => {
+  const { store, dataDir, repo } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  let testsPass = true
+  let landed = false
+  const io = fakeIo({
+    'run tests': () => (testsPass ? { out: { verdict: 'pass', leaves: { tests: '12 passed' }, numbers: { passed: 12 } } } : { exitCode: 1, stdout: '3 failed' }),
+    'land it': (spec) => ({ out: { leaves: { commit: `${spec.env.BOTYARD_IN_COMMIT}-merged` } } }),
+  }, { inMain: async (where, commit, branch) => { assert.equal(where, repo); assert.equal(branch, 'main'); return landed } })
+  const request = startRequest(store, 'co', { track: 'crew', title: 'Add a lighthouse', projectId: 'p1', inputs: { brief: 'A lighthouse on the hill' } }, { now: T0, actor: { agent: 'lead-bot' } })
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  // The builder gets a job under the request, with the brief.
+  const build1 = workingJob(store, tripId, 'build')
+  const job1 = store.object('SELECT raw FROM jobs WHERE id = ?', build1)
+  assert.equal(job1.parentId, request.jobId)
+  assert.equal(job1.assigneeAgentId, 'b1')
+  assert.match(job1.description, /A lighthouse on the hill/)
+  assert.equal(store.object("SELECT raw FROM wakes WHERE agent_id = 'b1'").payload.issueId, build1, 'the bot is woken')
+  store.put('runs', { id: 'r1', companyId: 'co', agentId: 'b1', issueId: build1, status: 'succeeded', usageJson: { costUsd: 1.25, inputTokens: 100, outputTokens: 10 } })
+  botDoes(store, build1, { commit: 'aaa111' }, T0)
+  await tick(2)
+  // Tests passed with the commit handed in; the checker got its job.
+  assert.equal(io.ran[0].env.BOTYARD_IN_COMMIT, 'aaa111')
+  const check1 = workingJob(store, tripId, 'check')
+  assert.ok(check1)
+  store.put('runs', { id: 'r2', companyId: 'co', agentId: 'c1', issueId: check1, status: 'succeeded', usageJson: { costUsd: 0.5 } })
+  botDoes(store, check1, { verdict: 'FAIL: the lamp does not turn' }, T0)
+  await tick(3)
+  // Back to build, round 1, with the findings and the commit it continues.
+  const build2 = workingJob(store, tripId, 'build')
+  const job2 = store.object('SELECT raw FROM jobs WHERE id = ?', build2)
+  assert.match(job2.description, /the lamp does not turn/)
+  assert.match(job2.description, /Start from commit aaa111/)
+  assert.equal(job2.startFrom, 'aaa111')
+  assert.match(job2.title, /round 2/)
+  let view = tripView(store, tripId)
+  assert.deepEqual(view.rounds, { 'check>build': 1 })
+  assert.equal(view.steps.find((s) => s.id === 'build').tries.length, 2)
+  assert.equal(view.steps.find((s) => s.id === 'check').tries[0].status, 'stale', 'the failed check is kept, no longer read')
+  assert.equal(view.steps.find((s) => s.id === 'check').tries[0].snapshot.verdict, 'fail')
+  // Round 2 fails at the tests, round 3 at the check: both back-lines count their own rounds.
+  botDoes(store, build2, { commit: 'bbb222' }, T0)
+  testsPass = false
+  await tick(4)
+  assert.deepEqual(tripView(store, tripId).rounds, { 'check>build': 1, 'tests>build': 1 })
+  assert.match(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).description, /3 failed/)
+  testsPass = true
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ccc333' }, T0)
+  await tick(5)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL again' }, T0)
+  await tick(6)
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ddd444' }, T0)
+  await tick(7)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL a third time' }, T0)
+  await tick(8)
+  // Two rounds back from the check are used: the gate decides, and shows the findings.
+  view = tripView(store, tripId)
+  assert.equal(view.current, 'decide')
+  const card = store.object("SELECT raw FROM cards WHERE status = 'pending'")
+  assert.equal(card.issueId, request.jobId)
+  assert.match(card.summary, /FAIL a third time/)
+  assert.throws(() => answerGate(store, tripId, { action: 'approve' }, { actor: { agent: 'b1' } }), /Only the owner/)
+  answerGate(store, tripId, { action: 'approve' }, { now: T0 + 9000, actor: OWNER })
+  await tick(10)
+  // Landed by the script, but not in main yet: not finished.
+  view = tripView(store, tripId)
+  assert.equal(view.status, 'not-in-main')
+  assert.equal(view.commit, 'ddd444-merged')
+  assert.equal(getRequest(store, request.id).status, 'not-in-main')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
+  landed = true
+  await tick(80)
+  assert.equal(tripView(store, tripId).status, 'done')
+  const shown = getRequest(store, request.jobCode)
+  assert.equal(shown.status, 'done')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'done')
+  // Cost is added up across every step and round of the request.
+  assert.equal(shown.cost.usd, 1.75)
+  assert.equal(shown.cost.inputTokens, 100)
+})
+
+test('a track that delivers a change and leaves no commit is stuck, never done', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', { key: 'nocommit', steps: [{ id: 'only', kind: 'script', command: 'ok' }, { id: 'decide', kind: 'gate' }], lines: [{ from: 'only', to: 'decide', on: 'fail' }] }, { actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'nocommit', title: 'Tidy', projectId: 'p1' }, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io: fakeIo({ ok: () => ({}) }), now: T0 })
+  const shown = getRequest(store, request.id)
+  assert.equal(shown.trip.status, 'stuck')
+  assert.match(shown.trip.reason, /no step left a commit/)
+  assert.equal(shown.status, 'working')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
+})
+
+test('pause holds a trip, resume goes on, and a rerun from a step keeps every snapshot before it', async () => {
+  const { store, dataDir } = yard()
+  const io = fakeIo({ one: () => ({ out: { leaves: { a: 'first' } } }), two: (spec) => ({ out: { leaves: { b: `${spec.env.BOTYARD_IN_A}+${spec.env.BOTYARD_IN_NOTE || ''}` } } }) })
+  saveTrack(store, 'co', {
+    key: 'two', delivers: 'nothing',
+    steps: [{ id: 's1', kind: 'script', command: 'one', leaves: ['a'] }, { id: 's2', kind: 'script', command: 'two', needs: ['a'], leaves: ['b'] }, { id: 'stop', kind: 'gate' }],
+    lines: [{ from: 's1', to: 's2', on: 'pass' }, { from: 's1', to: 'stop', on: 'fail' }, { from: 's2', to: 'stop', on: 'fail' }],
+  }, { actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'two', title: 'Two steps' }, { now: T0, actor: OWNER })
+  const tripId = store.row('SELECT id FROM trips').id
+  pauseTrip(store, tripId, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 1000 })
+  assert.equal(io.ran.length, 0, 'a paused trip starts nothing')
+  assert.throws(() => pauseTrip(store, tripId, { actor: { agent: 'b1' } }), /Only the owner/)
+  resumeTrip(store, tripId, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 2000 })
+  assert.deepEqual(io.ran.map((r) => r.line), ['one', 'two'])
+  assert.equal(getRequest(store, request.id).status, 'done')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'done')
+  // Rerun from the second step with a note: the first is not run again, its value is read from its snapshot.
+  rerunTrip(store, tripId, { step: 's2', note: 'louder' }, { now: T0 + 3000, actor: OWNER })
+  assert.equal(getRequest(store, request.id).status, 'working', 'a rerun opens the request again')
+  await tickTracks(store, { dataDir, io, now: T0 + 4000 })
+  assert.deepEqual(io.ran.map((r) => r.line), ['one', 'two', 'two'])
+  const view = tripView(store, tripId)
+  assert.equal(view.steps[0].tries.length, 1)
+  assert.equal(view.steps[1].latest.snapshot.leaves.b, 'first+louder')
+  assert.equal(view.steps[1].tries[0].status, 'stale')
+  assert.equal(view.status, 'done')
+  assert.throws(() => rerunTrip(store, tripId, { step: 'nope' }, { actor: OWNER }), /Say which step/)
+})
+
+test('at a gate the owner sends the work back to a chosen step with a note, or adds context and the step before runs again', async () => {
+  const { store, dataDir } = yard()
+  const io = fakeIo({ draft: (spec) => ({ out: { leaves: { text: `draft(${spec.env.BOTYARD_IN_NOTE || ''})` } } }), polish: (spec) => ({ out: { leaves: { text: `${spec.env.BOTYARD_IN_TEXT}+polish(${spec.env.BOTYARD_IN_NOTE || ''})` } } }) })
+  saveTrack(store, 'co', {
+    key: 'write', delivers: 'nothing',
+    steps: [{ id: 'draft', kind: 'script', command: 'draft', leaves: ['text'] }, { id: 'polish', kind: 'script', command: 'polish', needs: ['text'], leaves: ['text'] }, { id: 'look', kind: 'gate', needs: ['text'] }],
+    lines: [{ from: 'draft', to: 'polish', on: 'pass' }, { from: 'draft', to: 'look', on: 'fail' }, { from: 'polish', to: 'look', on: 'always' }],
+  }, { actor: OWNER })
+  startRequest(store, 'co', { track: 'write', title: 'A page' }, { now: T0, actor: OWNER })
+  const tripId = store.row('SELECT id FROM trips').id
+  await tickTracks(store, { dataDir, io, now: T0 })
+  assert.match(store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /draft\(\)\+polish\(\)/)
+  assert.throws(() => answerGate(store, tripId, { action: 'back', to: 'look', note: 'x' }, { actor: OWNER }), /a step before the gate/)
+  assert.throws(() => answerGate(store, tripId, { action: 'back', to: 'draft' }, { actor: OWNER }), /a note goes with the work/)
+  answerGate(store, tripId, { action: 'back', to: 'draft', note: 'shorter' }, { now: T0 + 1, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 2 })
+  assert.match(store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /draft\(shorter\)\+polish\(\)/)
+  answerGate(store, tripId, { action: 'context', note: 'warmer' }, { now: T0 + 3, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 4 })
+  assert.match(store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /draft\(shorter\)\+polish\(warmer\)/)
+  assert.deepEqual(io.ran.map((r) => r.line), ['draft', 'polish', 'draft', 'polish', 'polish'])
+  answerGate(store, tripId, { action: 'approve' }, { now: T0 + 5, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 6 })
+  assert.equal(tripView(store, tripId).status, 'done')
+  assert.throws(() => answerGate(store, tripId, { action: 'approve' }, { actor: OWNER }), /not waiting at a gate/)
+})
+
+test('a "no" on the gate\'s card sends the work back to the step before it', async () => {
+  const { store, dataDir } = yard()
+  const io = fakeIo({ make: () => ({ out: { leaves: {} } }) })
+  saveTrack(store, 'co', { key: 'mk', delivers: 'nothing', steps: [{ id: 'make', kind: 'script', command: 'make' }, { id: 'ok', kind: 'gate' }], lines: [{ from: 'make', to: 'ok', on: 'always' }] }, { actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'mk', title: 'Make' }, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 })
+  const card = store.object("SELECT raw FROM cards WHERE status = 'pending'")
+  const { settleCard } = await import('../server/engine/write.mjs')
+  settleCard(store, request.jobId, card.id, 'reject', { reason: 'not like this' }, { now: T0 + 1, actor: OWNER })
+  await tickTracks(store, { dataDir, io, now: T0 + 2 })
+  assert.equal(io.ran.length, 2)
+  assert.equal(tripView(store, store.row('SELECT id FROM trips').id).current, 'ok')
+})
+
+test('a step can run another saved track and take what it leaves', async () => {
+  const { store, dataDir } = yard()
+  const io = fakeIo({ inner: () => ({ out: { leaves: { score: '9' } } }), outer: (spec) => ({ out: { leaves: { said: `score ${spec.env.BOTYARD_IN_SCORE}` } } }) })
+  saveTrack(store, 'co', { key: 'scoring', delivers: 'nothing', steps: [{ id: 'score', kind: 'script', command: 'inner', leaves: ['score'] }, { id: 'g', kind: 'gate' }], lines: [{ from: 'score', to: 'g', on: 'fail' }] }, { actor: OWNER })
+  saveTrack(store, 'co', {
+    key: 'outer', delivers: 'nothing',
+    steps: [{ id: 'sub', kind: 'track', track: 'scoring', leaves: ['score'] }, { id: 'say', kind: 'script', command: 'outer', needs: ['score'], leaves: ['said'] }, { id: 'g', kind: 'gate' }],
+    lines: [{ from: 'sub', to: 'say', on: 'pass' }, { from: 'sub', to: 'g', on: 'fail' }, { from: 'say', to: 'g', on: 'fail' }],
+  }, { actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'outer', title: 'Score it' }, { now: T0, actor: OWNER })
+  for (let n = 0; n < 3; n++) await tickTracks(store, { dataDir, io, now: T0 + n })
+  const shown = getRequest(store, request.id)
+  assert.equal(shown.status, 'done')
+  assert.equal(shown.trips[0].steps[1].latest.snapshot.leaves.said, 'score 9')
+  assert.equal(shown.trips[0].innerTrips.length, 1)
+})
+
+test('stopping a trip lets go of the step at work and stops the request', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'crew', title: 'X', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io: fakeIo(), now: T0 })
+  const tripId = store.row('SELECT id FROM trips').id
+  const job = workingJob(store, tripId, 'build')
+  stopTrip(store, tripId, { now: T0, actor: OWNER })
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', job).status, 'cancelled')
+  assert.equal(getRequest(store, request.id).status, 'stopped')
+})
+
+test('the built-in sample runs a real script and waits at the owner\'s gate, with no bot and no key', async () => {
+  const { store, dataDir, repo } = yard()
+  fs.writeFileSync(path.join(repo, 'a.txt'), 'a')
+  fs.writeFileSync(path.join(repo, 'b.txt'), 'b')
+  const request = startRequest(store, 'co', { track: SAMPLE_TRACK.key, title: 'Count the harbour', projectId: 'p1' }, { now: Date.now(), actor: OWNER })
+  const tripId = store.row('SELECT id FROM trips').id
+  for (let n = 0; n < 100; n++) {
+    await tickTracks(store, { dataDir, io: trackIo, now: Date.now() })
+    if (tripView(store, tripId).current === 'approve') break
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  const view = tripView(store, tripId)
+  assert.equal(view.current, 'approve')
+  assert.equal(view.steps[0].latest.snapshot.leaves.report, 'This folder holds 2 files and folders.')
+  assert.equal(view.steps[0].latest.snapshot.numbers.entries, 2)
+  answerGate(store, tripId, { action: 'approve' }, { actor: OWNER })
+  await tickTracks(store, { dataDir, io: trackIo, now: Date.now() })
+  assert.equal(getRequest(store, request.id).status, 'done')
+})
+
+test('tracks, requests and trips through the engine\'s API', async () => {
+  const { startEngine } = await import('../server/engine/main.mjs')
+  const engine = await startEngine({ dataDir: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'engine-tracks-api-')), 'data'), runs: false, log: () => {} })
+  try {
+    const co = (await engine.handle({ url: '/api/companies' })).body[0].id
+    const list = await engine.handle({ url: `/api/companies/${co}/tracks` })
+    assert.equal(list.status, 200)
+    assert.ok(list.body.some((t) => t.key === 'sample-check' && t.current.steps.length === 2), 'the sample is there in a new yard')
+    const refused = await engine.handle({ method: 'POST', url: `/api/companies/${co}/tracks`, body: { key: 'bad', steps: [{ id: 'a', kind: 'script', command: 'x' }] } })
+    assert.equal(refused.status, 400)
+    assert.match(refused.body.error, /nothing after a fail/)
+    const started = await engine.handle({ method: 'POST', url: `/api/companies/${co}/requests`, body: { track: 'sample-check', title: 'Count' } })
+    assert.equal(started.status, 201)
+    const request = await engine.handle({ url: `/api/requests/${started.body.id}` })
+    assert.equal(request.body.trips.length, 1)
+    assert.equal(request.body.trips[0].steps.length, 2)
+    const trip = await engine.handle({ url: `/api/trips/${request.body.trips[0].id}` })
+    assert.equal(trip.body.track.key, 'sample-check')
+    const paused = await engine.handle({ method: 'POST', url: `/api/trips/${trip.body.id}/pause`, body: {} })
+    assert.equal(paused.body.status, 'paused')
+    const gate = await engine.handle({ method: 'POST', url: `/api/trips/${trip.body.id}/gate`, body: { action: 'approve' } })
+    assert.equal(gate.status, 409)
+    assert.equal((await engine.handle({ url: `/api/companies/${co}/requests` })).body.length, 1)
+  } finally {
+    await engine.stop()
+  }
+})

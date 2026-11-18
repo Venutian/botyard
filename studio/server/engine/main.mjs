@@ -20,6 +20,7 @@ import { notFromHere } from '../lib/local-call.mjs'
 import { DEFAULT_PORT, ENGINE_VARS, defaultDataDir, keysDir as keysIn, storeFile } from './names.mjs'
 import { tickRoutines } from './routines.mjs'
 import { tick } from './runner.mjs'
+import { tickTracks } from './tracks.mjs'
 import { openStore } from './store.mjs'
 import { ensureStudio } from './studio.mjs'
 
@@ -129,6 +130,8 @@ export async function startEngine({ dataDir, port = null, runs = true, log = con
       for (const run of report.started) log(`[engine] started ${run.id} for ${run.agentId} on ${run.issueId}`)
       for (const run of report.finished) log(`[engine] ${run.status} ${run.id}${run.error ? `: ${run.error}` : ''}`)
       for (const skip of report.skipped) log(`[engine] wake ${skip.id} not started: ${skip.why}`)
+      // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
+      for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
     } catch (err) {
       log(`[engine] tick failed: ${err.message}`)
     }
