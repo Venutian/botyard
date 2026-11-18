@@ -59,6 +59,46 @@ class Wake(unittest.TestCase):
                                                             'payload': {'issueId': 'j1'}})])
         self.assertEqual(wait.load(), [])
 
+    def test_several_done_files_wake_once_when_the_last_appears(self):
+        second = os.path.join(self.dir, 'arm2.done')
+        wait.register([self.done, second], 'two arms', env=ENV)
+        open(self.done, 'w').close()
+        wait.wake_pass(api=self.api)
+        self.assertEqual(self.posts, [], 'one arm done is not a wake')
+        open(second, 'w').close()
+        wait.wake_pass(api=self.api)
+        wait.wake_pass(api=self.api)
+        self.assertEqual(len(self.posts), 1)
+        self.assertEqual(wait.load(), [])
+
+    def test_a_second_registration_for_the_same_job_joins_the_first(self):
+        second = os.path.join(self.dir, 'arm2.done')
+        wait.register(self.done, 'arm 1', env=ENV)
+        w = wait.register(second, 'arm 2', env=ENV)
+        self.assertEqual(w['doneFiles'], [self.done, second])
+        self.assertEqual(len(wait.load()), 1)
+        open(self.done, 'w').close()
+        wait.wake_pass(api=self.api)
+        self.assertEqual(self.posts, [])
+
+    def test_a_session_that_already_ran_since_the_work_ended_is_not_woken_again(self):
+        import contextlib, io
+        wait.register(self.done, env=ENV)
+        open(self.done, 'w').close()
+        os.utime(self.done, (1_700_000_000, 1_700_000_000))
+        self.runs = [{'runId': 'r2', 'createdAt': '2026-11-18T10:00:00Z', 'startedAt': '2026-11-18T10:00:00Z', 'status': 'succeeded'}]
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            wait.wake_pass(api=self.api)
+        self.assertEqual(self.posts, [])
+        self.assertEqual(wait.load(), [])
+        self.assertIn('already ran', out.getvalue())
+
+    def test_a_registration_from_before_lists_still_wakes(self):
+        json.dump([{'issueId': 'j1', 'agentId': 'a1', 'doneFile': self.done, 'startedAt': time.time(), 'note': ''}], open(wait.FILE, 'w'))
+        open(self.done, 'w').close()
+        wait.wake_pass(api=self.api)
+        self.assertEqual(len(self.posts), 1)
+
     def test_wake_after_a_cut_off_is_the_request_resume_phased_builds(self):
         self.runs = [{'runId': 'r9', 'createdAt': '1', 'status': 'timed_out'}]
         wait.register(self.done, env=ENV)

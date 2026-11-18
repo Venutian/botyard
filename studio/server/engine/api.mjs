@@ -32,7 +32,8 @@ const route = (method, pattern, act) => [method, new RegExp(`^${pattern}$`), act
 const WRITES = [
   route('POST', `/companies/${one}/issues`, (s, p, b, c) => [201, createJob(s, p[0], b, c)]),
   route('PATCH', `/issues/${one}`, (s, p, b, c) => [200, patchJob(s, p[0], b, c)]),
-  route('POST', `/issues/${one}/comments`, (s, p, b, c) => [201, addComment(s, p[0], b, c)]),
+  // `wake: false` posts without waking the job's bot: a script's result while more of the same job's work is still running.
+  route('POST', `/issues/${one}/comments`, (s, p, b, c) => [201, addComment(s, p[0], b, { ...c, quiet: b.wake === false })]),
   route('POST', `/issues/${one}/interactions`, (s, p, b, c) => [201, createCard(s, p[0], b, c)]),
   route('POST', `/issues/${one}/interactions/${one}/(respond|accept|reject|withdraw|cancel)`, (s, p, b, c) => [200, settleCard(s, p[0], p[1], p[2], b, c)]),
   route('PUT', `/issues/${one}/documents/${one}`, (s, p, b, c) => [200, putDocument(s, p[0], p[1], b, c)]),
