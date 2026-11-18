@@ -194,6 +194,10 @@ test('a request moves along its track: a failed check goes back with its finding
   const shown = getRequest(store, request.jobCode)
   assert.equal(shown.status, 'done')
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'done')
+  // The build rounds the landed one replaced are closed as superseded; the round that landed stays done.
+  const builds = store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = 'build' ORDER BY created_at", tripId)
+  assert.deepEqual(builds.map((b) => store.object('SELECT raw FROM jobs WHERE id = ?', b.jobId).status), ['cancelled', 'cancelled', 'cancelled', 'done'])
+  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ?', builds[0].jobId).at(-1).body, /^Superseded: a later round of this request landed in main \(ddd4444-merg/)
   // Cost is added up across every step and round of the request.
   assert.equal(shown.cost.usd, 1.75)
   assert.equal(shown.cost.inputTokens, 100)
