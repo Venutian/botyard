@@ -65,7 +65,7 @@ export function PcLoadCard({ connection, every = 30_000 }: { connection: Connect
   const full = now === 'full';
   return (
     <View>
-      <Label>PC load</Label>
+      <Label>Throttle</Label>
       <View style={[styles.card, { backgroundColor: t.card, borderColor: full ? t.bad : t.line }, t.plates && { borderRadius: t.r.card }]}>
         <Segmented<LoadLevel> value={now || 'none'} options={LEVELS.map((id) => ({ id, name: NAMES[id] }))} onChange={choose} />
         <View style={styles.status}>

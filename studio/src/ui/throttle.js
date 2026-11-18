@@ -1,5 +1,5 @@
 /**
- * The top bar's PC load control: a radio group of five levels (None, Light, Medium, Heavy, Full),
+ * The top bar's throttle (PC load) control: a radio group of five levels (None, Light, Medium, Heavy, Full),
  * a state line, and a small popover to set Day and Night apart. Pure HTML from the state, so it is
  * tested in Node; `mountThrottle` wires it to the server's /api/studio/throttle.
  * Full is the only level that asks first, and while it holds the control offers Resume.
@@ -13,8 +13,11 @@ export const NAMES = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'H
 export const CONFIRM = 'Pause all heavy work and stop new builds? The lead bot and checks keep running. You can resume any time.'
 const STOP = '<svg class="ld-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
 const HINTS = {
-  none: 'None: the crew uses the PC freely', light: 'Light: a little work at a time', medium: 'Medium: half the usual work',
-  heavy: 'Heavy: most work allowed', full: 'Full: all heavy work paused, no new builds',
+  none: 'No throttle: the crew does the most work at once',
+  light: 'Light throttle: a little less work at once',
+  medium: 'Medium throttle: about half the work at once',
+  heavy: 'Heavy throttle: the least work at once, the PC stays quiet',
+  full: 'Full stop: heavy work paused, no new builds',
 }
 
 /** The buttons and the state line. `ui` is `{ confirming, busy, error }`. */
@@ -28,7 +31,7 @@ export function throttleHtml(state, ui = {}) {
     return `<button type="button" role="radio" aria-checked="${on}" tabindex="${on || (!now && id === 'none') ? 0 : -1}" class="ld-seg ld-${id}${on ? ' on' : ''}" data-level="${id}" title="${esc(HINTS[id])}"${ui.busy ? ' aria-disabled="true"' : ''}>${id === 'full' ? STOP : ''}<span>${NAMES[id]}</span></button>`
   }).join('')
   const resume = full ? '<button type="button" class="ld-resume" data-act="load-resume">Resume</button>' : ''
-  return `<span class="ld-label" id="ld-label">PC load</span>
+  return `<span class="ld-label" id="ld-label" title="How much the crew slows down to keep this PC free: None is full speed, Heavy is the slowest, Full pauses heavy work">Throttle</span>
 <div class="ld-group${full ? ' is-full' : ''}" role="radiogroup" aria-labelledby="ld-label">${seg}</div>
 ${resume}<button type="button" class="ld-more" data-act="load-more" aria-expanded="${Boolean(ui.more)}" aria-controls="ld-pop" title="Set day and night apart" aria-label="Day and night settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
 <span class="ld-line" role="status" aria-live="polite" title="${esc(ui.error || state?.line || '')}">${esc(ui.error || (full || split || state?.note ? state?.line : '') || '')}</span>
