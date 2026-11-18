@@ -55,7 +55,10 @@ export type Plans = {
 } | null;
 /** What the Models screen shows: every bot's model, the free models' health, the subscriptions and the last switches. */
 export type ModelBot = Looked & { id: string; name: string; status: string; label: string; where: string; free: boolean };
+/** Where a free model stands against Claude (the service's CLAUDE_SCALE). */
+export type ClaudeChip = { chip: string; tier: 'below' | 'haiku' | 'sonnet' | 'opus' | 'unrated' };
 export type FreeModel = {
+  claude?: ClaudeChip;
   label: string;
   family: string;
   tier: 'strong' | 'light';

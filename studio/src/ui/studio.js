@@ -12,6 +12,7 @@ import './launch.css'
 import { CrewMap } from './crew-map.js'
 import { DESCRIBE } from './describe.js'
 import { BrainMap } from './brain-map.js'
+import { claudeChip } from './usage.js'
 import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
@@ -2073,7 +2074,7 @@ setView(view) {
       if (!el()) return
       const STATE = { answering: 'Answering', out: 'Set aside', unchecked: 'Not checked yet', failing: 'Failing' }
       el().innerHTML = `<p class="hint">${esc(m.health.text)}</p>
-        <div class="said"><details><summary>Free models (${m.free.filter((f) => f.state === 'answering').length} of ${m.free.length} answering)</summary><div class="table"><table><thead><tr><th>Model</th><th>Now</th><th>Coding test</th></tr></thead><tbody>${m.free.map((f) => `<tr><td>${esc(f.label)}</td><td>${esc(STATE[f.state] || f.state)}</td><td>${f.pass != null ? `${f.pass} passed, ${f.fail} failed` : ''}</td></tr>`).join('')}</tbody></table></div>
+        <div class="said"><details><summary>Free models (${m.free.filter((f) => f.state === 'answering').length} of ${m.free.length} answering)</summary><div class="table"><table><thead><tr><th>Model</th><th>Now</th><th>Coding test</th></tr></thead><tbody>${m.free.map((f) => `<tr><td>${esc(f.label)} ${claudeChip(f.claude)}</td><td>${esc(STATE[f.state] || f.state)}</td><td>${f.pass != null ? `${f.pass} passed, ${f.fail} failed` : ''}</td></tr>`).join('')}</tbody></table></div>
         ${m.limits.map((l) => `<p class="hint"><b>${esc(l.provider)}:</b> ${esc(l.note)}</p>`).join('')}</details>
         ${m.switches.length ? `<details><summary>Latest switches</summary>${m.switches.slice(0, 8).map((x) => `<p class="event"><time>${clock(x.at * 1000)}</time>${esc(x.text)}</p>`).join('')}</details>` : ''}</div>`
     } catch (err) {
