@@ -7,6 +7,7 @@ import { portraitOf } from '../mascot/look';
 import { useLook } from '../theme/prefs';
 import { ask, tell } from '../ui/ask';
 import { Note, planProblem, Small, START_PLAN, timezone, useAct, WhenPicker } from '../ui/form';
+import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, Field, GlassButton, Group, Label, Title, Toggle, Txt, useTap } from '../ui/kit';
 import { shortWhen } from '../ui/time';
 import { ago, dayClock, Line, Tag } from '../ui/page';
@@ -171,7 +172,7 @@ export function RoutinesScreen({ connection, crew, nav }: { connection: Connecti
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.head}>
           <GlassButton icon="back" label="Back" onPress={nav.back} />
-          <GlassButton icon={adding ? 'close' : 'plus'} label={adding ? 'Close the form' : 'New routine'} onPress={() => setAdding(!adding)} />
+          <GlassButton icon={adding ? 'close' : 'plus'} label={adding ? 'Close the form' : 'New routine'} hint={adding ? DESCRIBE.icon.closeForm : DESCRIBE.icon.newRoutine} onPress={() => setAdding(!adding)} />
         </View>
         <Title>Routines and helpers</Title>
         <Txt color={t.ink2}>Work that starts by itself. Each routine run becomes a job you can open; the helpers are the small scripts that keep the crew moving.</Txt>
@@ -203,7 +204,9 @@ export function RoutinesScreen({ connection, crew, nav }: { connection: Connecti
         {!routines && !error ? <ActivityIndicator color={t.accent} /> : null}
         {routines?.length ? <Label>Next 7 days</Label> : null}
         {routines?.length ? <Week routines={routines} /> : null}
+        {routines?.length ? <Txt size={13} color={t.ink2}>{DESCRIBE.routine.week}</Txt> : null}
         {routines?.length ? <Label>All routines</Label> : null}
+        {routines?.length ? <Txt size={13} color={t.ink2}>{`${DESCRIBE.routine.switch}. Run now: ${DESCRIBE.act['Run now'].toLowerCase()}. Change: ${DESCRIBE.act['Change routine'].toLowerCase()}. Remove: ${DESCRIBE.act['Remove routine'].toLowerCase()}.`}</Txt> : null}
         {routines && !routines.length && !adding ? <Txt color={t.ink2} style={styles.empty}>Nothing runs by itself yet. Tap the plus above to add a nightly test run or a weekly check.</Txt> : null}
         {routines?.map((routine) => {
           const words = routine.when || 'No time set';
@@ -214,7 +217,7 @@ export function RoutinesScreen({ connection, crew, nav }: { connection: Connecti
                   <Txt size={16} weight={600}>{routine.title}</Txt>
                   <Txt size={13} color={t.ink2}>{[words, routine.bot, routine.project].filter(Boolean).join(', ')}</Txt>
                 </Pressable>
-                <Toggle label={`${routine.title}: runs on its timetable`} value={!routine.paused} onChange={(on) => act(routine, on ? 'resume' : 'pause')} />
+                <Toggle label={`${routine.title}: runs on its timetable`} hint={DESCRIBE.routine.switch} value={!routine.paused} onChange={(on) => act(routine, on ? 'resume' : 'pause')} />
               </View>
               <Txt size={12} color={t.ink3}>
                 {routine.paused ? 'Paused' : routine.nextAt ? `Next run ${shortWhen(routine.nextAt)}` : 'Waiting for its first run'}

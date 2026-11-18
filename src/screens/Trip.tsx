@@ -6,7 +6,8 @@ import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { ask } from '../ui/ask';
 import { useAct } from '../ui/form';
-import { Button, Chips, Field, Group, Label, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, Group, Label, Txt, Words } from '../ui/kit';
 import { Line, Page, Tag, useLoad } from '../ui/page';
 import { TrackDrawing } from '../ui/track';
 
@@ -51,15 +52,15 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
           {gate ? (
             <View style={[styles.gate, { borderColor: t.warn, backgroundColor: t.card }]}>
               <Txt size={16} weight={700}>{`Waits for you: ${gate.title}`}</Txt>
-              <Button label="Approve" busy={busy === 'approve'} disabled={Boolean(busy)} onPress={() => { act('approve'); }} />
-              {workJob ? <Button label="Mark exact places in the work" kind="quiet" icon="pin" disabled={Boolean(busy)} onPress={() => nav.push({ name: 'review', job: workJob })} /> : null}
+              <Button label="Approve" hint={DESCRIBE.act['Approve step']} busy={busy === 'approve'} disabled={Boolean(busy)} onPress={() => { act('approve'); }} />
+              {workJob ? <Button label="Mark exact places in the work" kind="quiet" icon="pin" hint={DESCRIBE.act['Mark exact places']} disabled={Boolean(busy)} onPress={() => nav.push({ name: 'review', job: workJob })} /> : null}
               <Field label="Note for the work" value={note} onChangeText={setNote} multiline tall maxLength={4000} placeholder="What to change, or what the step should know" />
-              {before ? <Button label={`Add this and run “${before.title}” again`} kind="quiet" busy={busy === 'context'} disabled={needNote || Boolean(busy)} onPress={() => { act('context', { note }); }} /> : null}
+              {before ? <Button label={`Add this and run “${before.title}” again`} kind="quiet" hint={DESCRIBE.act['Add note and run again']} busy={busy === 'context'} disabled={needNote || Boolean(busy)} onPress={() => { act('context', { note }); }} /> : null}
               {gate.backTo.length ? (
                 <>
                   <Txt size={14} weight={600} color={t.ink2}>Send back to</Txt>
                   <Chips value={target} options={gate.backTo.map((s) => ({ id: s.id, name: s.title }))} onChange={setTo} />
-                  <Button label="Send back with the note" kind="quiet" busy={busy === 'back'} disabled={needNote || Boolean(busy)} onPress={() => { act('back', { to: target, note }); }} />
+                  <Button label="Send back with the note" kind="quiet" hint={DESCRIBE.act['Send back']} busy={busy === 'back'} disabled={needNote || Boolean(busy)} onPress={() => { act('back', { to: target, note }); }} />
                 </>
               ) : null}
             </View>
@@ -69,6 +70,7 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
           <TrackDrawing steps={trip.steps} lines={trip.lines} states={Object.fromEntries(trip.steps.map((s) => [s.id, s.state]))} current={trip.current} title={trip.track.title} />
 
           <Label>Steps</Label>
+          <Words words={[trip.state, ...trip.steps.map((s) => (s.state === 'working' && s.kind === 'gate' ? 'Waits for you' : WORDS[s.state] || s.state))]} />
           <Group>
             {trip.steps.map((s, index) => (
               <Line key={s.id} title={`${index + 1}. ${s.title}`}
@@ -82,16 +84,16 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
 
           <Label>Change its course</Label>
           <View style={styles.row}>
-            {trip.can.pause ? <Button label="Pause" kind="quiet" busy={busy === 'pause'} disabled={Boolean(busy)} onPress={() => { act('pause'); }} /> : null}
-            {trip.can.resume ? <Button label="Resume" busy={busy === 'resume'} disabled={Boolean(busy)} onPress={() => { act('resume'); }} /> : null}
+            {trip.can.pause ? <Button label="Pause" kind="quiet" hint={DESCRIBE.act['Pause run']} busy={busy === 'pause'} disabled={Boolean(busy)} onPress={() => { act('pause'); }} /> : null}
+            {trip.can.resume ? <Button label="Resume" hint={DESCRIBE.act['Resume run']} busy={busy === 'resume'} disabled={Boolean(busy)} onPress={() => { act('resume'); }} /> : null}
           </View>
           <Txt size={14} weight={600} color={t.ink2}>Run again from</Txt>
           <Chips value={rerunFrom} options={trip.steps.map((s) => ({ id: s.id, name: s.title }))} onChange={setFrom} />
           <Field label="Context for that step (optional)" value={rerunNote} onChangeText={setRerunNote} multiline maxLength={4000} />
-          <Button label="Run again from there" kind="quiet" busy={busy === 'rerun'} disabled={Boolean(busy)} onPress={() => { act('rerun', { step: rerunFrom, note: rerunNote }); }} />
+          <Button label="Run again from there" kind="quiet" hint={DESCRIBE.act['Run again from there']} busy={busy === 'rerun'} disabled={Boolean(busy)} onPress={() => { act('rerun', { step: rerunFrom, note: rerunNote }); }} />
           <Txt size={13} color={t.ink3}>What the steps before it left is kept, so they are not paid for again.</Txt>
           {trip.can.stop ? (
-            <Button label="Stop this trip" kind="danger" busy={busy === 'stop'} disabled={Boolean(busy)}
+            <Button label="Stop this trip" kind="danger" hint={DESCRIBE.act['Stop run']} busy={busy === 'stop'} disabled={Boolean(busy)}
               onPress={() => ask('Stop this trip?', 'The step at work is let go of and nothing more starts. You can run it again from a step later.', 'Stop', () => { act('stop'); })} />
           ) : null}
         </>

@@ -20,6 +20,7 @@ import Svg, { Defs, LinearGradient, Pattern, Rect, Stop } from 'react-native-svg
 import { hexToHue, hsl, inkOn, isHex } from '../theme/color';
 import { Weight } from '../theme/fonts';
 import { useLook } from '../theme/prefs';
+import { DESCRIBE } from './describe';
 import { Icon, IconName } from './Icon';
 
 /** Browsers ring a focused field. The app has no such ring on a phone, so the PC build drops it too. */
@@ -58,13 +59,15 @@ export function Label({ children, style }: { children: ReactNode; style?: StyleP
   return <View style={[styles.label, style]}><Txt accessibilityRole="header" size={14} weight={600} color={t.ink2}>{children}</Txt></View>;
 }
 
-export function GlassButton({ icon, label, onPress, size = 44 }: { icon: IconName; label: string; onPress: () => void; size?: number }) {
+/** An icon on its own: its label names it, its hint says what pressing it does. */
+export function GlassButton({ icon, label, onPress, size = 44, hint }: { icon: IconName; label: string; onPress: () => void; size?: number; hint?: string }) {
   const { t } = useLook();
   const tap = useTap();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={hint}
       hitSlop={6}
       onPress={() => {
         tap();
@@ -81,14 +84,16 @@ export function GlassButton({ icon, label, onPress, size = 44 }: { icon: IconNam
   );
 }
 
-export function Button({ label, onPress, kind = 'primary', busy, disabled, icon }: { label: string; onPress: () => void; kind?: 'primary' | 'quiet' | 'danger'; busy?: boolean; disabled?: boolean; icon?: IconName }) {
+/** A button. `hint` is a short line that says what pressing it does, written under it so a phone shows it too. */
+export function Button({ label, onPress, kind = 'primary', busy, disabled, icon, hint }: { label: string; onPress: () => void; kind?: 'primary' | 'quiet' | 'danger'; busy?: boolean; disabled?: boolean; icon?: IconName; hint?: string }) {
   const { t } = useLook();
   const tap = useTap();
   const ink = kind === 'primary' ? t.accentInk : kind === 'danger' ? t.bad : t.ink;
-  return (
+  const press = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={hint}
       accessibilityState={{ disabled: Boolean(busy || disabled), busy: Boolean(busy) }}
       disabled={busy || disabled}
       onPress={() => {
@@ -115,6 +120,7 @@ export function Button({ label, onPress, kind = 'primary', busy, disabled, icon 
       )}
     </Pressable>
   );
+  return hint ? <View style={styles.hinted}>{press}<Txt size={13} color={t.ink2}>{hint}</Txt></View> : press;
 }
 
 /** A grouped card of settings rows, with a line between them. */
@@ -140,7 +146,7 @@ export function Row({ title, detail, right, onPress, last, children }: { title: 
   return onPress ? <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && styles.dim}>{body}</Pressable> : body;
 }
 
-export function Toggle({ value, onChange, label }: { value: boolean; onChange: (next: boolean) => void; label: string }) {
+export function Toggle({ value, onChange, label, hint }: { value: boolean; onChange: (next: boolean) => void; label: string; hint?: string }) {
   const { t } = useLook();
   const tap = useTap();
   const travel = useRef(new Animated.Value(value ? 1 : 0)).current;
@@ -151,6 +157,7 @@ export function Toggle({ value, onChange, label }: { value: boolean; onChange: (
     <Pressable
       accessibilityRole="switch"
       accessibilityLabel={label}
+      accessibilityHint={hint}
       accessibilityState={{ checked: value }}
       onPress={() => {
         tap();
@@ -191,10 +198,15 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   );
 }
 
-export function Chips<T extends string>({ value, options, onChange, styleFor }: { value: T; options: { id: T; name: string }[]; onChange: (next: T) => void; styleFor?: (id: T) => object }) {
+/**
+ * A row of filter chips. `hints` says in a short line what each chip shows; the chosen chip's line is written under
+ * the row, so a phone (which has no hover) never leaves a filter unexplained.
+ */
+export function Chips<T extends string>({ value, options, onChange, styleFor, hints }: { value: T; options: { id: T; name: string }[]; onChange: (next: T) => void; styleFor?: (id: T) => object; hints?: Partial<Record<T, string>> }) {
   const { t } = useLook();
   const tap = useTap();
-  return (
+  const said = hints?.[value];
+  const row = (
     <View style={styles.chips}>
       {options.map((option) => {
         const active = option.id === value;
@@ -202,6 +214,7 @@ export function Chips<T extends string>({ value, options, onChange, styleFor }: 
           <Pressable
             key={option.id}
             accessibilityRole="button"
+            accessibilityHint={hints?.[option.id]}
             accessibilityState={{ selected: active }}
             hitSlop={{ top: 2, bottom: 2 }}
             onPress={() => {
@@ -214,6 +227,38 @@ export function Chips<T extends string>({ value, options, onChange, styleFor }: 
           </Pressable>
         );
       })}
+    </View>
+  );
+  return said ? <View style={styles.chipsBox}>{row}<Txt size={13} color={t.ink2}>{said}</Txt></View> : row;
+}
+
+/** Anything pressable with its description written under it: a phone has no hover, so the words stay on screen. */
+export function Hinted({ hint, children }: { hint: string; children: ReactNode }) {
+  const { t } = useLook();
+  return (
+    <View style={styles.hintedFit}>
+      {children}
+      <Txt size={13} color={t.ink2}>{hint}</Txt>
+    </View>
+  );
+}
+
+/**
+ * "What these words mean": a fold that lists the status words on the screen, each with its description from
+ * describe.ts. A phone has no hover, so this is where a tag such as Checking or Blocked is explained. Only the
+ * words given are listed; a word with no description is skipped, and a fold with nothing to say is not drawn.
+ */
+export function Words({ words, from = DESCRIBE.status, title = 'What these words mean' }: { words: string[]; from?: Record<string, string>; title?: string }) {
+  const { t } = useLook();
+  const [open, setOpen] = useState(false);
+  const lines = [...new Set(words)].filter((w) => from[w]);
+  if (!lines.length) return null;
+  return (
+    <View style={styles.words}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityHint={open ? 'Hides the list' : 'Shows what each word means'} hitSlop={8} onPress={() => setOpen(!open)} style={({ pressed }) => [styles.wordsHead, pressed && styles.dim]}>
+        <Txt size={13} weight={600} color={t.ink2}>{`${title}  ${open ? '▴' : '▾'}`}</Txt>
+      </Pressable>
+      {open ? lines.map((w) => <Txt key={w} size={13} color={t.ink2}>{from[w]}</Txt>) : null}
     </View>
   );
 }
@@ -408,6 +453,11 @@ export const styles = StyleSheet.create({
   segments: { borderRadius: 12, flexDirection: 'row', gap: 2, padding: 3 },
   segment: { alignItems: 'center', borderRadius: 9, flex: 1, minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipsBox: { gap: 6 },
+  hinted: { gap: 4 },
+  hintedFit: { alignSelf: 'flex-start', gap: 4 },
+  words: { gap: 4 },
+  wordsHead: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
   chip: { borderRadius: 999, minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
   slider: { height: 44, justifyContent: 'center' },
   sliderTrack: { borderRadius: 7, height: 14, overflow: 'hidden' },

@@ -7,7 +7,8 @@ import { portraitOf } from '../mascot/look';
 import { useLook } from '../theme/prefs';
 import { ask } from '../ui/ask';
 import { planProblem, timezone, useAct, useLeaveGuard, WhenPicker } from '../ui/form';
-import { Button, Chips, Field, Group, Label, Row, Toggle, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, Group, Label, Row, Toggle, Txt, Words } from '../ui/kit';
 import { ago, Line, Page, Tag, useLoad } from '../ui/page';
 import { shortWhen } from '../ui/time';
 
@@ -77,9 +78,9 @@ export function RoutineScreen({ id, connection, crew, nav }: { id: string; conne
         <>
           <Group>
             <Row title={r.paused ? 'Paused' : 'Runs by itself'} detail={r.paused ? 'It does not start until you switch it on' : r.nextAt ? `Next run ${shortWhen(r.nextAt)}` : 'Waiting for its first run'} last
-              right={<Toggle label={`${r.title}: runs by itself`} value={!r.paused} onChange={(on) => { act(on ? 'resume' : 'pause'); }} />} />
+              right={<Toggle label={`${r.title}: runs by itself`} hint={DESCRIBE.routine.switch} value={!r.paused} onChange={(on) => { act(on ? 'resume' : 'pause'); }} />} />
           </Group>
-          <Button label="Run it now" kind="quiet" busy={busy === 'run'} disabled={Boolean(busy)} onPress={() => { act('run'); }} />
+          <Button label="Run it now" kind="quiet" hint={DESCRIBE.act['Run now']} busy={busy === 'run'} disabled={Boolean(busy)} onPress={() => { act('run'); }} />
 
           <Label>When it runs</Label>
           <Group><WhenPicker key={round} start={r.plan} onChange={setPlan} /></Group>
@@ -108,6 +109,7 @@ export function RoutineScreen({ id, connection, crew, nav }: { id: string; conne
           </View>
 
           <Label>Last runs</Label>
+          {r.runs.length ? <Words words={r.runs.map((x) => x.state)} /> : null}
           {r.runs.length ? (
             <Group>
               {r.runs.map((one, index) => (
@@ -118,7 +120,7 @@ export function RoutineScreen({ id, connection, crew, nav }: { id: string; conne
           ) : <Txt color={t.ink2}>It has not run yet. Run it now to see the job it makes.</Txt>}
 
           <Label>Remove</Label>
-          <Button label="Remove this routine" kind="danger" busy={busy === 'remove'} disabled={Boolean(busy)} onPress={remove} />
+          <Button label="Remove this routine" kind="danger" hint={DESCRIBE.act['Remove routine']} busy={busy === 'remove'} disabled={Boolean(busy)} onPress={remove} />
         </>
       ) : null}
     </Page>

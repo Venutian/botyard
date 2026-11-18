@@ -10,7 +10,8 @@ import { BotBadge } from '../mascot/BotBadge';
 import { BotState, portraitOf, STATE_WORDS, SUIT_COLOURS } from '../mascot/look';
 import { useLook, WallpaperId, WALLPAPERS } from '../theme/prefs';
 import { tell } from '../ui/ask';
-import { Button, Chips, ColorPicker, Field, GlassButton, Group, Label, Row, Segmented, Toggle, Txt, useTap } from '../ui/kit';
+import { BOT_WORDS, DESCRIBE } from '../ui/describe';
+import { Button, Chips, ColorPicker, Field, GlassButton, Group, Label, Row, Segmented, Toggle, Txt, useTap, Words } from '../ui/kit';
 import { WALLPAPER_NAMES } from '../ui/Wallpaper';
 import { CAN_TALK } from '../voice';
 import { ago, Line, tokens, useLoad } from '../ui/page';
@@ -103,6 +104,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
 
         <Label>Now</Label>
         {page.error && !info ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{page.error}</Txt> : null}
+        {info ? <Words from={BOT_WORDS} words={[info.resting ? 'Resting' : info.state]} /> : null}
         <Group>
           {info ? (
             <>
@@ -171,7 +173,7 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
                   options={[{ id: 'plate', name: 'Plate' }, { id: 'round', name: 'Round' }]}
                   onChange={(frame) => set({ frame })}
                 />
-                <Button label="Remove photo" kind="danger" onPress={() => updateBot(botId, { photo: undefined })} />
+                <Button label="Remove photo" kind="danger" hint="Goes back to the drawing of the bot" onPress={() => updateBot(botId, { photo: undefined })} />
               </Row>
             ) : null}
           </Group>
@@ -187,12 +189,12 @@ export function BotScreen({ botId, connection, crew, nav }: { botId: string; con
               onChange={(wallpaper) => updateBot(botId, { wallpaper: wallpaper === 'same' ? undefined : wallpaper })}
             />
           </Row>
-          {CAN_TALK ? <Row title="Read replies aloud" last right={<Toggle label="Read replies aloud" value={Boolean(look.speak)} onChange={(speak) => updateBot(botId, { speak })} />} /> : null}
+          {CAN_TALK ? <Row title="Read replies aloud" detail="Speaks each new reply out loud in this chat" last right={<Toggle label="Read replies aloud" value={Boolean(look.speak)} onChange={(speak) => updateBot(botId, { speak })} />} /> : null}
         </Group>
         </> : null}
 
         <View style={styles.reset}>
-          <Button label="Reset this bot's look" kind="quiet" icon="reset" onPress={() => resetBot(botId)} />
+          <Button label="Reset this bot's look" kind="quiet" icon="reset" hint="Puts the name, colour and photo on this phone back as they were" onPress={() => resetBot(botId)} />
         </View>
       </View>
     </ScrollView>

@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Connection, FreeModel, getModels, getSpend, ModelBot, Models, SpendLine, SpendView, Switch } from '../api';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
-import { Button, GlassButton, Group, Label, Row, Segmented, styles as kit, Title, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, GlassButton, Group, Label, Row, Segmented, styles as kit, Title, Txt, Words } from '../ui/kit';
 import { tokens } from '../ui/page';
 
 const REFRESH_MS = 30_000;
@@ -181,6 +182,7 @@ function SpendCard({ spend }: { spend: SpendView }) {
     <Group>
       <View style={styles.inner}>
         <Segmented<SpendBy> value={by} options={[{ id: 'bots', name: 'Bots' }, { id: 'projects', name: 'Projects' }, { id: 'models', name: 'Models' }]} onChange={setBy} />
+        <Txt size={13} color={t.ink2}>{`${DESCRIBE.spend[by]}. ${DESCRIBE.spend.bar}.`}</Txt>
         {rows.length ? rows.slice(0, 12).map((row) => <SpendBar key={row.name} line={row} top={top} note={row.note || undefined} warn={row.warn} />) : <Txt size={14} color={t.ink2}>Nothing used this week.</Txt>}
         <Txt size={12} color={t.ink3}>{`${tokens(total)} tokens in 7 days${spend.priced ? '' : ', all on subscriptions'}.`}{spend.pace ? ` Claude's week is at ${Math.round(spend.pace.week * 100)} %, using ${(spend.pace.perHourNow * 100).toFixed(1)} % an hour of ${(spend.pace.perHourAllowed * 100).toFixed(1)} % allowed.` : ''}</Txt>
       </View>
@@ -240,6 +242,7 @@ export function ModelsScreen({ connection, nav }: { connection: Connection; nav:
           <HealthCard health={models.health} now={now} />
 
           <Label>Who runs on what</Label>
+          <Words from={{ Working: DESCRIBE.botStatus.Working, Ready: DESCRIBE.status.Ready, Resting: DESCRIBE.botStatus.Resting, 'In trouble': DESCRIBE.botStatus['In trouble'] }} words={models.bots.map((b) => STATUS_WORDS[b.status] ?? b.status)} />
           <Group>
             {models.bots.map((bot, index) => <BotRow key={bot.id} bot={bot} last={index === models.bots.length - 1} onOpen={() => nav.push({ name: 'bot', botId: bot.id })} />)}
           </Group>

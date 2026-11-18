@@ -5,7 +5,8 @@ import { BotBadge } from '../mascot/BotBadge';
 import { portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
 import { useLook } from '../theme/prefs';
-import { Label, Segmented, Sign, styles as kit, Txt } from './kit';
+import { DESCRIBE } from './describe';
+import { Label, Segmented, Sign, styles as kit, Txt, Words } from './kit';
 
 const WINDOWS: { id: FlowWindow; name: string }[] = [
   { id: 'now', name: 'Now' },
@@ -14,6 +15,8 @@ const WINDOWS: { id: FlowWindow; name: string }[] = [
 ];
 
 const STATUS_WORDS: Record<FlowStatus, string> = { working: 'working', waiting: 'waiting', free: 'free', resting: 'resting', paused: 'paused', error: 'in trouble' };
+/** The words the crew screen explains, by the word it shows. */
+const LEGEND: Record<string, string> = { ...DESCRIBE.botStatus, Lines: DESCRIBE.map.arrows, Met: DESCRIBE.map.met };
 const KIND_WORD: Record<FlowKind, string> = {
   order: 'order', brief: 'brief', report: 'report', check: 'check', verdict: 'verdict', ask: 'ruling asked', ruling: 'ruling',
   idea: 'idea', approval: 'approval', start: 'start', card: 'card', notice: 'notice', wait: 'waits on',
@@ -201,6 +204,8 @@ export function CrewTree({ flow, fallback, waiting, window, onWindow, onOpenBot,
         <Label style={styles.switchLabel}>Crew</Label>
         <View style={styles.switch}><Segmented value={window} options={WINDOWS} onChange={onWindow} /></View>
       </View>
+      <Txt size={13} color={t.ink2}>{DESCRIBE.map[window]}</Txt>
+      <Words title="How to read the crew" from={LEGEND} words={[...bots.map((b) => (STATUS_WORDS[b.status] ?? b.status).replace(/^./, (c) => c.toUpperCase())), 'Lines', ...(bots.some((b) => b.met || b.notMet) ? ['Met'] : [])]} />
       <Pressable accessibilityRole="button" accessibilityLabel={ownerLabel} onPress={onOwner} style={({ pressed }) => [styles.node, styles.owner, { backgroundColor: t.card, borderColor: waiting ? t.warn : t.line }, pressed && kit.dim]}>
         <View style={[styles.ownerMark, { backgroundColor: t.control }]}><Txt size={15} weight={700}>You</Txt></View>
         <View style={kit.flex}>

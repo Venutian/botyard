@@ -1,3 +1,4 @@
+import { DESCRIBE } from './describe.js'
 import { markdown } from './markdown.js'
 import { BrainField, DAY_INKS, INKS } from './brain-field.js'
 
@@ -58,7 +59,7 @@ export class BrainMap {
         <p class="bm-sub"></p>
         <label class="bm-find"><span class="visually-hidden">Search the notes</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 11.2L14.5 14.5M12.4 7a5.4 5.4 0 1 1-10.8 0a5.4 5.4 0 1 1 10.8 0"/></svg><input type="search" placeholder="Search the notes" autocomplete="off" spellcheck="false"></label>
         <button type="button" class="bm-new" data-act="new-note">New note</button>
-        <div class="bm-seg" role="group" aria-label="Show as"><button type="button" data-mode="field" aria-pressed="true">Brain</button><button type="button" data-mode="list" aria-pressed="false">List</button></div>
+        <div class="bm-seg" role="group" aria-label="Show as"><button type="button" data-mode="field" title="${DESCRIBE.brain.field}" aria-pressed="true">Brain</button><button type="button" data-mode="list" title="${DESCRIBE.brain.list}" aria-pressed="false">List</button></div>
         <p class="bm-said" role="status" aria-live="polite"></p>
       </div>
       <div class="bm-stage"><div class="bm-tip" hidden></div><p class="bm-hint">Drag to turn, scroll to come closer, click a neuron to read it.</p></div>

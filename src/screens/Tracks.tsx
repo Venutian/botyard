@@ -3,7 +3,8 @@ import { View, StyleSheet } from 'react-native';
 import { Connection, getTracks } from '../api';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
-import { Group, Label, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Group, Label, Txt, Words } from '../ui/kit';
 import { ago, Line, Page, Tag, useLoad } from '../ui/page';
 import { TrackDrawing } from '../ui/track';
 
@@ -19,6 +20,7 @@ export function TracksScreen({ connection, nav }: { connection: Connection; nav:
         <>
           <Txt size={14} color={t.ink2}>A request moves along its track; a failed check goes back with its findings; it is finished only when its change is in main.</Txt>
           <Label>Requests</Label>
+          {requests.length ? <Words words={requests.map((r) => (r.waitsForOwner ? 'Waits for you' : r.state))} /> : null}
           {requests.length ? (
             <Group>
               {requests.map((r, index) => (

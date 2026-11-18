@@ -7,7 +7,8 @@ import { useLook } from '../theme/prefs';
 import { ask, tell } from '../ui/ask';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { Icon } from '../ui/Icon';
-import { Button, Chips, Field, GlassButton, Group, Hazard, Label, Row, styles as kit, Title, Toggle, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, GlassButton, Group, Hazard, Hinted, Label, Row, styles as kit, Title, Toggle, Txt } from '../ui/kit';
 
 const REFRESH_MS = 20_000;
 const LIMITS = [1, 2, 5, 10, 20, 50].map((m) => ({ id: String(m * 1_000_000), name: `${m}M` }));
@@ -140,21 +141,22 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
     >
       {t.plates && !item.read ? <Hazard /> : null}
       <Txt size={12} weight={700} color={tone}>{item.read || t.plates ? '' : '● '}{tag}</Txt>
+      {tag && (DESCRIBE.status as Record<string, string>)[tag] ? <Txt size={13} color={t.ink2}>{(DESCRIBE.status as Record<string, string>)[tag]}</Txt> : null}
       <Txt size={16} weight={item.read ? 400 : 600} color={item.read ? t.ink2 : undefined}>{item.title}</Txt>
       {item.detail ? <Txt size={14} color={t.ink2}>{item.detail}</Txt> : null}
       {item.kind === 'approval' ? <Field value={note} onChangeText={setNote} placeholder="Add a note (optional)" accessibilityLabel="A note with your answer, optional" maxLength={2000} style={{ backgroundColor: t.control }} /> : null}
       {item.kind === 'approval' ? (
         <View style={styles.actions}>
-          <View style={kit.flex}><Button label="Approve" onPress={() => act('approve')} busy={busy} /></View>
-          <View style={kit.flex}><Button label="Reject" kind="danger" onPress={() => act('reject')} busy={busy} /></View>
+          <View style={kit.flex}><Button label="Approve" hint={DESCRIBE.act.Approve} onPress={() => act('approve')} busy={busy} /></View>
+          <View style={kit.flex}><Button label="Reject" kind="danger" hint={DESCRIBE.act.Reject} onPress={() => act('reject')} busy={busy} /></View>
         </View>
       ) : null}
       {onMark && item.key ? (
         <View style={styles.sort}>
           {item.archived ? (
-            <SortButton label="Restore" onPress={() => onMark(item, { archived: false })} />
+            <Hinted hint={DESCRIBE.act.Restore}><SortButton label="Restore" onPress={() => onMark(item, { archived: false })} /></Hinted>
           ) : (
-            <SortButton label="Archive" onPress={() => onMark(item, { archived: true })} />
+            <Hinted hint={DESCRIBE.act.Archive}><SortButton label="Archive" onPress={() => onMark(item, { archived: true })} /></Hinted>
           )}
         </View>
       ) : null}
@@ -221,7 +223,7 @@ export function StudioScreen({ connection, nav }: { connection: Connection; nav:
             {summary ? <Txt color={t.ink2}>{summary.running.length} running, {summary.queued.length} queued</Txt> : null}
             <ConnectionBadge connection={connection} />
           </View>
-          <GlassButton icon="plus" label="New job" onPress={() => nav.push({ name: 'new' })} />
+          <GlassButton icon="plus" label="New job" hint={DESCRIBE.icon.newJob} onPress={() => nav.push({ name: 'new' })} />
         </View>
         {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{summary ? 'Showing the last update. ' : ''}{error}</Txt> : null}
         {!summary && !error ? <ActivityIndicator color={t.accent} style={styles.firstLabel} accessibilityLabel="Loading" /> : null}

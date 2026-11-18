@@ -4,7 +4,8 @@ import { ActivityItem, Connection, getActivity, getRun, getRuns, RunRow } from '
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
-import { Chips, Group, Label, Row, Segmented, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Chips, Group, Label, Row, Segmented, Txt, Words } from '../ui/kit';
 import { ago, Line, More, Page, seconds, Tag, tokens, useLoad } from '../ui/page';
 import { clock } from '../ui/time';
 import { RunLine } from './Crew';
@@ -54,7 +55,9 @@ export function RunsScreen({ connection, nav, bot }: { connection: Connection; n
   return (
     <Page title={name ? `${name}'s runs` : 'Runs'} onBack={nav.back} onRefresh={current.load} error={current.error} loading={!current.data}>
       <Segmented<View_> value={view} options={[{ id: 'runs', name: 'Runs' }, { id: 'activity', name: 'Activity' }]} onChange={setView} />
-      {view === 'runs' ? <Chips value={status} options={ENDINGS} onChange={setStatus} /> : null}
+      <Txt size={13} color={t.ink2}>{DESCRIBE.runs[view]}</Txt>
+      {view === 'runs' ? <Chips value={status} options={ENDINGS} onChange={setStatus} hints={{ '': DESCRIBE.runs.All, failed: DESCRIBE.runs['Failed or stopped'], running: DESCRIBE.runs.Running, succeeded: DESCRIBE.runs.Done }} /> : null}
+      {view === 'runs' && shownRuns.length ? <Words words={shownRuns.map((r) => r.state)} /> : null}
       {view === 'runs' && runs.data ? (
         <>
           <Label>{`${runs.data.total} run${runs.data.total === 1 ? '' : 's'}${status ? ` ${ENDINGS.find((e) => e.id === status)?.name.toLowerCase()}` : ''}, newest first`}</Label>

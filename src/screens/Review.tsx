@@ -7,6 +7,7 @@ import { boxOf, linesOf, quoteOf, reviewOf, whereOf } from '../marks';
 import { alpha } from '../theme/color';
 import { useLook } from '../theme/prefs';
 import { Icon } from '../ui/Icon';
+import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, Field, GlassButton, Label, plainField, Title, Txt } from '../ui/kit';
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -208,7 +209,7 @@ export function ReviewScreen({ job, bot, connection, nav }: { job?: string; bot?
                 <View style={styles.markHead}>
                   <View style={[styles.num, { borderColor: t.ink }]}><Txt size={12} weight={700} color="#15181d">{m.n}</Txt></View>
                   <Txt size={13} color={t.ink2} style={styles.flex} numberOfLines={1}>{whereOf(m)} · {src.pieces.find((p) => p.id === m.pieceId)?.title}</Txt>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove mark ${m.n}`} hitSlop={10} onPress={() => setMarks((all) => all.filter((x) => x.n !== m.n))}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove mark ${m.n}`} accessibilityHint={DESCRIBE.icon.removeMark} hitSlop={10} onPress={() => setMarks((all) => all.filter((x) => x.n !== m.n))}>
                     <Icon name="close" size={18} color={t.ink2} />
                   </Pressable>
                 </View>
@@ -224,10 +225,10 @@ export function ReviewScreen({ job, bot, connection, nav }: { job?: string; bot?
               </>
             ) : null}
             {error ? <Txt color={t.bad} accessibilityLiveRegion="polite">{error}</Txt> : null}
-            <Button label={src.gate ? 'Send back with marks' : `Send to ${src.bot || 'the bot'}`} icon="send" busy={busy} disabled={!marks.length && !note.trim()} onPress={() => send('back')} />
-            <Button label={src.gate ? 'Approve' : 'Approve and keep'} kind="quiet" icon="check" busy={busy} onPress={() => send('approve')} />
+            <Button label={src.gate ? 'Send back with marks' : `Send to ${src.bot || 'the bot'}`} icon="send" hint={src.gate ? DESCRIBE.act['Send back with marks'] : DESCRIBE.act['Send marks to the bot']} busy={busy} disabled={!marks.length && !note.trim()} onPress={() => send('back')} />
+            <Button label={src.gate ? 'Approve' : 'Approve and keep'} kind="quiet" icon="check" hint={src.gate ? DESCRIBE.act.Approve : DESCRIBE.act['Approve and keep']} busy={busy} onPress={() => send('approve')} />
             {src.gate ? null : (
-              <Button label="Hold in the tray, send with my other answers" kind="quiet" icon="save" busy={busy} disabled={!marks.length && !note.trim()} onPress={async () => {
+              <Button label="Hold in the tray, send with my other answers" kind="quiet" icon="save" hint={DESCRIBE.act['Hold in the tray']} busy={busy} disabled={!marks.length && !note.trim()} onPress={async () => {
                 setBusy(true);
                 try {
                   await holdInTray(connection, { kind: 'review', jobId: src.jobId, title: 'Your review', job: `${src.ref} ${src.title}`.trim(), review: reviewOf(src, marks, note, 'back', current) });

@@ -5,7 +5,8 @@ import { Connection, decideImprovement, getImprovements, Improvement, Improvemen
 import { decidedLine, historyLine, STATUS_NAMES } from '../improvementText';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
-import { Button, Chips, Field, GlassButton, Title, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, Field, GlassButton, Title, Txt, Words } from '../ui/kit';
 import { Tag } from '../ui/page';
 import { Notes, RecordCard } from '../ui/record';
 
@@ -24,10 +25,10 @@ function Decide({ item, lead, busy, onDecide }: { item: Improvement; lead: strin
   return (
     <>
       <View style={styles.buttons}>
-        <View style={styles.cell}><Button label="Accept" kind={OPEN.includes(item.status) ? 'primary' : 'quiet'} disabled={busy} onPress={() => onDecide('accept')} /></View>
-        <View style={styles.cell}><Button kind="quiet" label="Reject" disabled={busy} onPress={() => setRejecting(!rejecting)} /></View>
-        <View style={styles.cell}><Button kind="quiet" label="Ask me" disabled={busy} onPress={() => onDecide('ask')} /></View>
-        <View style={styles.cell}><Button kind="quiet" label={`Send to ${lead || 'the lead'}`} disabled={busy} onPress={() => onDecide('send')} /></View>
+        <View style={styles.cell}><Button label="Accept" hint={DESCRIBE.act.Accept} kind={OPEN.includes(item.status) ? 'primary' : 'quiet'} disabled={busy} onPress={() => onDecide('accept')} /></View>
+        <View style={styles.cell}><Button kind="quiet" label="Reject" hint={DESCRIBE.act['Reject finding']} disabled={busy} onPress={() => setRejecting(!rejecting)} /></View>
+        <View style={styles.cell}><Button kind="quiet" label="Ask me" hint={DESCRIBE.act['Ask me']} disabled={busy} onPress={() => onDecide('ask')} /></View>
+        <View style={styles.cell}><Button kind="quiet" label={`Send to ${lead || 'the lead'}`} hint={DESCRIBE.act['Send to the lead']} disabled={busy} onPress={() => onDecide('send')} /></View>
       </View>
       {rejecting ? (
         <View style={styles.reject}>
@@ -147,7 +148,8 @@ export function ImprovementsScreen({ connection, nav }: { connection: Connection
           {waitingCount ? (
             <Txt size={15}><Txt size={15} weight={700}>{`${waitingCount} waiting for you. `}</Txt>{`Accept, reject, ask to be asked again, or hand it to ${data.lead || 'the lead'}.`}</Txt>
           ) : data.items.length ? <Txt size={15}><Txt size={15} weight={700}>Nothing waits for you. </Txt>Open a finding to change a decision.</Txt> : null}
-          <Chips<Filter> value={filter} options={FILTERS.map((f) => ({ id: f.id, name: `${f.name} ${count(f.id)}` }))} onChange={setFilter} />
+          <Chips<Filter> value={filter} options={FILTERS.map((f) => ({ id: f.id, name: `${f.name} ${count(f.id)}` }))} onChange={setFilter} hints={Object.fromEntries(FILTERS.map((f) => [f.id, (DESCRIBE.finding as Record<string, string>)[f.name]]).filter(([, text]) => text))} />
+          {shown.length ? <Words from={DESCRIBE.finding} words={shown.map((i) => STATUS_NAMES[i.status] ?? i.status)} /> : null}
           {shown.length ? (
             <View style={styles.list}>{shown.map((item) => <Finding key={item.id} item={item} lead={data.lead ?? ''} open={Boolean(opened[item.id])} onToggle={() => setOpened((o) => ({ ...o, [item.id]: !o[item.id] }))} busy={busy} onDecide={(action, reason) => decide(item.id, action, reason)} onJob={(ref) => nav.push({ name: 'job', id: ref })} />)}</View>
           ) : (

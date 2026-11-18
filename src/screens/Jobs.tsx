@@ -5,7 +5,8 @@ import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
 import { tell } from '../ui/ask';
 import { Icon } from '../ui/Icon';
-import { Chips, Group, plainField, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Chips, Group, plainField, Txt, Words } from '../ui/kit';
 import { ago, Line, More, Page, Tag } from '../ui/page';
 
 const ALL = '';
@@ -95,9 +96,10 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
       <View style={[styles.search, { backgroundColor: t.card, borderColor: t.edge, borderWidth: StyleSheet.hairlineWidth }]}>
         <Icon name="search" size={18} color={t.ink2} />
         <TextInput value={words} onChangeText={setWords} placeholder="Search every job" accessibilityLabel="Search every job" placeholderTextColor={t.ink3} autoCorrect={false} returnKeyType="search" style={[styles.input, font(400), plainField, { color: t.ink }]} />
-        {words ? <Pressable accessibilityRole="button" accessibilityLabel="Clear the search" hitSlop={8} onPress={() => setWords('')} style={styles.clear}><Icon name="close" size={16} color={t.ink2} /></Pressable> : null}
+        {words ? <Pressable accessibilityRole="button" accessibilityLabel="Clear the search" accessibilityHint={DESCRIBE.icon.clearSearch} hitSlop={8} onPress={() => setWords('')} style={styles.clear}><Icon name="close" size={16} color={t.ink2} /></Pressable> : null}
       </View>
-      <Chips<JobPile> value={pile} options={[...(piles.length ? piles : PILES).map((p) => ({ id: p.id, name: pileName(p) })), { id: 'all', name: 'All' }]} onChange={setPile} />
+      <Chips<JobPile> value={pile} options={[...(piles.length ? piles : PILES).map((p) => ({ id: p.id, name: pileName(p) })), { id: 'all', name: 'All' }]} onChange={setPile}
+        hints={Object.fromEntries([...(piles.length ? piles : PILES), { id: 'all', name: 'All' }].filter((p) => (DESCRIBE.pile as Record<string, string>)[p.name]).map((p) => [p.id, (DESCRIBE.pile as Record<string, string>)[p.name]]))} />
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: filters }} onPress={() => setFilters(!filters)} style={styles.filters}>
         <Txt size={14} weight={600} color={t.accentText}>{filters ? 'Hide filters' : narrowed ? `Filtered: ${narrowed}` : 'Filter by project or bot'}</Txt>
         <Icon name={filters ? 'up' : 'down'} size={16} color={t.accentText} />
@@ -109,6 +111,7 @@ export function JobsScreen({ connection, nav, project: firstProject, bot: firstB
         </>
       ) : null}
       {jobs && !jobs.length ? <Txt color={t.ink2}>{q ? 'No job matches that search.' : 'No jobs here.'}</Txt> : null}
+      {jobs?.length ? <Words words={jobs.map((j) => j.state)} /> : null}
       {jobs?.length ? (
         <Group>
           {jobs.map((job, index) => <JobLine key={job.id} job={job} last={index === jobs.length - 1} onOpen={() => nav.push({ name: 'job', id: job.id })} />)}

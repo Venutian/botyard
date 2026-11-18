@@ -1,3 +1,4 @@
+import { DESCRIBE } from './describe.js'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -274,7 +275,7 @@ export class BrainField {
     this.replacedLines = this._lines(this.replaced, 1, true)
     this.group.add(this.linkLines, this.replacedLines)
     this.centres = centres
-    this.labels.innerHTML = brain.areas.map((a) => `<button type="button" class="bf-label" data-area="${a.id}" style="--ink:${this.inks[this.slot.get(a.id)]}">${a.name.replace(/[<>&]/g, '')}<span>${a.count}</span></button>`).join('')
+    this.labels.innerHTML = brain.areas.map((a) => `<button type="button" class="bf-label" data-area="${a.id}" title="${DESCRIBE.brain.area}" style="--ink:${this.inks[this.slot.get(a.id)]}">${a.name.replace(/[<>&]/g, '')}<span>${a.count}</span></button>`).join('')
     if (this.day.value) { this._themed = false; this.setTheme(false) } else this.paint()
     if (!this._glided) this._glide()
   }

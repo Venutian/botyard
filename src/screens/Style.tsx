@@ -11,6 +11,7 @@ import { DAY, LOOK_CHOICES, LookChoice, NIGHT, Plates } from '../theme/plates';
 import { ask, tell } from '../ui/ask';
 import { Bubble, TypingBubble } from '../ui/Bubble';
 import { Icon } from '../ui/Icon';
+import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, ColorPicker, Field, GlassButton, Group, Label, Row, Segmented, Slider, styles as kit, Title, Toggle, Txt, useTap } from '../ui/kit';
 import { Wallpaper, WALLPAPER_NAMES } from '../ui/Wallpaper';
 
@@ -86,11 +87,11 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
       <View style={styles.head}>
         <Title>Style</Title>
         <View style={styles.headActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Surprise me: a random look" onPress={() => { tap('done'); surprise(); }} style={({ pressed }) => [styles.surprise, { backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }, pressed && kit.dim]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Surprise me: a random look" accessibilityHint={DESCRIBE.style.surprise} onPress={() => { tap('done'); surprise(); }} style={({ pressed }) => [styles.surprise, { backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.outline ? 2 : 0 }, pressed && kit.dim]}>
             <Icon name="shuffle" size={17} color={t.accentInk} />
             <Txt size={14} weight={700} color={t.accentInk}>Surprise me</Txt>
           </Pressable>
-          {undo ? <GlassButton icon="reset" label="Undo the surprise" onPress={undo} /> : null}
+          {undo ? <GlassButton icon="reset" label="Undo the surprise" hint={DESCRIBE.icon.undo} onPress={undo} /> : null}
         </View>
       </View>
 
@@ -126,10 +127,10 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
       <View style={styles.page}>
         <View style={styles.gapTop}>
           <Group>
-            <Row title="Strength">
+            <Row title="Strength" detail={DESCRIBE.style.strength}>
               <Slider label="Wallpaper strength" value={p.wallpaperStrength} min={0} max={1} onChange={(wallpaperStrength) => update({ wallpaperStrength })} />
             </Row>
-            <Row title="Show on every screen" last right={<Toggle label="Show on every screen" value={p.wallpaperEverywhere} onChange={(wallpaperEverywhere) => update({ wallpaperEverywhere })} />} />
+            <Row title="Show on every screen" detail={DESCRIBE.style.everywhere} last right={<Toggle label="Show on every screen" value={p.wallpaperEverywhere} onChange={(wallpaperEverywhere) => update({ wallpaperEverywhere })} />} />
           </Group>
         </View>
 
@@ -182,8 +183,8 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
           <Row title="Chat text size">
             <Slider label="Chat text size" value={p.textScale} min={0.85} max={1.35} onChange={(textScale) => update({ textScale })} />
           </Row>
-          <Row title="Show message times" right={<Toggle label="Show message times" value={p.showTimes} onChange={(showTimes) => update({ showTimes })} />} />
-          <Row title="Show message previews" last right={<Toggle label="Show message previews" value={p.showPreviews} onChange={(showPreviews) => update({ showPreviews })} />} />
+          <Row title="Show message times" detail={DESCRIBE.style.times} right={<Toggle label="Show message times" value={p.showTimes} onChange={(showTimes) => update({ showTimes })} />} />
+          <Row title="Show message previews" detail={DESCRIBE.style.previews} last right={<Toggle label="Show message previews" value={p.showPreviews} onChange={(showPreviews) => update({ showPreviews })} />} />
         </Group>
 
         <Label>Crew</Label>
@@ -206,7 +207,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
         <Label>Saved prompts</Label>
         <Group>
           {p.prompts.map((words) => (
-            <Row key={words} title={words} right={<GlassButton icon="close" label={`Remove ${words}`} size={32} onPress={() => update({ prompts: p.prompts.filter((w) => w !== words) })} />} />
+            <Row key={words} title={words} right={<GlassButton icon="close" label={`Remove ${words}`} hint={DESCRIBE.icon.removeItem} size={32} onPress={() => update({ prompts: p.prompts.filter((w) => w !== words) })} />} />
           ))}
           <Row title="Add a prompt" detail="Type / in a chat to use these" last>
             <Field value={prompt} onChangeText={setPrompt} onSubmitEditing={addPrompt} maxLength={200} accessibilityLabel="A new quick question" placeholder="Show me the latest build" style={{ backgroundColor: t.control }} />
@@ -216,7 +217,7 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
 
         <Label>Share this look</Label>
         <Group>
-          <Row title="Your look as a code" detail="Photos stay on this phone" right={<Button label="Share" kind="quiet" icon="share" onPress={() => Share.share({ message: lookCode() }).catch(() => undefined)} />} />
+          <Row title="Your look as a code" detail={`${DESCRIBE.style.share}. Photos stay on this phone`} right={<Button label="Share" kind="quiet" icon="share" onPress={() => Share.share({ message: lookCode() }).catch(() => undefined)} />} />
           <Row title="Use a code" last>
             <Field value={code} onChangeText={setCode} multiline autoCapitalize="none" autoCorrect={false} accessibilityLabel="Look code" placeholder="Paste a look code" style={{ backgroundColor: t.control }} />
             <Button label="Apply" kind="quiet" onPress={useCode} disabled={!code.trim()} />
@@ -227,8 +228,8 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
         <Group>
           {Platform.OS !== 'web' ? <Row title="Tell me when bots need me" detail="Checks about every 15 minutes" right={<Toggle label="Tell me when bots need me" value={p.notify} onChange={(notify) => update({ notify })} />} /> : null}
           <Row title="Devices" detail="See and cut off what can reach your studio" onPress={() => nav.push({ name: 'devices' })} right={<Icon name="shield" size={20} color={t.ink3} />} />
-          <Row title="Vibrate on taps" right={<Toggle label="Vibrate on taps" value={p.haptics} onChange={(haptics) => update({ haptics })} />} />
-          <Row title="Tab names" last right={<Toggle label="Tab names" value={p.tabLabels} onChange={(tabLabels) => update({ tabLabels })} />} />
+          <Row title="Vibrate on taps" detail={DESCRIBE.style.vibrate} right={<Toggle label="Vibrate on taps" value={p.haptics} onChange={(haptics) => update({ haptics })} />} />
+          <Row title="Tab names" detail={DESCRIBE.style.tabNames} last right={<Toggle label="Tab names" value={p.tabLabels} onChange={(tabLabels) => update({ tabLabels })} />} />
         </Group>
 
         <View style={styles.footer}>

@@ -12,7 +12,8 @@ import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
 import { PcLoadCard } from '../ui/PcLoad';
 import { Icon } from '../ui/Icon';
-import { Button, Chips, GlassButton, Group, Label, Sign, styles as kit, Txt } from '../ui/kit';
+import { DESCRIBE } from '../ui/describe';
+import { Button, Chips, GlassButton, Group, Hinted, Label, Sign, styles as kit, Txt, Words } from '../ui/kit';
 import { Tag } from '../ui/page';
 import { clock } from '../ui/time';
 import { NeedsYouCard } from './Studio';
@@ -230,7 +231,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
           <ConnectionBadge connection={connection} />
         </View>
         <View style={styles.headButtons}>
-          <GlassButton icon="plus" label="New job" onPress={() => nav.push({ name: 'new' })} />
+          <GlassButton icon="plus" label="New job" hint={DESCRIBE.icon.newJob} onPress={() => nav.push({ name: 'new' })} />
         </View>
       </View>
       {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">Showing the last update. {error}</Txt> : null}
@@ -241,12 +242,14 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       {calm ? <Txt color={t.ink2} style={styles.indent}>Nothing right now.</Txt> : null}
       {traySaid ? <Txt size={14} weight={600} color={t.good} accessibilityLiveRegion="polite">{traySaid}</Txt> : null}
       <TrayBar connection={connection} items={tray} onChange={(next, words) => { setTray(next); if (words) { setTraySaid(words); load(); } }} />
-      {decisions.some((d) => d.kind === 'question') ? <Button label="Answer several, send once" kind="quiet" icon="check" onPress={() => nav.push({ name: 'tray' })} /> : null}
+      {decisions.some((d) => d.kind === 'question') ? <Button label="Answer several, send once" kind="quiet" icon="check" hint={DESCRIBE.home.several} onPress={() => nav.push({ name: 'tray' })} /> : null}
       <View style={styles.stack}>
         {unread.filter(isDecision).length > 1 ? (
-          <Pressable accessibilityRole="button" onPress={() => mark(unread.filter(isDecision), { read: true })} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
-            <Txt size={13} weight={600} color={t.accentText}>Mark all {unread.filter(isDecision).length} read</Txt>
-          </Pressable>
+          <Hinted hint={DESCRIBE.home.markAllRead}>
+            <Pressable accessibilityRole="button" accessibilityHint={DESCRIBE.home.markAllRead} onPress={() => mark(unread.filter(isDecision), { read: true })} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
+              <Txt size={13} weight={600} color={t.accentText}>Mark all {unread.filter(isDecision).length} read</Txt>
+            </Pressable>
+          </Hinted>
         ) : null}
         {decisions.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
       </View>
@@ -262,9 +265,11 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       </View>
 
       {archivedCards.length ? (
-        <Pressable accessibilityRole="button" onPress={() => setShowArchived((v) => !v)} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
-          <Txt size={13} weight={600} color={t.ink2}>{showArchived ? 'Hide archived' : `Archived (${archivedCards.length})`}</Txt>
-        </Pressable>
+        <Hinted hint={DESCRIBE.home.archived}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showArchived }} onPress={() => setShowArchived((v) => !v)} style={({ pressed }) => [styles.allRead, pressed && kit.dim]}>
+            <Txt size={13} weight={600} color={t.ink2}>{showArchived ? 'Hide archived' : `Archived (${archivedCards.length})`}</Txt>
+          </Pressable>
+        </Hinted>
       ) : null}
       {showArchived ? (
         <View style={styles.stack}>
@@ -275,11 +280,12 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       <PcLoadCard connection={connection} />
 
       {/* The home views: the crew map here, Engram (the owner's notes) on its own screen. The phone has no yard. */}
-      <Chips value={'crew' as string} options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }]} onChange={(v) => { if (v === 'engram') nav.push({ name: 'engram' }); }} />
+      <Chips value={'crew' as string} options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }]} onChange={(v) => { if (v === 'engram') nav.push({ name: 'engram' }); }} hints={{ crew: DESCRIBE.home.crew, engram: DESCRIBE.home.engram }} />
       <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
       <Label>Work in hand</Label>
-      {view.piles?.length ? <Chips value={'' as string} options={view.piles.map((pile) => ({ id: pile.id as string, name: pileName(pile) }))} onChange={(pile) => nav.push({ name: 'jobs', pile: pile as JobPile })} /> : null}
+      {view.piles?.length ? <Chips value={'' as string} options={view.piles.map((pile) => ({ id: pile.id as string, name: pileName(pile) }))} onChange={(pile) => nav.push({ name: 'jobs', pile: pile as JobPile })} hints={Object.fromEntries(view.piles.map((pile) => [pile.id as string, (DESCRIBE.pile as Record<string, string>)[pile.name]]).filter(([, text]) => text))} /> : null}
+      {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}
       <View style={styles.stack}>
         {open.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
