@@ -1356,6 +1356,8 @@ setView(view) {
     const same = col.screen === id
     if (!same) this._leaveOwnPage(col)
     col.el.classList.toggle('wide', wide)
+    // Launch is a board: its sheet takes the whole deck, so nothing scrolls sideways while the screen has room.
+    col.el.classList.toggle('fill', id === 'launch')
     col.el.classList.remove('tab-wide')
     col.screen = id
     if (col === this.cols.a) { this.tab = null; this.root.classList.add('studio-open') }
