@@ -191,13 +191,34 @@ export const CLAUDE_SCALE = [
   ['-Haiku', 'below', 0, 3, 'weaker than Claude Haiku'],
 ]
 
-export function claudeLike({ pass = 0, fail = 0 }) {
+const TIER_OF = { '-Haiku': 'below', Haiku: 'haiku', '+Haiku': 'haiku', Sonnet: 'sonnet', '+Sonnet': 'sonnet', Opus: 'opus' }
+
+/**
+ * Published coding benchmarks first (model-grades.json: one row per model, matched by its name in the id, any
+ * provider, each with its score, the benchmark and the source); the crew's own record only for a model no
+ * benchmark covers. `from` says which, so the page can say it.
+ */
+let GRADES = null
+function grades() {
+  if (GRADES) return GRADES
+  try { GRADES = JSON.parse(fs.readFileSync(new URL('./model-grades.json', import.meta.url), 'utf8')) } catch { GRADES = { models: [] } }
+  return GRADES
+}
+const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '')
+export function benchmarkGrade(model, table = grades()) {
+  const id = slug(String(model).split('/').pop().replace(/:free$|-free$/, ''))
+  return (table.models || []).find((row) => row.grade && row.grade !== 'unrated' && (row.match || []).some((m) => id.includes(slug(m)))) || null
+}
+
+export function claudeLike({ pass = 0, fail = 0, model = '' }) {
+  const bench = model ? benchmarkGrade(model) : null
+  if (bench) return { chip: bench.grade, tier: TIER_OF[bench.grade] || 'below', from: 'benchmark', score: bench.score, benchmark: bench.benchmark }
   const checked = pass + fail
   if (checked < 3) return { chip: 'unrated', tier: 'unrated' }
   const share = pass / checked
   const [chip, tier] = CLAUDE_SCALE.find(([, , least, fewest]) => share >= least && checked >= fewest) || CLAUDE_SCALE.at(-1)
   // Only the chip travels (the phone's answer is kept small); each page says what it means (chipMeaning).
-  return { chip, tier }
+  return { chip, tier, from: 'checks' }
 }
 
 /** What a chip means, in words: the same sentence on the page and the phone. */
@@ -231,7 +252,7 @@ function freeModels({ folder, now, listed, detail = false }) {
     return {
       label: modelLabel(row.model),
       // Where it stands against Claude, shown as a chip beside the name (CLAUDE_SCALE).
-      claude: claudeLike({ pass, fail }),
+      claude: claudeLike({ pass, fail, model: row.model }),
       family: row.family,
       tier: demoted ? 'light' : row.tier,
       ...(demoted ? { demoted: true } : {}),

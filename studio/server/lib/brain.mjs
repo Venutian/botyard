@@ -99,7 +99,7 @@ export const CATEGORIES = [
   { id: 'life', name: 'Life', personal: true, folders: ['life', 'health', 'family', 'personal', 'private'] },
   { id: 'products', name: 'Products', words: ['product', 'products', 'projects', 'apps', 'games', 'game', 'website', 'web', 'design', 'ux', 'map', 'monetization', 'shop', 'store', 'brand', 'copy', 'writing', 'quality', 'releases', 'art', 'assets'] },
   { id: 'crew', name: 'Crew and process', words: ['crew', 'bots', 'agents', 'roles', 'rulings', 'reviews', 'priorities', 'tracks', 'approvals', 'safety', 'schedule', 'process', 'usage-limits', 'throttle', 'models', 'claude', 'codex', 'gemini', 'free-builder', 'merge', 'repos', 'cleanup', 'working-style', 'answers', 'money-ideas', 'money'] },
-  { id: 'tools', name: 'Tools', words: ['tools', 'tooling', 'ai-tools', 'paperclip', 'atrium', 'networking', 'remote-access', 'cloudflare', 'hardware', 'github', 'git', 'local-ai', 'testing', 'memory', 'second-brain', 'engram', 'backup', 'privacy', 'studio', 'botyard', 'ngen-studio'] },
+  { id: 'tools', name: 'Tools', words: ['tools', 'tooling', 'ai-tools', 'networking', 'remote-access', 'cloudflare', 'hardware', 'github', 'git', 'local-ai', 'testing', 'memory', 'second-brain', 'engram', 'backup', 'privacy', 'studio', 'botyard'] },
   { id: 'decisions', name: 'Decisions', kind: 'decision' },
   { id: 'preferences', name: 'Preferences', kind: 'preference' },
   { id: 'inbox', name: 'Inbox, to review', folders: ['inbox'] },
