@@ -274,6 +274,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
 
       <PcLoadCard connection={connection} />
 
+      {/* The home views: the crew map here, Senth (the owner's notes) on its own screen. The phone has no yard. */}
+      <Chips value={'crew' as string} options={[{ id: 'crew', name: 'Crew map' }, { id: 'senth', name: 'Senth' }]} onChange={(v) => { if (v === 'senth') nav.push({ name: 'senth' }); }} />
       <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
       <Label>Work in hand</Label>

@@ -587,6 +587,25 @@ const reviewSample = {
   ],
 };
 
+const bn = (id: string, area: string, kind: 'decision' | 'preference' | 'fact', date: string, title: string, excerpt: string, more: Partial<{ links: string[]; supersededBy: string[]; supersedes: string[]; pinned: boolean; private: boolean; imported: boolean; status: string }> = {}) => ({
+  id, path: `${kind}s/${id}.md`, title, date, folder: '', kind, status: more.status ?? 'accepted', supersedes: more.supersedes ?? [], supersededBy: more.supersededBy ?? [], tags: [area],
+  private: more.private ?? false, imported: more.imported ?? false, links: more.links ?? [], excerpt, words: 80, area, pinned: more.pinned ?? false,
+});
+/** A made-up notes vault, the same story as the PC demo's. */
+const brainSample = {
+  on: true as const, folder: '/demo/brain', name: 'brain', from: '2026-09-02', to: '2026-11-18',
+  areas: [{ id: 'life', name: 'life', count: 1, private: true }, { id: 'crew', name: 'crew', count: 3, private: false }, { id: 'shop', name: 'shop', count: 3, private: false }],
+  notes: [
+    bn('one-shop-one-repo', 'shop', 'decision', '2026-09-02', 'One repo per shop', 'Each client shop lives in its own repository.'),
+    bn('weekly-release-train', 'shop', 'decision', '2026-09-05', 'Weekly release train', 'Shops release every Friday together.', { status: 'superseded', supersededBy: ['release-when-green'] }),
+    bn('short-briefs', 'crew', 'preference', '2026-09-14', 'Short briefs', 'A brief fits on one screen: goal, done when, first step.'),
+    bn('mornings-are-for-making', 'life', 'preference', '2026-10-05', 'Mornings are for making', 'No meetings before noon.', { private: true, imported: true }),
+    bn('release-when-green', 'shop', 'decision', '2026-10-14', 'Release when green', 'A shop releases as soon as its checks pass.', { supersedes: ['weekly-release-train'], pinned: true, links: ['weekly-release-train'] }),
+    bn('night-builds-on-branches', 'crew', 'decision', '2026-11-10', 'Night builds on branches', 'The crew builds at night on its own branches.', { pinned: true, links: ['short-briefs'] }),
+    bn('ask-before-spending', 'crew', 'decision', '2026-11-17', 'Ask before any spend', 'A bot asks on a card before anything costs money.', { links: ['night-builds-on-branches'] }),
+  ],
+};
+
 export function sample(path: string, method: string, _body?: unknown) {
   const [route] = path.split('?');
   const shaped = shaping(route, method, (_body ?? {}) as Record<string, any>);
@@ -604,6 +623,8 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (route === '/activity') return { items: [{ at: ago(4), who: 'Reviewer', what: 'commented on', to: '', job: map, kind: 'commented', times: 3 }, { at: ago(18), who: 'Builder', what: 'had a run fail on', to: '', job: saves, kind: 'failed', run: 'u2', times: 1 }, { at: ago(40), who: 'Lead', what: 'handed on', to: 'Builder', job: map, kind: 'delegated', times: 1 }], total: 3, page: 0, pages: 1, since: null };
   if (route === '/spend') return spend;
   if (route === '/improvements') return improvements;
+  if (route === '/brain') return brainSample;
+  if (route === '/brain/note') { const id = decodeURIComponent(/id=([^&]+)/.exec(path)?.[1] ?? ''); const n = brainSample.notes.find((x) => x.id === id); return n ? { ...n, meta: {}, text: `# ${n.title}\n\n${n.excerpt}\n\nSee [[${n.links[0] ?? n.id}]].` } : null; }
   if (route.startsWith('/improvements/') && method === 'POST') return { ok: true, jobRef: '' };
   if (route === '/jobs' && method === 'GET') {
     const pile = /pile=(\w+)/.exec(path)?.[1] ?? 'active';
