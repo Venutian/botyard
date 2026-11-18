@@ -348,3 +348,28 @@ test('a service that registers no app is signed in to through the owner\'s own a
   assert.ok(!seen.some((u) => /register/.test(u)), 'nothing is registered on the service')
   assert.ok(!JSON.stringify(connectorList({ crew: CREW, folder: where.folder })).includes('shh'), 'the secret is never shown')
 })
+
+test('a service that only reads but marks no tool read-only still gives a reading bot its tools, from the catalogue\'s list', async () => {
+  // DeepWiki, 18 Nov: its server marks none of its tools read-only, so a bot given "read" saw no tools at all.
+  const where = room()
+  const tools = [{ name: 'read_wiki_structure', description: 'Topics' }, { name: 'read_wiki_contents', description: 'Docs' }, { name: 'ask_wiki_question', description: 'Ask' }, { name: 'new_tool_that_writes', description: 'A tool the catalogue does not know' }]
+  const fetcher = async (url, init = {}) => {
+    if (!String(url).startsWith('https://mcp.deepwiki.com/mcp')) return new Response('{}', { status: 404 })
+    const msg = JSON.parse(init.body || '{}')
+    if (msg.id === undefined) return new Response('', { status: 202 })
+    const result = msg.method === 'initialize' ? { protocolVersion: '2025-06-18', serverInfo: { name: 'DeepWiki' }, capabilities: {} }
+      : msg.method === 'tools/list' ? { tools } : { content: [{ type: 'text', text: `ran ${msg.params?.name}` }] }
+    return new Response(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  const made = await addConnector({ from: 'deepwiki' }, { folder: where.folder, fetcher, crew: CREW })
+  await loadTools(made.id, { folder: where.folder, fetcher })
+  await setAccess(made.id, { bots: { 'bot-lead': 'read' } }, { folder: where.folder, crew: CREW, out: where.out })
+  const listed = connectorList({ crew: CREW, folder: where.folder }).connectors.find((c) => c.id === made.id)
+  assert.deepEqual(listed.tools.filter((t) => t.reads).map((t) => t.name).sort(), ['ask_wiki_question', 'read_wiki_contents', 'read_wiki_structure'])
+  const pass = readStore(where.folder).passes['bot-lead']
+  const seen = await gateway(made.id, pass, { body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) }, { folder: where.folder, fetcher })
+  const names = JSON.parse(seen.body).result.tools.map((t) => t.name).sort()
+  assert.deepEqual(names, ['ask_wiki_question', 'read_wiki_contents', 'read_wiki_structure'], 'a tool the catalogue does not list stays a change')
+  const ran = await gateway(made.id, pass, { body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'read_wiki_structure', arguments: { repoName: 'a/b' } } }) }, { folder: where.folder, fetcher })
+  assert.match(ran.body, /ran read_wiki_structure/)
+})

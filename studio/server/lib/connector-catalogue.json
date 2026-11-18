@@ -362,7 +362,8 @@
     "url": "https://mcp.deepwiki.com/mcp"
    }
   ],
-  "signs": "No sign-in"
+  "signs": "No sign-in",
+  "readTools": ["ask_wiki_question", "read_wiki_contents", "read_wiki_structure", "ask_question"]
  },
  {
   "id": "descript",
@@ -472,7 +473,8 @@
     "url": "https://mcp.api.etsycloud.com/mcp"
    }
   ],
-  "signs": "No sign-in"
+  "signs": "No sign-in",
+  "readTools": ["learn_etsy_api", "search_etsy_api", "get_endpoint", "get_schema", "list_endpoints", "list_guides", "get_guide"]
  },
  {
   "id": "exa",

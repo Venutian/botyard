@@ -328,7 +328,10 @@ export async function loadTools(id, { folder = keysFolder(), fetcher = fetch } =
     live.health = health
     live.account = account
     if (health.ok) {
-      live.tools = tools.map((t) => ({ name: t.name, about: String(t.description || t.title || '').replace(/\s+/g, ' ').slice(0, 240), readOnly: t.annotations?.readOnlyHint === true }))
+      // A tool reads when the service says so, or when the catalogue knows it does: some services that only
+      // read (documentation, a search) mark none of their tools, and their bots would be given nothing.
+      const reads = new Set(CATALOGUE.find((a) => a.id === live.from)?.readTools || [])
+      live.tools = tools.map((t) => ({ name: t.name, about: String(t.description || t.title || '').replace(/\s+/g, ' ').slice(0, 240), readOnly: t.annotations?.readOnlyHint === true || reads.has(t.name) }))
       // A tool the service no longer has cannot stay ticked.
       live.writes = (live.writes || []).filter((name) => live.tools.some((t) => t.name === name))
     }
