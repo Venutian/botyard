@@ -161,6 +161,13 @@ export function patchJob(store, id, body = {}, { now = Date.now(), actor } = {})
   if (body.description !== undefined) next.description = text(body.description)
   if (body.priority !== undefined) { if (!PRIORITIES.has(body.priority)) throw new Refused(400, 'Unknown priority'); next.priority = body.priority }
   if (body.projectId !== undefined) { if (body.projectId && !store.row('SELECT id FROM projects WHERE id = ?', body.projectId)) throw new Refused(400, 'That project is not in this studio'); next.projectId = body.projectId || null }
+  // A job moved to another project leaves its old worktree behind: its execution workspace is
+  // cleared, so the next run cuts a fresh worktree in the new project's repo, from the job's
+  // startFrom. Not while a run is going on it.
+  if (body.projectId !== undefined && body.projectId !== job.projectId) {
+    const active = store.objects("SELECT raw FROM runs WHERE job_id = ? AND status IN ('running', 'queued')", job.id)
+    if (!active.length) next.executionWorkspaceId = null
+  }
   if (body.assigneeAdapterOverrides !== undefined) next.assigneeAdapterOverrides = body.assigneeAdapterOverrides || null
   if (body.blockedByIssueIds !== undefined) {
     const ids = Array.isArray(body.blockedByIssueIds) ? body.blockedByIssueIds.map(String) : []
