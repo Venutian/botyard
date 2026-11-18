@@ -74,6 +74,7 @@ class Privacy(unittest.TestCase):
         self.assertNotIn('learn-to-sail', out)
         self.assertNotIn('savings', out)
         self.assertIn('personal note(s) are not shown', out)
+        self.assertNotIn('  index  ', out, 'the vault\'s index is not a note')
         code, out = under('opencode', 'search', 'sail')
         self.assertNotIn('learn-to-sail', out)
 
