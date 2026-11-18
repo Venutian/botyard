@@ -341,7 +341,8 @@ def needs(bot, db, policy, env=None):
         out.append({'kind': 'read', 'path': scratch, 'probe': os.path.join(scratch, 'opencode', 'x'), 'why': "the run's own scratch folder, where OpenCode keeps its settings", 'virtual': True, 'fix': "setup-bots.py (it opens the run's scratch folder to every OpenCode bot)"})
     for path, who, why in writes(env):
         names = [base_name(n) for n in who] if who else None
-        if (names and base_name(bot['name']) in names) or (not names and bot['adapter'] in SANDBOXED):
+        # Only a bot whose shell is sandboxed is refused a write its script makes: the other adapters rule on their own file tools, not on a script.
+        if bot['adapter'] in SANDBOXED and (not names or base_name(bot['name']) in names):
             why = why or 'a folder its scripts write'
             out += [{'kind': 'exists', 'path': path, 'why': why}, {'kind': 'write', 'path': path, 'probe': os.path.join(path, 'x'), 'why': why}]
     seen = set()
