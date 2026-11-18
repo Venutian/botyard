@@ -58,7 +58,7 @@ export const SHOTS = [
   { name: 'setup', file: 'setup.png', what: 'Setup: what is signed in and how to fix what is not', view: 'setup', clicks: [['[data-tab="setup"]']], needs: 200 },
   // Engram, the Brain view, on the demo yard's made-up vault: at 1440 and at a phone's 375, day and night.
   { name: 'engram', file: 'engram.png', what: 'Engram: the notes vault as strata of areas over time', view: 'engram', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200 },
-  { name: 'engram-note', file: 'engram-note.png', what: 'Engram with a note open on the side', view: 'engram-note', clicks: [['[data-home="brain"]'], ['.bm-n[data-note*="release-when-green"]']], needs: 0, fewer: true, pause: 1500 },
+  { name: 'engram-note', file: 'engram-note.png', what: 'Engram with a note open on the side', view: 'engram-note', clicks: [['[data-home="brain"]'], ['[data-mode="list"]'], ['[data-note*="release-when-green"]'], ['[data-mode="field"]']], needs: 0, fewer: true, pause: 1500 },
   { name: 'engram-night', file: 'engram-night.png', what: 'Engram after dark', view: 'engram-night', clicks: [['[data-act="shift"]'], ['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800 },
   { name: 'engram-375', file: 'engram-phone.png', what: 'Engram at a phone\'s width', view: 'engram-375', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1200, size: [375, 812], atLeast: 200 },
   { name: 'engram-375-night', file: 'engram-phone-night.png', what: 'Engram at a phone\'s width after dark', view: 'engram-375-night', plates: 'night', clicks: [['[data-home="brain"]']], needs: 0, fewer: true, pause: 1800, size: [375, 812], atLeast: 200 },

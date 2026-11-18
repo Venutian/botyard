@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, G, Line as SvgLine, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, G, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { RADIUS, SHAPE, brainDust, fieldLayout } from '../brainLayout';
 import { Brain, BrainNote, Connection, getBrain, getBrainNote } from '../api';
 import { Nav } from '../crew';
 import { useLook } from '../theme/prefs';
@@ -34,52 +35,89 @@ function useInks(brain: Brain | null) {
   }, [brain, t.dark, t.ink3]);
 }
 
-/** The strata: one band per area, a mark per note, a dashed arrow from a superseded note to its successor. */
-function Strata({ brain, ink, chosenArea, onArea }: { brain: Extract<Brain, { on: true }>; ink: (area: string) => string; chosenArea: string; onArea: (id: string) => void }) {
-  const { t } = useLook();
+/** Light inks on the dark field, one per area: the same as the PC's Engram. */
+const FIELD_INKS = ['#6ea8ff', '#46f0cc', '#b98cff', '#ff9a5c', '#ff6fcf', '#9be564', '#ffd166', '#ff7a7a', '#6fd8ff', '#e7c99a'];
+const VOID = '#020309';
+
+/**
+ * The brain seen from the side, still: the same neurons, lobes and fibres as the PC's Engram (brainLayout.ts),
+ * drawn once in SVG. A neuron glows in its area's colour, the newest decisions are white-hot, a superseded note
+ * is ash with a dashed fibre to what replaced it. Tap a neuron to read it, a lobe's name to show only that area.
+ */
+function BrainField({ brain, chosenArea, onArea, onNote }: { brain: Extract<Brain, { on: true }>; chosenArea: string; onArea: (id: string) => void; onNote: (id: string) => void }) {
   const { width: screen } = useWindowDimensions();
   const width = Math.min(screen - 32, 720);
-  const band = 30;
-  const height = brain.areas.length * band;
-  const from = dayOf(brain.from) - 2 * DAY;
-  const to = dayOf(brain.to) + 2 * DAY;
-  const x = (iso: string) => 8 + ((dayOf(iso) - from) / Math.max(DAY, to - from)) * (width - 16);
-  const row = new Map(brain.areas.map((a, i) => [a.id, i]));
+  const height = Math.round(width * 0.78);
+  const { at, centres } = useMemo(() => fieldLayout(brain), [brain]);
+  const dust = useMemo(() => brainDust(1500), []);
+  const scale = (width * 0.92) / (2 * RADIUS * SHAPE.z);
+  const px = (p: { y: number; z: number }) => ({ x: width / 2 - p.z * scale, y: height / 2 + 10 - p.y * scale * 1.05 });
+  const slot = new Map(brain.areas.map((a, i) => [a.id, i % FIELD_INKS.length]));
+  const inkOf = (area: string) => FIELD_INKS[slot.get(area) ?? 0];
   const newest = dayOf(brain.to) - 3 * DAY;
-  const at = new Map(brain.notes.map((n) => [n.id, { x: x(n.date), y: (row.get(n.area) ?? 0) * band + band / 2 }]));
+  const dim = (area: string) => Boolean(chosenArea) && chosenArea !== area;
+  const byId = new Map(brain.notes.map((n) => [n.id, n]));
+  const fibres: { d: string; ink: string; ash: boolean; faint: boolean; key: string }[] = [];
+  for (const n of brain.notes) {
+    const a = at.get(n.id);
+    if (!a) continue;
+    for (const [t, ash] of [...n.links.map((x) => [x, false] as const), ...n.supersededBy.map((x) => [x, true] as const)]) {
+      const b = at.get(t);
+      if (!b) continue;
+      const pa = px(a);
+      const pb = px(b);
+      const c = px({ y: (a.y + b.y) / 2 * 0.5, z: (a.z + b.z) / 2 * 0.5 });
+      fibres.push({ key: `${n.id}>${t}${ash ? '!' : ''}`, d: `M${pa.x.toFixed(1)} ${pa.y.toFixed(1)}Q${c.x.toFixed(1)} ${c.y.toFixed(1)} ${pb.x.toFixed(1)} ${pb.y.toFixed(1)}`, ink: ash ? '#8a94a6' : inkOf(n.area), ash, faint: dim(n.area) && dim(byId.get(t)?.area ?? '') });
+    }
+  }
   return (
-    <View accessible accessibilityLabel={`${brain.notes.length} notes in ${brain.areas.length} areas, from ${said(brain.from)} to ${said(brain.to)}`}>
+    <View style={[styles.field, { width, height }]} accessible accessibilityLabel={`${brain.notes.length} notes in ${brain.areas.length} areas, drawn as a brain. The list below has every note.`}>
       <Svg width={width} height={height}>
-        {brain.areas.map((a, i) => <Rect key={a.id} x={0} y={i * band} width={width} height={band} fill={ink(a.id)} opacity={chosenArea && chosenArea !== a.id ? 0.03 : i % 2 ? 0.1 : 0.06} />)}
-        {brain.notes.flatMap((n) => n.supersededBy.map((s) => { const a = at.get(n.id); const b = at.get(s); return a && b ? <SvgLine key={`${n.id}>${s}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={t.ink3} strokeWidth={1.4} strokeDasharray="4 3" /> : null; }))}
+        <Defs>
+          {FIELD_INKS.map((ink, i) => (
+            <RadialGradient key={ink} id={`g${i}`} cx="50%" cy="50%" r="50%">
+              <Stop offset="0" stopColor="#ffffff" stopOpacity="0.95" />
+              <Stop offset="0.22" stopColor={ink} stopOpacity="0.9" />
+              <Stop offset="1" stopColor={ink} stopOpacity="0" />
+            </RadialGradient>
+          ))}
+          <RadialGradient id="hot" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity="1" />
+            <Stop offset="0.35" stopColor="#fff1c9" stopOpacity="0.85" />
+            <Stop offset="1" stopColor="#ffd166" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width={width} height={height} rx={12} fill={VOID} />
+        {Array.from({ length: dust.length / 3 }, (_, i) => {
+          const p = px({ y: dust[i * 3 + 1], z: dust[i * 3 + 2] });
+          return <Circle key={i} cx={p.x} cy={p.y} r={0.75} fill={dust[i * 3 + 2] > 0 ? '#4f8dff' : '#9a6bff'} opacity={0.45} />;
+        })}
+        {fibres.map((f) => <Path key={f.key} d={f.d} stroke={f.ink} strokeWidth={f.ash ? 1 : 1.1} strokeDasharray={f.ash ? '4 3' : undefined} fill="none" opacity={f.faint ? 0.08 : f.ash ? 0.55 : 0.5} />)}
         {brain.notes.map((n) => {
-          const p = at.get(n.id)!;
-          const c = ink(n.area);
-          const r = n.pinned ? 5.5 : 4;
-          const faint = chosenArea && chosenArea !== n.area ? 0.2 : 1;
+          const p = px(at.get(n.id)!);
           const old = n.status === 'superseded';
-          const fill = old || n.kind === 'inbox' || n.kind === 'note' ? t.card : c;
-          const glow = n.kind === 'decision' && !old && dayOf(n.date) >= newest;
+          const fresh = n.kind === 'decision' && !old && dayOf(n.date) >= newest;
+          const r = (n.kind === 'decision' ? 9 : n.kind === 'preference' ? 7 : 5.5) + (n.pinned ? 2.5 : 0) + (fresh ? 3 : 0);
+          const fill = old ? '#5d6676' : fresh ? 'url(#hot)' : `url(#g${slot.get(n.area) ?? 0})`;
           return (
-            <G key={n.id}>
-              {glow ? <Circle cx={p.x} cy={p.y} r={r * 2.6} fill="#ffb020" opacity={0.35} /> : null}
-              {n.kind === 'decision'
-                ? <Path d={`M${p.x} ${p.y - r * 1.3}L${p.x + r * 1.3} ${p.y}L${p.x} ${p.y + r * 1.3}L${p.x - r * 1.3} ${p.y}Z`} fill={fill} stroke={c} strokeWidth={1.4} opacity={faint} />
-                : n.kind === 'preference'
-                  ? <Rect x={p.x - r} y={p.y - r} width={r * 2} height={r * 2} rx={1.2} fill={fill} stroke={c} strokeWidth={1.4} opacity={faint} />
-                  : <Circle cx={p.x} cy={p.y} r={r} fill={fill} stroke={c} strokeWidth={1.4} opacity={faint} />}
+            <G key={n.id} opacity={dim(n.area) ? 0.15 : old ? 0.6 : 1} onPress={() => onNote(n.id)}>
+              <Circle cx={p.x} cy={p.y} r={old ? r * 0.45 : r * 1.6} fill={fill} />
+              {n.imported ? <Circle cx={p.x} cy={p.y} r={r * 0.9} stroke={inkOf(n.area)} strokeWidth={0.8} strokeDasharray="1.5 2" fill="none" /> : null}
             </G>
           );
         })}
       </Svg>
-      <View style={styles.bandNames} pointerEvents="box-none">
-        {brain.areas.map((a) => (
-          <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={`${a.name}, ${a.count} notes${a.private ? ', private' : ''}. Show only this area.`} onPress={() => onArea(chosenArea === a.id ? '' : a.id)} style={[styles.bandName, { height: band }]}>
-            <View style={[styles.swatch, { backgroundColor: ink(a.id) }]} />
-            <Txt size={11} weight={700} color={t.ink2}>{a.name} {a.count}</Txt>
+      {brain.areas.map((a) => {
+        const c = centres.get(a.id);
+        if (!c) return null;
+        const p = px({ y: c.y + 46, z: c.z });
+        return (
+          <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={`${a.name}, ${a.count} notes${a.private ? ', private' : ''}. Show only this area.`} onPress={() => onArea(chosenArea === a.id ? '' : a.id)}
+            style={[styles.lobe, { left: p.x, top: p.y, borderColor: inkOf(a.id), opacity: dim(a.id) ? 0.35 : 1, transform: [{ translateX: -40 }, { translateY: -10 }] }]}>
+            <Txt size={11} weight={700} color={inkOf(a.id)} numberOfLines={1}>{a.name} {a.count}</Txt>
           </Pressable>
-        ))}
-      </View>
+        );
+      })}
     </View>
   );
 }
@@ -108,7 +146,7 @@ export function EngramScreen({ connection, nav }: { connection: Connection; nav:
       {data && !data.on ? <Txt color={t.ink2}>{data.why} Set the notes folder on the PC, in the Engram view.</Txt> : null}
       {brain ? (
         <>
-          <Strata brain={brain} ink={ink} chosenArea={area} onArea={setArea} />
+          <BrainField brain={brain} chosenArea={area} onArea={setArea} onNote={(id) => nav.push({ name: 'engramNote', id })} />
           <Field label="Search the notes" value={query} onChangeText={setQuery} autoCorrect={false} autoCapitalize="none" returnKeyType="search" />
           <Chips value={area} options={[{ id: '', name: 'All areas' }, ...brain.areas.map((a) => ({ id: a.id, name: `${a.name} ${a.count}` }))]} onChange={setArea} />
           {months.length === 0 ? <Txt color={t.ink2}>No note matches.</Txt> : null}
@@ -169,8 +207,7 @@ export function EngramNoteScreen({ id, connection, nav }: { id: string; connecti
 }
 
 const styles = StyleSheet.create({
-  bandNames: { position: 'absolute', left: 0, top: 0 },
-  bandName: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, paddingTop: 2, paddingLeft: 4 },
-  swatch: { width: 3, height: 10, borderRadius: 1.5, marginTop: 2 },
+  field: { alignSelf: 'center', borderRadius: 12, overflow: 'hidden', backgroundColor: VOID },
+  lobe: { position: 'absolute', width: 80, alignItems: 'center', paddingVertical: 2, borderWidth: 1, borderRadius: 999, backgroundColor: 'rgba(2,3,9,0.72)' },
   text: { padding: 14, borderRadius: 10, borderWidth: 1 },
 });
