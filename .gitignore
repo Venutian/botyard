@@ -24,3 +24,6 @@ __pycache__/
 
 # made by expo prebuild for an APK build
 /android
+
+# A worktree may link node_modules to the main checkout: never track the link.
+/node_modules
