@@ -122,7 +122,7 @@ class SameAsTheFixture(Studio):
 
 class TheFiles(unittest.TestCase):
     def sets(self):
-        yield 'bots', crew_set.CrewSet(own='', places=crew_set.Places(env={'HOME': '/home/owner', 'PATH': ''}, crew='/home/owner/.botyard/crew', projects='/home/owner/work'))
+        yield 'bots', crew_set.CrewSet(own='', places=crew_set.Places(env={'HOME': '/home/user', 'PATH': ''}, crew='/home/user/.botyard/crew', projects='/home/user/work'))
 
     def test_every_bot_file_is_whole_and_renders_with_nothing_left_over(self):
         for name, files in self.sets():
@@ -390,7 +390,9 @@ class CodexOut(Studio):
 class FreeModelsWithNoKey(unittest.TestCase):
     def test_the_list_is_shorter_without_a_key_and_whole_with_one(self):
         m = seeder()
-        m.FREE_FOUND = m.FREE_SCORES = m.FREE_OUT = '/nonexistent/x.json'
+        m.FREE_FOUND = m.FREE_SCORES = m.FREE_OUT = m.FREE_LIMITS = '/nonexistent/x.json'
+        # Never what this PC's tool lists today or which providers asked for credits here: that changes by the day.
+        m.tool_models = lambda: []
         providers = lambda rows: {model.split('/')[0] for model, _, _ in rows}
         none = m.free_list(has_key=lambda name: False)
         self.assertEqual(providers(none), {'opencode'}, "OpenCode's own free models need no key")
