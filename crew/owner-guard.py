@@ -55,6 +55,25 @@ def closed_folders():
     return out
 
 
+COMMAND_TOLD = 'Refused: that command is the owner\'s alone. Ask the owner on a card if the job needs it.'
+
+
+def closed_commands():
+    """Shell commands no bot runs, each with what it is told: the ones a studio names in its crew/own/guard.json,
+    {"commands": [{"pattern": "a regular expression", "told": "why"}]} (a PC setting only the owner changes, say)."""
+    out = []
+    try:
+        with open(os.path.join(botyard_home.places()['crew'], 'own', 'guard.json'), encoding='utf8') as f:
+            for row in json.load(f).get('commands') or []:
+                try:
+                    out.append((re.compile(str(row['pattern'])), row.get('told') or COMMAND_TOLD))
+                except (KeyError, re.error):
+                    continue
+    except (OSError, ValueError, AttributeError):
+        pass
+    return out
+
+
 TOLD = ('Refused: the folder with the connectors\' keys is read by Botyard only. Use the service through its '
                     'tools (mcp__<service>__...); if a tool you need is missing or refused, ask the owner on a card.')
 KEY_TOLD = ('Refused: the support inbox\'s key folder is read by support-mail.py only. To answer support mail '
@@ -126,6 +145,9 @@ def check(event):
         m = SENDS.search(command)
         if m:
             return TOLD.format(what=f'"{m.group(0).strip()}"')
+        for pattern, told in closed_commands():
+            if pattern.search(command):
+                return told
     return None
 
 
