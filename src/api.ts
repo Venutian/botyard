@@ -707,7 +707,7 @@ export const holdInTray = (c: Connection, item: TrayHold) => call<{ items: TrayI
 export const dropFromTray = (c: Connection, key: string) => call<{ items: TrayItem[] }>(c, '/tray', 'POST', { action: 'drop', key });
 export const sendTrayNow = (c: Connection) => call<{ sent: number; failed: number; items: TrayItem[] }>(c, '/tray', 'POST', { action: 'send' });
 
-// ── Senth: the owner's notes vault, read-only ─────────────────────────────────────────
+// ── Engram: the owner's notes vault, read-only ─────────────────────────────────────────
 
 export type BrainNote = {
   id: string; path: string; title: string; date: string; folder: string;
@@ -719,6 +719,6 @@ export type BrainNote = {
 export type BrainArea = { id: string; name: string; count: number; private: boolean };
 export type Brain = { on: true; folder: string; name: string; notes: BrainNote[]; areas: BrainArea[]; from: string; to: string } | { on: false; why: string };
 export type BrainNoteText = BrainNote & { text: string; meta: Record<string, unknown> };
-/** The notes, without their text: what the Senth screen draws. Read-only; editing stays in the files. */
+/** The notes, without their text: what the Engram screen draws. Read-only; editing stays in the files. */
 export const getBrain = (c: Connection) => call<Brain>(c, '/brain');
 export const getBrainNote = (c: Connection, id: string) => call<BrainNoteText>(c, `/brain/note?id=${encodeURIComponent(id)}`);

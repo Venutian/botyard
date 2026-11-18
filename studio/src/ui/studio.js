@@ -256,7 +256,7 @@ const TEMPLATE = `
 <header class="studio-top panel">
   <strong class="mark">Botyard</strong>
   <p class="studio-state"></p>
-  <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button><button type="button" data-home="brain" aria-pressed="false" title="Senth: your notes, decisions and preferences">Senth</button></div>
+  <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button><button type="button" data-home="brain" aria-pressed="false" title="Engram: your notes, decisions and preferences">Engram</button></div>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
   <div class="ld" data-part="load"></div>
   <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -442,7 +442,7 @@ export class Studio {
    */
   setHome(mode) {
     this.home = mode === 'yard' || mode === 'brain' ? mode : 'map'
-    // Senth stands where the map stands: the yard is not drawn behind either.
+    // Engram stands where the map stands: the yard is not drawn behind either.
     this.root.classList.toggle('map-home', this.home !== 'yard')
     for (const b of this.top.querySelectorAll('[data-home]')) b.setAttribute('aria-pressed', String(b.dataset.home === this.home))
     this.crewMap.show(this.home === 'map')

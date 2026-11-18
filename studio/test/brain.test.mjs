@@ -1,5 +1,5 @@
 /**
- * Senth, the Brain view (`/api/studio/brain`, `/v1/brain`): what it reads from a notes vault, that it only
+ * Engram, the Brain view (`/api/studio/brain`, `/v1/brain`): what it reads from a notes vault, that it only
  * reads, and that it answers the owner and never a bot. Everything runs on the demo vault in studio/demo/brain.
  */
 import test from 'node:test'

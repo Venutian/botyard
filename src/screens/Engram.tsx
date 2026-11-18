@@ -9,7 +9,7 @@ import { Line, Page, Tag, useLoad } from '../ui/page';
 import { Markdown } from '../ui/Markdown';
 
 /**
- * Senth on the phone: the owner's notes as strata (one band per area, a mark per note at the day it was
+ * Engram on the phone: the owner's notes as strata (one band per area, a mark per note at the day it was
  * made), then the notes newest first, by month. A tap opens the note. Read-only; the phone door answers
  * the owner's key only, never a bot.
  */
@@ -84,7 +84,7 @@ function Strata({ brain, ink, chosenArea, onArea }: { brain: Extract<Brain, { on
   );
 }
 
-export function SenthScreen({ connection, nav }: { connection: Connection; nav: Nav }) {
+export function EngramScreen({ connection, nav }: { connection: Connection; nav: Nav }) {
   const { t } = useLook();
   const { data, error, load } = useLoad(() => getBrain(connection), [connection], 60_000);
   const ink = useInks(data);
@@ -104,8 +104,8 @@ export function SenthScreen({ connection, nav }: { connection: Connection; nav: 
     months.at(-1)!.notes.push(n);
   }
   return (
-    <Page title="Senth" note={brain ? `${brain.notes.length} notes, ${said(brain.from)} to ${said(brain.to)}. Read-only: edit notes in their files.` : undefined} onBack={nav.back} onRefresh={load} error={error} loading={!data && !error}>
-      {data && !data.on ? <Txt color={t.ink2}>{data.why} Set the notes folder on the PC, in the Senth view.</Txt> : null}
+    <Page title="Engram" note={brain ? `${brain.notes.length} notes, ${said(brain.from)} to ${said(brain.to)}. Read-only: edit notes in their files.` : undefined} onBack={nav.back} onRefresh={load} error={error} loading={!data && !error}>
+      {data && !data.on ? <Txt color={t.ink2}>{data.why} Set the notes folder on the PC, in the Engram view.</Txt> : null}
       {brain ? (
         <>
           <Strata brain={brain} ink={ink} chosenArea={area} onArea={setArea} />
@@ -124,7 +124,7 @@ export function SenthScreen({ connection, nav }: { connection: Connection; nav: 
                   note={`${KIND[n.kind]} in ${n.area}, ${said(n.date)}`}
                   tone={n.status === 'superseded' ? t.ink3 : undefined}
                   right={n.status === 'superseded' ? <Tag text="Replaced" color={t.ink3} /> : n.imported ? <Tag text="To review" color={t.warn} /> : n.private ? <Tag text="Private" color={t.ink3} /> : undefined}
-                  onPress={() => nav.push({ name: 'senthNote', id: n.id })}
+                  onPress={() => nav.push({ name: 'engramNote', id: n.id })}
                   last={i === m.notes.length - 1}
                 />
               ))}
@@ -136,7 +136,7 @@ export function SenthScreen({ connection, nav }: { connection: Connection; nav: 
   );
 }
 
-export function SenthNoteScreen({ id, connection, nav }: { id: string; connection: Connection; nav: Nav }) {
+export function EngramNoteScreen({ id, connection, nav }: { id: string; connection: Connection; nav: Nav }) {
   const { t } = useLook();
   const note = useLoad(() => getBrainNote(connection, id), [connection, id]);
   const all = useLoad(() => getBrain(connection), [connection]);
@@ -147,7 +147,7 @@ export function SenthNoteScreen({ id, connection, nav }: { id: string; connectio
   const list = (label: string, ids: string[]) => ids.length ? (
     <View>
       <Label>{label}</Label>
-      {ids.map((x, i) => <Line key={x} title={title(x)} onPress={() => nav.push({ name: 'senthNote', id: x })} last={i === ids.length - 1} />)}
+      {ids.map((x, i) => <Line key={x} title={title(x)} onPress={() => nav.push({ name: 'engramNote', id: x })} last={i === ids.length - 1} />)}
     </View>
   ) : null;
   // [[links]] read as the note's title; the links are listed below as buttons.

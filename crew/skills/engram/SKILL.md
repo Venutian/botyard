@@ -1,9 +1,9 @@
 ---
-name: senth
-description: Read the owner's notes (Senth): their decisions and preferences on products, the crew, design, copy and how work is done. Use before choosing a library, tool, structure, style or approach, and whenever you would otherwise guess what the owner wants. Read-only.
+name: engram
+description: Read the owner's notes (Engram): their decisions and preferences on products, the crew, design, copy and how work is done. Use before choosing a library, tool, structure, style or approach, and whenever you would otherwise guess what the owner wants. Read-only.
 ---
 
-# Senth: the owner's notes
+# Engram: the owner's notes
 
 The owner keeps their lasting decisions and preferences in a folder of markdown notes. A decision or
 preference there beats your guess, and beats a habit of yours. If a note and your brief disagree, follow the
@@ -32,4 +32,4 @@ for it. Never quote a personal note in a job, a comment or a file that other bot
 
 Do not create, edit or move a note, and do not save notes anywhere else either. If you learn something the
 owner should keep (a decision they made, a rule they stated), end your report with one line:
-`For Senth: <what, in one sentence, and where the owner said it>`. The lead proposes it to the owner.
+`For Engram: <what, in one sentence, and where the owner said it>`. The lead proposes it to the owner.
