@@ -186,8 +186,15 @@ class Folders(Yard):
 
     def test_a_read_folder_that_holds_the_job_worktrees_would_refuse_their_edits(self):
         self.good_yard()
-        self.agent('a5', 'Reader', 'opencode_local', self.d + '/room', self.opencode('reader', reads=[self.d]))
+        room = os.path.join(self.d, 'room')
+        env = self.opencode('reader', reads=[self.d], own=room)
+        self.agent('a5', 'Reader', 'opencode_local', room, env)
         self.job('j5', 'a5')
+        self.assertEqual(self.faults().faults, [], 'the seeder keeps the worktrees of a read folder editable')
+        # a config written without that (an older seed) is found
+        config = json.load(open(env['OPENCODE_CONFIG']))
+        config['permission']['edit'] = {k: v for k, v in config['permission']['edit'].items() if 'worktrees' not in k}
+        json.dump(config, open(env['OPENCODE_CONFIG'], 'w'))
         text = self.say(self.faults())
         self.assertIn('Reader: cannot write', text)
         self.assertIn('the worktrees of its jobs', text)

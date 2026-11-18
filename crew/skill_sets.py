@@ -184,8 +184,9 @@ def read_only(perm, reads, own=None):
     # A job is worked in its own worktree (<repo>/.botyard/worktrees/<job>), which lies inside the folder a bot only reads when that is a
     # projects folder: those stay editable, or a job given to the bot would find every edit refused.
     trees = {p: 'allow' for f in folders for p in (f'{f}/.botyard/worktrees/*', f'{f}/*/.botyard/worktrees/*')}
-    edit = {**edit, **{f'{f}/*': 'deny' for f in folders}, **trees, **({mine: 'allow', f'{mine}/*': 'allow'} if mine else {}),
-            **{k: v for k, v in edit.items() if v == 'deny'}}
+    closed = {k: v for k, v in edit.items() if v == 'deny'}
+    edit = {**{k: v for k, v in edit.items() if k not in closed}, **{f'{f}/*': 'deny' for f in folders}, **trees,
+            **({mine: 'allow', f'{mine}/*': 'allow'} if mine else {}), **closed}
     return {**perm, 'external_directory': outside, 'edit': edit}
 
 
