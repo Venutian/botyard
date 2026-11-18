@@ -143,6 +143,20 @@
       "envFile": "{config}/edge-tunnel.env",
       "restart": "10s",
       "on": true
+    },
+    {
+      "name": "grade-new-models",
+      "kind": "timer",
+      "what": "New free models get their published coding grade (SWE-bench Verified against Claude) asked for, once: one job for the lead when any has none.",
+      "command": [
+        "{python}",
+        "{scripts}/grade-new-models.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "10m",
+      "limit": "2m",
+      "on": true
     }
   ]
 }
