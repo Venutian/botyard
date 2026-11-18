@@ -124,3 +124,12 @@
 .mk-diff .hunk { color: var(--muted); background: var(--sunk, #dfe3e8); }
 .mk-diff .mk-line.marked { background: color-mix(in srgb, var(--go, #ffc61a) 38%, transparent); }
 .mk-sheet .link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* A live page: the address bar, the pointer switch, and the page itself in a frame. */
+.mk-look-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin: 0 0 6px; }
+.mk-look-bar input { min-width: 0; padding: 8px 10px; border: 2px solid var(--field-edge, #15181d); border-radius: 6px; background: var(--raise, #fff); color: var(--text); font: 400 14px/1.2 var(--body); }
+.mk-look-bar .btn { min-height: 38px; padding: 0 12px; }
+.mk-look-bar [aria-pressed='true'] { outline: 3px solid var(--accent); }
+.mk-look-note { margin: 0 0 6px; color: var(--red); font-size: 13px; min-height: 1em; }
+.mk-look-frame iframe { display: block; width: 100%; height: calc(100vh - 300px); min-height: 420px; border: 2px solid var(--edge, #15181d); border-radius: 6px; background: #fff; }
+@media (max-width: 760px) { .mk-look-bar { grid-template-columns: minmax(0, 1fr) auto; } .mk-look-bar label { grid-column: 1 / -1; } .mk-look-frame iframe { height: 60vh; min-height: 300px; } }

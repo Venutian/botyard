@@ -11,6 +11,7 @@
  */
 import './marks.css'
 import { boxFrom, esc, linesHtml, markWhere, payloadOf, selectionIn } from './marks-core.js'
+export { esc }
 
 const ICON = {
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -24,6 +25,8 @@ async function call(url, payload) {
   if (!res.ok) throw new Error(out.error || `The service answered ${res.status}`)
   return out
 }
+
+const post = (url, body) => call(url, body)
 
 const kept = {
   read(id) { try { return JSON.parse(localStorage.getItem(KEEP + id) || 'null') } catch { return null } },
@@ -206,14 +209,22 @@ function drawAsk(rect = null) {
     const left = Math.min(frame.right - 380, Math.max(frame.left + 12, rect.left))
     Object.assign(ask.style, { top: `${top - frame.top}px`, left: `${left - frame.left}px` })
   } else Object.assign(ask.style, { top: '', left: '' })
+  // A pick inside a live page leaves the keys with that page's frame: take them back first.
+  window.focus()
   ask.querySelector('textarea').focus({ preventScroll: true })
 }
 
 function addPending() {
   const text = sheet.querySelector('#mk-new')?.value.trim()
   if (!state.pending || !text) { sheet.querySelector('#mk-new')?.focus(); return }
-  state.marks.push({ ...state.pending, n: state.next++, comment: text })
+  const mark = { ...state.pending, n: state.next++, comment: text }
+  state.marks.push(mark)
   state.pending = null
+  // A mark on a live page takes its screenshot now, at the owner's size and scroll; the send waits for it.
+  if (mark.kind === 'page' && mark.look && !mark.shotId) {
+    state.shots = state.shots || []
+    state.shots.push(post('/api/studio/look/shot', { job: state.jobId, ...mark.look }).then((shot) => { mark.shotId = shot.id; save() }).catch((err) => { mark.shotWhy = err.message; toast(`No screenshot: ${err.message}`, true) }))
+  }
   window.getSelection()?.removeAllRanges()
   save()
   draw()
@@ -246,6 +257,7 @@ function drawTray() {
 
 async function send(verdict) {
   if (state.pending) addPending()
+  if (state.shots?.length) await Promise.all(state.shots)
   const to = sheet.querySelector('#mk-to')?.value || ''
   const body = payloadOf(state, verdict, to)
   const button = sheet.querySelector(`[data-mk="send"][data-verdict="${verdict}"]`)
@@ -270,6 +282,7 @@ async function send(verdict) {
 /** Keep the review in the tray in Needs you, to go with the owner's other answers in one press. */
 async function holdReview() {
   if (state.pending) addPending()
+  if (state.shots?.length) await Promise.all(state.shots)
   try {
     await window.botyardTray.hold({ kind: 'review', jobId: state.jobId, title: 'Your review', job: `${state.ref ? `${state.ref} ` : ''}${state.title}`.trim(), review: payloadOf(state, 'back') })
     kept.write(state.jobId, null)
@@ -333,6 +346,7 @@ function onKey(e) {
 /** For the parts that draw their own pieces (the change, a live page). */
 const api = {
   esc,
+  toast,
   linesHtml,
   pending(mark, rect) { state.pending = mark; drawAsk(rect) },
   get state() { return state },

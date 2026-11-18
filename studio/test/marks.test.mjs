@@ -318,3 +318,41 @@ test('a change is read in chapters: the heart first, what it touches, how it is 
   assert.equal((await guidedChange({ files }, { overview: true, folder, command: '', ask })).chapters[0].by, 'script')
   assert.equal((await guidedChange({ files: files.slice(1) }, { overview: true, folder, command: 'cheap', ask: async () => null })).chapters[0].by, 'script')
 })
+
+// ── marks on a live local page (lib/look.mjs) ─────────────────────────────────────
+
+test('only pages on this computer are opened; the relay adds the pointer to HTML, passes the rest, and drops what forbids a frame', async () => {
+  const http = await import('node:http')
+  const { findBrowser, localPage, openLook, pageShot, withKit } = await import('../server/lib/look.mjs')
+  for (const bad of ['http://example.org/', 'file:///etc/passwd', 'http://192.168.1.4:8080/', 'http://user:pw@localhost/', 'javascript:alert(1)', 'nope']) assert.throws(() => localPage(bad), /on this computer|web pages|address|name and password/, bad)
+  assert.equal(localPage('http://game.localhost:8080/play?x=1').host, 'game.localhost:8080')
+  assert.match(withKit('<html><head><title>x</title></head><body></body></html>'), /<script src="\/__botyard-look\.js"><\/script><\/head>/)
+  assert.match(withKit('<p>no head</p>'), /^<script src="\/__botyard-look\.js"><\/script><p>/)
+  const page = http.createServer((req, res) => {
+    if (req.url === '/app.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'X-Frame-Options': 'DENY' }); return res.end('window.ok = 1') }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'" })
+    res.end('<html><head><title>Harbour game</title></head><body><button id="play" style="position:absolute;left:40px;top:30px;width:120px;height:40px">Play</button></body></html>')
+  })
+  await new Promise((resolve) => page.listen(0, '127.0.0.1', resolve))
+  const address = `http://localhost:${page.address().port}/`
+  try {
+    const look = await openLook(address)
+    assert.match(look.relay, /^http:\/\/127\.0\.0\.1:\d+\/$/)
+    assert.equal((await openLook(`${address}other`)).relay.replace(/other$/, ''), look.relay, 'one relay per page origin')
+    const html = await fetch(look.relay)
+    assert.equal(html.headers.get('x-frame-options'), null)
+    assert.equal(html.headers.get('content-security-policy'), null)
+    assert.match(await html.text(), /__botyard-look\.js[\s\S]*Harbour game|Harbour game[\s\S]*__botyard-look\.js/)
+    assert.equal(await (await fetch(`${look.relay}app.js`)).text(), 'window.ok = 1')
+    assert.match(await (await fetch(`${look.relay}__botyard-look.js`)).text(), /botyard-look-pick/)
+    // The screenshot, where this computer has a browser for it: the size asked for, a real PNG.
+    if (findBrowser()) {
+      const shot = await pageShot(address, { width: 400, height: 300, waitMs: 200 })
+      assert.equal(shot.readUInt32BE(16), 400)
+      assert.equal(shot.readUInt32BE(20), 300)
+    }
+  } finally {
+    page.closeAllConnections()
+    page.close()
+  }
+})
