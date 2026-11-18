@@ -139,6 +139,29 @@ def _slug(bot):
     return bot.lower().replace(' ', '-')
 
 
+def brain_denials(env=None):
+    """OpenCode permission rules that keep the owner's personal notes (crew/brain.py says which) from a model
+    run under OpenCode, whose words may go to a third party: no read, search, list or edit of a personal folder
+    or a private note, no shell command that names one, and no edit anywhere in the notes. {} with no notes."""
+    import brain
+    root = brain.folder(env)
+    if not root or not os.path.isdir(root):
+        return {}
+    every = brain.notes(root)
+    tops = sorted({n[1].split(os.sep)[0] for n in every if n[4] and os.sep in n[1] and n[1].split(os.sep)[0].lower() not in brain.WORK_FOLDERS})
+    tops += sorted(d for d in os.listdir(root) if d.lower() in brain.PERSONAL and os.path.isdir(os.path.join(root, d)) and d not in tops)
+    files = sorted(os.path.join(root, n[1]) for n in every if n[4] and n[1].split(os.sep)[0] not in tops)
+    # OpenCode matches a read or a search against the path from the run's worktree (`../../notes/life/x.md`),
+    # so each rule is written to match from anywhere: the vault's own folder name, then the personal part.
+    name = os.path.basename(root.rstrip('/'))
+    paths = [p for t in tops for p in (f'{root}/{t}/*', f'*{name}/{t}/*', f'*{name}/{t}')] + [p for f in files for p in (f, '*' + name + '/' + os.path.relpath(f, root))]
+    if not paths:
+        return {'edit': {'*': 'allow', f'{root}/*': 'deny', f'*{name}/*': 'deny'}}
+    deny = {'*': 'allow', **{p: 'deny' for p in paths}}
+    shell = {'*': 'allow', **{f'*{os.path.join(root, t)}*': 'deny' for t in tops}, **{f'*{t}/*': 'deny' for t in tops}, **{f'*{os.path.basename(f)}*': 'deny' for f in files}}
+    return {'read': deny, 'glob': deny, 'grep': deny, 'list': deny, 'edit': {**deny, f'{root}/*': 'deny', f'*{name}/*': 'deny'}, 'bash': shell}
+
+
 def write_for(bot, adapter, skills=None, want=None):
     """Writes the bot's skill file and returns the env entries that point its runs at it. `want` is the
     bot's own list of skill names, from its settings file; with none it is asked from the files. {} for
@@ -167,7 +190,7 @@ def write_for(bot, adapter, skills=None, want=None):
     # OpenCode: hide every skill but the set; add the folders of the plugin skills it needs.
     folders = sorted({os.path.dirname(s['dir']) for s in skills if s['kind'] == 'plugin' and s['name'] in want})
     config = {'$schema': 'https://opencode.ai/config.json',
-              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}}}
+              'permission': {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}, **brain_denials()}}
     if folders:
         config['skills'] = {'paths': folders}
     path = f'{OUT}/{_slug(bot)}.opencode.json'
