@@ -10,6 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { noteArrival, readAway } from '../server/lib/away.mjs'
 import { signPlay } from '../server/lib/edge.mjs'
+import { waitingCount } from '../server/lib/cards.mjs'
 import { phoneHandler, startPhoneDoor, tokenMatches } from '../server/phone.mjs'
 
 const TOKEN = 'a'.repeat(40)
@@ -1034,4 +1035,18 @@ test('a paired phone reaches an own page\'s list and its own calls, never its fi
     else process.env.BOTYARD_HOME = saved
     fs.rmSync(home, { recursive: true, force: true })
   }
+})
+
+test('the phone gets the crew map\'s tree on /v1/flow, with the summary\'s Needs-you list, and only with its key', async () => {
+  await withDoor(async (ask) => {
+    assert.equal((await ask('/v1/flow', { token: null })).status, 401)
+    const res = await ask('/v1/flow?window=7d')
+    assert.equal(res.status, 200, JSON.stringify(res.body))
+    const body = res.body
+    assert.ok(Array.isArray(body.nodes), 'the tree has its nodes')
+    assert.ok(Array.isArray(body.edges), 'and its lines')
+    const summary = (await ask('/v1/summary')).body
+    // One Needs-you number: the cards waiting for the owner's answer, the same as the phone's badge.
+    assert.equal(body.needs, waitingCount(summary.needsYou))
+  })
 })
