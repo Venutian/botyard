@@ -133,7 +133,7 @@ function story(bot, project) {
     // Finished, checked, ruled and merged yesterday.
     { key: 'history', project: project.shop, title: 'Order history: a page of past orders', by: bot.rook, status: 'done', made: 30 * 60, started: 29 * 60, ended: 27 * 60,
       body: 'A signed-in buyer sees their past orders, newest first, with a link to each receipt.\n\nDone when: twenty orders load in under a second and the page works with a keyboard alone.',
-      said: [[bot.rook, 27 * 60, 'Built on `orders-history`.\n\n- New route `/orders` with a table of date, items, total and a receipt link.\n- Paged twenty at a time; the query uses the index on `buyer_id, created_at`.\n- Tests: 14 new, all pass. Keyboard: every row is reachable and the receipt link is the row\'s only tab stop.\n\nNot done: export to a file. Say if you want it as its own job.']],
+      said: [[bot.rook, 27 * 60, 'Built on `orders-history`.\n\n- New route `/orders` with a table of date, items, total and a receipt link.\n- Paged twenty at a time; the query uses the index on `buyer_id, created_at`.\n- Tests: 14 new, all pass. Keyboard: every row is reachable and the receipt link is the row\'s only tab stop.\n\nNot done: export to a file. Say if you want it as its own job.\n\nOUTCOME: MET']],
       runs: [{ by: bot.rook, at: 29 * 60, took: 118 * 60, tokens: [412_000, 38_000, 2_900_000], ok: true }], merged: 25 * 60 },
     { check: 'history', project: project.shop, by: bot.sable, status: 'done', made: 27 * 60, started: 27 * 60 - 5, ended: 26 * 60 + 20,
       said: [[bot.sable, 26 * 60 + 20, '## OUTCOME: PASS\n\nRan it with 0, 1, 20 and 400 orders. Paging holds, the empty state says what to do, and the receipt link opens the right order every time. One note, not blocking: the total column is not right-aligned on a narrow phone.']],
@@ -160,11 +160,19 @@ function story(bot, project) {
     // Being ruled on by the lead right now.
     { key: 'search', project: project.shop, title: 'Search: find a product by any word in its name', by: bot.rook, status: 'done', made: 9 * 60, started: 8 * 60 + 30, ended: 6 * 60 + 40,
       body: 'The search box finds a product by any word in its name or its code, and forgives one wrong letter.\n\nDone when: "anchr chain" finds the anchor chain.',
-      said: [[bot.rook, 6 * 60 + 40, 'Built on `shop-search`. Words are matched in any order; one wrong letter is forgiven for words of five letters or more. 22 tests, all pass. The search is a plain index in the shop\'s own database: no new service to run.']],
+      said: [[bot.rook, 6 * 60 + 40, 'Built on `shop-search`. Words are matched in any order; one wrong letter is forgiven for words of five letters or more. 22 tests, all pass. The search is a plain index in the shop\'s own database: no new service to run.\n\nOUTCOME: MET']],
       runs: [{ by: bot.rook, at: 8 * 60 + 30, took: 106 * 60, tokens: [505_000, 44_000, 3_300_000], ok: true }] },
     { check: 'search', project: project.shop, by: bot.sable, status: 'done', made: 6 * 60 + 40, started: 6 * 60 + 35, ended: 5 * 60 + 55,
       said: [[bot.sable, 5 * 60 + 55, '## OUTCOME: PASS\n\n"anchr chain", "chain anchor" and the product code all find it. A search of one letter answers in 40 ms with 2,000 products.']],
       runs: [{ by: bot.sable, at: 6 * 60 + 35, took: 36 * 60, tokens: [101_000, 9_500, 330_000], ok: true }] },
+    { check: 'search', project: project.shop, by: bot.piper, status: 'done', made: 5 * 60 + 54, started: 5 * 60 + 53, ended: 5 * 60 + 51,
+      said: [[bot.piper, 5 * 60 + 51, '## VERDICT: PASS\n\nRead every changed line. The index is built in one migration and dropped in its undo. Nothing blocks it. Not blocking: the forgiving match lives in two places; one would do.']],
+      runs: [{ by: bot.piper, at: 5 * 60 + 53, took: 2 * 60, tokens: [64_000, 5_000, 180_000], ok: true }] },
+    // A hard call put to the ruler, and answered.
+    { key: 'skip', project: project.shop, title: 'Ruling: may search ship before the reviewer reads it?', by: bot.juno, status: 'done', made: 6 * 60 + 30, started: 6 * 60 + 28, ended: 6 * 60 + 10,
+      body: 'The checker passed it and the shop is busy this week. May it be merged now and reviewed after?',
+      said: [[bot.juno, 6 * 60 + 10, 'RULING: No. Search reads the buyers\' own data, so the reviewer reads it first. It is one short review, not a day.']],
+      runs: [{ by: bot.juno, at: 6 * 60 + 28, took: 9 * 60, tokens: [38_000, 4_000, 90_000], ok: true }] },
     { check: 'search', lead: true, project: project.shop, by: bot.marlow, status: 'in_progress', made: 5 * 60 + 50, started: 14,
       runs: [{ by: bot.marlow, at: 14, live: true }] },
 
@@ -188,18 +196,26 @@ function story(bot, project) {
     // Blocked on something only the owner has.
     { key: 'receipts', project: project.shop, title: 'Receipts: send one by email after every order', by: bot.wren, status: 'blocked', made: 7 * 60, started: 6 * 60 + 30,
       body: 'After an order is paid the buyer gets a receipt by email with the items, the total and a link back to the order.',
-      said: [[bot.wren, 5 * 60, 'Blocked. The receipt is built and its tests pass with a stand-in mailer, but there is no mail service connected to this yard, so I cannot send a real one. Connect one on the Connectors page and choose that I may use it, then reopen this job.']],
+      said: [[bot.wren, 5 * 60, 'Blocked. The receipt is built and its tests pass with a stand-in mailer, but there is no mail service connected to this yard, so I cannot send a real one. Connect one on the Connectors page and choose that I may use it, then reopen this job.\n\nOUTCOME: NOT MET']],
       runs: [{ by: bot.wren, at: 6 * 60 + 30, took: 58 * 60, tokens: [150_000, 13_000, 480_000], ok: true }] },
 
     // Waiting for a bot to be free, and for the owner to say go.
-    { key: 'align', project: project.shop, title: 'Order history: right-align the totals on a narrow phone', by: bot.wren, status: 'todo', made: 25 * 60, body: 'From Sable\'s note on the order history check.' },
-    { key: 'about', project: project.site, title: 'About page: say what the studio does in its first line', by: bot.rook, status: 'todo', made: 4 * 60, body: 'The page opens on a paragraph about values. Put what we make, and for whom, first.' },
-    { key: 'dark', project: project.kit, title: 'Colours: a night set that keeps every label readable', by: null, status: 'backlog', made: 40 * 60, body: 'Later. Needs the buttons job first.' },
+    { key: 'align', waits: 'checkout', project: project.shop, title: 'Order history: right-align the totals on a narrow phone', by: bot.wren, status: 'todo', made: 25 * 60, body: 'From Sable\'s note on the order history check.' },
+    { key: 'about', owner: true, project: project.site, title: 'About page: say what the studio does in its first line', by: bot.rook, status: 'todo', made: 4 * 60, body: 'The page opens on a paragraph about values. Put what we make, and for whom, first.' },
+    { key: 'dark', owner: true, project: project.kit, title: 'Colours: a night set that keeps every label readable', by: null, status: 'backlog', made: 40 * 60, body: 'Later. Needs the buttons job first.' },
     { key: 'compare', project: project.tides, title: 'Compare three sources of tide data: cost, cover and licence', by: bot.finch, status: 'todo', made: 20 * 60,
       body: 'A short table with a source for every claim. No building.', said: [[bot.marlow, 20 * 60 - 5, 'Finch is switched off until Gemini is signed in (Setup). This waits for him.']] },
 
+    // An idea from the researcher, approved by the ruler, and started by the lead.
+    { key: 'idea', project: project.shop, title: 'A printed tide calendar for each harbour, sold at the till', by: bot.juno, from: bot.finch, status: 'done', made: 40 * 60, started: 39 * 60, ended: 38 * 60,
+      body: 'Three chandleries nearby sell paper tide tables at the till. The shop could print one per harbour from the data the app already has.',
+      said: [[bot.finch, 40 * 60 - 1, 'Small to make, sells all year, and it points buyers to the app. One print shop quoted a fair price for fifty.'], [bot.juno, 38 * 60, 'RULING: APPROVED. One small step first: a page that prints a month for one harbour. Nothing is bought until the owner says so.']],
+      runs: [{ by: bot.juno, at: 39 * 60, took: 6 * 60, tokens: [30_000, 3_000, 70_000], ok: true }] },
+    { key: 'calendar', parent: 'idea', project: project.shop, title: 'Tide calendar: a page that prints one month for one harbour', by: bot.wren, status: 'todo', made: 37 * 60,
+      body: 'From the approved idea. One harbour, one month, on one sheet. No order is placed with a printer.' },
+
     // Called off.
-    { key: 'pdf', project: project.shop, title: 'Receipts as a PDF attached to the email', by: bot.rook, status: 'cancelled', made: 12 * 60, ended: 11 * 60, body: 'Dropped: the link back to the order is enough for now.' },
+    { key: 'pdf', owner: true, project: project.shop, title: 'Receipts as a PDF attached to the email', by: bot.rook, status: 'cancelled', made: 12 * 60, ended: 11 * 60, body: 'Dropped: the link back to the order is enough for now.' },
   ]
 }
 
@@ -312,10 +328,13 @@ export async function fillSampleYard({ store }, { dataDir, now = Date.now(), cre
     const job = call('POST', `/companies/${studio.id}/issues`, {
       title, description: item.body || (item.check ? `Check the build of ${of.identifier} against what the job asks for. Say PASS, or what blocks it.` : ''),
       projectId: item.project, ...(item.by ? { assigneeAgentId: item.by } : {}), status: item.status === 'backlog' ? 'backlog' : 'todo', priority: item.priority || 'medium',
-    }, { ago: item.made, as: item.check || item.fix ? bot.marlow : null })
+      ...(item.parent ? { parentId: jobs[item.parent].id } : {}),
+    }, { ago: item.made, as: item.owner ? null : item.from || bot.marlow })
     const key = item.key || (item.fix ? `fix:${item.fix}` : `${item.check}:${item.lead ? 'ruling' : 'check'}:${job.identifier}`)
     jobs[key] = { id: job.id, identifier: job.identifier, workTitle: of?.workTitle || item.title, status: item.status }
     for (const [who, ago, text] of item.said || []) call('POST', `/issues/${job.id}/comments`, { body: text }, { ago, as: who })
+    // A job that cannot go on until another one moves.
+    if (item.waits) call('PATCH', `/issues/${job.id}`, { blockedByIssueIds: [jobs[item.waits].id] }, { ago: item.made })
     if (item.status !== 'todo' && item.status !== 'backlog') call('PATCH', `/issues/${job.id}`, { status: item.status }, { ago: item.ended ?? item.started ?? item.made })
     date(job.id, {
       createdAt: iso(item.made), startedAt: item.started === undefined ? null : iso(item.started),
@@ -399,6 +418,12 @@ export async function fillSampleYard({ store }, { dataDir, now = Date.now(), cre
     kind: 'request_confirmation', title: `Merge ${jobs.offline.identifier}: a week of tides kept on the phone?`,
     payload: { prompt: 'It failed its first check (an empty screen past the stored week), was fixed, and passed the second. Merging puts it in the project\'s main line.', acceptLabel: 'Merge it', rejectLabel: 'Not yet' },
   }, { ago: 27, as: bot.marlow })
+
+  // ── the crew's scripts: notes they leave, signed so they are not taken for the owner's words ──
+  const note = (jobId, text, name, ago) => call('POST', `/issues/${jobId}/comments`, { body: `${text}\n\n<!-- yard-script: ${name} -->` }, { ago })
+  note(jobs.buttons.id, `${jobs.buttons.identifier} has waited over an hour for its check. The checker is on it now.`, 'Review guard', 20)
+  note(jobs.receipts.id, 'This job has been blocked for five hours. It waits on a mail service being connected.', 'Wait watch', 60)
+  note(chat.id, 'Health check: one free model is set aside until tomorrow; the others still answer.', 'Health check', 90)
 
   // ── what a helper keeps: the log of merges ──────────────────────────────────────────
   const crewDir = path.join(dataDir, 'crew')

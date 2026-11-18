@@ -4,6 +4,7 @@ import { View } from './yard/view.js'
 import { Yard } from './yard/yard.js'
 import { Shell } from './shell/shell.js'
 import { Studio } from './ui/studio.js'
+import { waitingCount } from './ui/needs-count.js'
 
 /**
  * Botyard's page: the yard drawn on a canvas, the panels over it, and the few things that join
@@ -52,6 +53,8 @@ studio = new Studio(shell.el, {
   redraw: () => stage.redraw(),
   refresh: () => ask(),
   toast: (text, kind) => shell.toast(text, kind),
+  // The crew map is the home: the yard is not drawn under it, so an idle page draws no frames.
+  homeChanged: (mode) => { stage.pause(mode === 'map'); if (mode === 'yard') view.whole({ glide: false }) },
 })
 
 // ── settings ───────────────────────────────────────────────────────────────────────
@@ -105,7 +108,8 @@ async function ask() {
       }
     }
     noticeCount()
-    stage.redraw()
+    if (studio.home === 'map') studio.crewMap.refresh()
+    else stage.redraw()
   } finally {
     asking = false
   }
@@ -209,6 +213,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '?') return void shell.toggleHelp()
   if (key === '+' || key === '=') return void view.zoom(0.8)
   if (key === '-') return void view.zoom(1.25)
+  if (key === 'm' && studio.on) return void studio.setHome(studio.home === 'map' ? 'yard' : 'map')
   if (key === 'n') return void nextBot()
   if (key === 'h') return void shell.toggleUi()
   if (key === 's') return void shell.toggleSettings()
@@ -227,7 +232,8 @@ function savePicture() {
 
 let waiting = 0
 function noticeCount() {
-  const now = (studio._cards || studio._needs || []).filter((a) => !a.read && !a.archived).length
+  // THE Needs-you number (ui/needs-count.js): the same on the badge, the crew map and the phone.
+  const now = waitingCount(studio._cards || studio._needs || [])
   document.title = now ? `(${now}) Botyard` : 'Botyard'
   if (now > waiting && document.hidden && settings.get('notify') && globalThis.Notification?.permission === 'granted') {
     try { new Notification('Botyard', { body: now === 1 ? 'One thing waits for you.' : `${now} things wait for you.`, tag: 'botyard-waiting' }) } catch { /* the system may refuse */ }
@@ -267,7 +273,13 @@ async function show(name, id = '') {
   studio.closeSheet()
   studio.show(null)
   const m = studio.view.manager
+  if (name === 'crew' || name === 'crew-night') {
+    settings.set('shift', name === 'crew' ? 'day' : 'night')
+    studio.setHome('map', { quiet: true })
+    return settle(1200)
+  }
   if (name === 'map' || name === 'night' || name === 'night-map') {
+    studio.setHome('yard', { quiet: true })
     settings.set('shift', name === 'map' ? 'day' : 'night')
     view.whole({ glide: false })
     if (name === 'night') studio.show('work')

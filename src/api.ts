@@ -292,6 +292,40 @@ export const hello = (c: Connection) => call<{ away: string | null; edge?: Edge 
 
 export const getSummary = (c: Connection) => call<Summary>(c, '/summary');
 export const getManager = (c: Connection) => call<Manager>(c, '/manager');
+
+export type FlowWindow = 'now' | '24h' | '7d';
+export type FlowKind = 'order' | 'brief' | 'report' | 'check' | 'verdict' | 'ask' | 'ruling' | 'idea' | 'approval' | 'start' | 'card' | 'notice' | 'wait';
+export type FlowRole = 'lead' | 'ruler' | 'reviewer' | 'builder' | 'checker' | 'researcher' | 'general';
+export type FlowStatus = 'working' | 'waiting' | 'free' | 'resting' | 'paused' | 'error';
+export type FlowOwner = { id: 'owner'; kind: 'owner'; name: string; role: 'owner'; roleName: string; needs: number };
+export type FlowBot = {
+  id: string; kind: 'bot'; name: string; title: string; role: FlowRole; roleName: string;
+  look: { colour: string; build: string; gear: string[]; hat: string; face: string };
+  reportsTo: string | null; under: string; model: string; engine: string; status: FlowStatus; why: string;
+  job: null | { id: string; ref: string; title: string; stage: string; project: string; projectId: string };
+  runsToday: number; failedToday: number; week: { tokens: number; share: number | null }; met: number; notMet: number;
+};
+export type FlowScript = { id: string; kind: 'script'; name: string; role: 'script'; roleName: string; notices: number; last: number };
+export type FlowNode = FlowOwner | FlowBot | FlowScript;
+export type FlowEdge = {
+  id: string; kind: FlowKind; from: string; to: string; count: number; failed: number; last: number; lastFailed: boolean;
+  messages: { at: number; failed: boolean; text: string; job: null | { id: string; ref: string; title: string } }[];
+};
+/** The crew map: who leads, who reports to whom, and the typed message lines between them. */
+export type Flow = {
+  at: number; window: FlowWindow; since: number; needs: number; nodes: FlowNode[]; edges: FlowEdge[];
+  lanes: { id: string; name: string; rank: number; open: number; running: number; bots: string[] }[];
+  kinds: { kind: string; label: string; says: string }[];
+};
+/** The crew map, or null when the studio does not have one yet: the phone then draws the plain crew. */
+export async function getFlow(c: Connection, window: FlowWindow): Promise<Flow | null> {
+  try {
+    const flow = await call<Flow>(c, `/flow?window=${window}`);
+    return flow && Array.isArray(flow.nodes) && Array.isArray(flow.edges) ? flow : null;
+  } catch {
+    return null;
+  }
+}
 export const getJob = (c: Connection, id: string) => call<JobDetail>(c, `/jobs/${id}`);
 export const getRoutines = (c: Connection) => call<{ routines: Routine[] }>(c, '/routines');
 export const getModels = (c: Connection) => call<Models>(c, '/models');

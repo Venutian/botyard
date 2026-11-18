@@ -46,7 +46,9 @@ const VIEW_WAIT_MS = 25_000
  * `needs` is how much more text the view must put on the page before it counts as filled.
  */
 export const SHOTS = [
-  { name: 'map', file: 'map.png', what: 'the map: the yard with its crew at work', view: 'map', clicks: [], needs: 0 },
+  { name: 'crewmap', file: 'crew-map.png', what: 'the crew map: who leads, who does what, who tells whom', view: 'crew', clicks: [], needs: 0 },
+  { name: 'crewmap-night', file: 'crew-map-night.png', what: 'the crew map after dark', view: 'crew-night', clicks: [['[data-act="shift"]']], needs: 0, fewer: true, pause: 1500 },
+  { name: 'map', file: 'map.png', what: 'the map: the yard with its crew at work', view: 'map', clicks: [['[data-home="yard"]']], needs: 0, fewer: true },
   { name: 'needs', file: 'needs-you.png', what: 'Needs you: what waits for the owner', view: 'needs', clicks: [['[data-tab="attention"]']], needs: 60 },
   { name: 'job', file: 'job.png', what: 'a job with a question from its bot', view: 'job', clicks: [['[data-tab="work"]'], ['[data-line] >> checkout', '.line[data-line]:not(.done)', '[data-line]']], needs: 200 },
   { name: 'run', file: 'run.png', what: 'one run: how it ended, what it used, what the bot did', view: 'run', clicks: [['[data-tab="runs"]'], ['[data-act="open-run"]:not(.failed)', '[data-act="open-run"]']], needs: 200 },
@@ -152,7 +154,7 @@ const LOOK = `(() => {
     .filter((el) => /help|shortcut|keys|welcome|got it/i.test((el.id || '') + ' ' + el.className + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.innerText || '').slice(0, 300)))
   const busy = [...document.querySelectorAll('.loading, .spinner, [aria-busy="true"]')].filter(shown).length
   const canvas = document.querySelector('canvas')
-  return { text: document.body.innerText.length, inTheWay: inTheWay.length ? (inTheWay[0].innerText || '').trim().slice(0, 60) : '', busy, canvas: Boolean(canvas && canvas.width > 300), ready: Boolean(window.botyard) && document.querySelectorAll('[data-tab], nav button').length > 0 }
+  return { text: document.body ? document.body.innerText.length : 0, inTheWay: inTheWay.length ? (inTheWay[0].innerText || '').trim().slice(0, 60) : '', busy, canvas: Boolean(canvas && canvas.width > 300), ready: Boolean(window.botyard) && document.querySelectorAll('[data-tab], nav button').length > 0 }
 })()`
 
 /** Wait until the page has stopped changing; gives what it looks like then. */
@@ -209,7 +211,8 @@ async function take(browser, base, shot, outDir) {
       }
     }
     if (shot.pause) await sleep(shot.pause)
-    const look = await settled(page, { until: (now) => now.text >= before + shot.needs, why: `"${shot.what}"` }).catch((err) => { throw new Error(`${err.message}: the view is empty or still loading`) })
+    // A view that replaces the home's own words (the yard after the crew map) says less, not more: it only has to say something.
+    const look = await settled(page, { until: (now) => (shot.fewer ? now.text > 300 : now.text >= before + shot.needs), why: `"${shot.what}"` }).catch((err) => { throw new Error(`${err.message}: the view is empty or still loading`) })
     if (look.inTheWay) throw new Error(`a sheet is in the way ("${look.inTheWay}…")`)
     const { data } = await page.cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     const bytes = Buffer.from(data, 'base64')

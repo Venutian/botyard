@@ -59,3 +59,13 @@ export function withCardState(items = [], store = readCards()) {
     return { ...item, key, read: Boolean(store.read[key]), archived: Boolean(store.archived[key]) }
   })
 }
+
+/**
+ * The cards that wait for the owner's answer: an approval or a question, not archived. This is THE
+ * "Needs you" number: the badge, the crew map's owner node, the bay tags, the sheet and the phone all
+ * show it, so the owner never sees two counts for one thing. Run failures, blocked jobs and stale work
+ * are not in it: the owner cannot answer them, so they are listed under "Also going on".
+ */
+export const DECISION_KINDS = new Set(['approval', 'question'])
+export const isDecision = (item = {}) => DECISION_KINDS.has(item.kind)
+export const waitingCount = (items = []) => items.filter((item) => isDecision(item) && !item.archived).length

@@ -179,6 +179,7 @@ function needsYou({ approvals, attention, issues, names, projects, failedRuns })
     kind: 'approval',
     id: a.id,
     title: a.payload?.title || a.payload?.name || a.type,
+    botId: a.requestedByAgentId || '',
     detail: a.requestedByAgentId ? `Asked by ${names.get(a.requestedByAgentId) || 'a bot'}` : '',
   }))
   const noticed = (...kinds) => attention.filter((item) => kinds.includes(item.sourceKind))
@@ -189,6 +190,7 @@ function needsYou({ approvals, attention, issues, names, projects, failedRuns })
         kind: issue.status === 'blocked' ? 'blocked' : 'review',
         id: issue.id,
         title: `${refOf(issue, projects)} ${withRefs(issue.title)}`.trim(),
+        botId: issue.assigneeAgentId || '',
         detail: names.get(issue.assigneeAgentId) || '',
       })
     }

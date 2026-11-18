@@ -23,6 +23,7 @@ import { companySettings, inviteMember, revokeInvite } from './lib/company.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { fromOwnPage, ownHost, readBytes, readJson, sendJson } from './lib/page-guard.mjs'
 import { savedStore } from './lib/saved.mjs'
+import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = process.env.BOTYARD_DATA || dataDir()
@@ -60,6 +61,9 @@ const readRawBody = (req, limit) => readBytes(req, limit).catch((err) => { throw
 /** An answer to a change the map itself shows: its own view is worked out again on the next poll. */
 const changed = (res, status, body) => { staleStudioView(); return send(res, status, body) }
 
+/** The cards the engine's summary lists, read through the flow's ten-second keep (lib/flow.mjs). */
+const needsNow = () => needsList({ read: async () => (await studioSummary()).needsYou })
+
 /** The request came over loopback — from this computer, not another device on the network. */
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const fromThisMachine = (req) => LOOPBACK.has(req.socket?.remoteAddress)
@@ -81,7 +85,10 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio/chats' && read) return send(res, 200, { chats: await chatList() })
     if (url.pathname === '/api/studio/settings' && read) return send(res, 200, readGuard(guardFolder()))
     // What only the phone app could do before: the map is now the whole studio on this machine.
-    if (url.pathname === '/api/studio/needs' && read) return send(res, 200, { needs: withCardState((await studioSummary()).needsYou) })
+    // Kept ten seconds and worked out again as soon as a job, a comment or a card moves: it took about 340 ms.
+    if (url.pathname === '/api/studio/needs' && read) return send(res, 200, { needs: withCardState(await needsNow()) })
+    // The crew map: who tells whom, from the store (lib/flow.mjs).
+    if (url.pathname === '/api/studio/flow' && read) return send(res, 200, await crewFlow({ window: url.searchParams.get('window') || '24h', needs: async () => withCardState(await needsNow()) }))
     if (url.pathname === '/api/studio/models' && read) return send(res, 200, await readModels({ folder: crewFolder(), agents: () => agentModels() }))
     if (url.pathname === '/api/studio/usage' && read) {
       // Every part may be missing (no crew scripts, no key, the engine slow): the list then shows less.
@@ -95,7 +102,11 @@ async function studioRoute(req, res, url) {
     }
     // The crew in full: bots, their runs, the activity timeline, and what it all used.
     const q = (name) => url.searchParams.get(name) || ''
-    if (url.pathname === '/api/studio/bots' && read) return send(res, 200, await botList())
+    // The crew with its week from the flow: share of the Claude week and MET / NOT MET (lib/flow.mjs).
+    if (url.pathname === '/api/studio/bots' && read) {
+      const [list, week] = await Promise.all([botList(), crewFlow({ window: '7d', needs: async () => withCardState(await needsNow()) }).catch(() => null)])
+      return send(res, 200, withWeek(list, week))
+    }
     if (url.pathname === '/api/studio/bot' && read) return send(res, 200, await botPage(q('id')))
     if (url.pathname === '/api/studio/runs' && read) return send(res, 200, await runList({ bot: q('bot'), status: q('status'), page: Number(q('page')) || 0 }))
     if (url.pathname === '/api/studio/run' && read) return send(res, 200, await runDetail(q('id')))
@@ -141,6 +152,8 @@ async function studioRoute(req, res, url) {
     }
     if (read) return send(res, 404, { error: 'Unknown endpoint' })
     if (!fromThisMachine(req)) return send(res, 403, { ok: false, error: 'The crew only takes orders from the computer Botyard runs on' })
+    // Every write below changes a job, a comment, a card or a bot: the kept flow and cards go with it.
+    dropFlow()
     // A file for a job comes as its own bytes, named in the address.
     if (url.pathname === '/api/studio/attach' && req.method === 'POST') {
       const bytes = await readRawBody(req, MAX_ATTACH_BYTES)

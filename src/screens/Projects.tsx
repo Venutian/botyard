@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   rank: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 60, paddingHorizontal: 14, paddingVertical: 9 },
   number: { textAlign: 'center', width: 22 },
   open: { justifyContent: 'center', minHeight: 44 },
-  move: { alignItems: 'center', borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, height: 40, justifyContent: 'center', width: 40 },
+  move: { alignItems: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, height: 44, justifyContent: 'center', width: 44 },
   goal: { borderLeftWidth: 3, borderRadius: 14, gap: 10, marginBottom: 14, padding: 14 },
   goalHead: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   goalPart: { gap: 2 },

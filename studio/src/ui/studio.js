@@ -1,5 +1,8 @@
 import './studio.css'
 import './plates.css'
+import './crew-map.css'
+import { CrewMap } from './crew-map.js'
+import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
@@ -93,11 +96,12 @@ function since(at, now = Date.now()) {
 const clock = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 const BOT_STATE = { running: 'Working', idle: 'Free', paused: 'Paused', error: 'Stopped on an error' }
-const STEP_NAMES = ['Build', 'Check', 'Ruling', 'Merge', 'Push']
+// The third step is the lead's own check: called a ruling only when a bot whose role is ruler makes it.
+const STEP_NAMES = ['Build', 'Check', 'Final check', 'Merge', 'Push']
 /** Where a job stands, in a word, and its colour: the row says it instead of five unlabelled dots. */
 const STAGE = {
   queued: ['Waiting', 'wait'], build: ['Building', 'go'], fix: ['Fixing', 'go'], check: ['Checking', 'look'],
-  ruling: ['Ruling', 'look'], blocked: ['Blocked', 'bad'], failed: ['Failed', 'bad'], merge: ['To merge', 'ok'],
+  ruling: ['Checking', 'look'], ruled: ['Ruling', 'look'], blocked: ['Blocked', 'bad'], failed: ['Failed', 'bad'], merge: ['To merge', 'ok'],
   push: ['To push', 'ok'], done: ['Done', 'ok'], stopped: ['Stopped', 'bad'], replaced: ['Replaced', 'wait'],
   passed: ['Passed', 'ok'], built: ['Built', 'ok'], merged: ['Merged', 'ok'], pushed: ['Pushed', 'ok'], kept: ['Kept here', 'ok'],
 }
@@ -239,6 +243,7 @@ const TEMPLATE = `
 <header class="studio-top panel">
   <strong class="mark">Botyard</strong>
   <p class="studio-state"></p>
+  <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button></div>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
   <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
   <button class="btn icon ghost" data-act="shift" title="Day plates or night plates">${ICONS.shift}</button>
@@ -379,6 +384,8 @@ export class Studio {
       const step = e.target.closest('[data-first-step]')?.dataset.firstStep
       if (step) return this.openFirst(step)
       const act = e.target.closest('[data-act]')?.dataset.act
+      const home = e.target.closest('[data-home]')?.dataset.home
+      if (home) return this.setHome(home)
       if (act === 'new-job') return this._beside(() => this.openNewJob())
       if (act === 'shift') return this._shift()
       if (act === 'usage') return this.usageOpen ? this.closeUsage() : this.openUsage()
@@ -394,6 +401,31 @@ export class Studio {
       if (bot) this.actions.pickBot(bot)
     })
     this._mountDeck()
+    this.crewMap = new CrewMap(this.root, {
+      openBot: (id) => { this.openScreen('bots'); this._beside(() => this.openBot(id)) },
+      openNeeds: () => this.show('attention'),
+      openJob: (id) => this._beside(() => this.openJob(id)),
+      openProject: (name) => this.openProject(name),
+      faces: () => this.view?.faces || {},
+      // The owner's plate and the badge show one number: when the map's differs, the cards are read again.
+      needsSeen: (n) => { if (this._needs && n !== waitingCount(this._needs) && Date.now() - (this._needsAt || 0) > 2000) this._loadNeeds() },
+    })
+    let home = 'map'
+    try { home = localStorage.getItem('botyard.home') === 'yard' ? 'yard' : 'map' } catch { /* storage off */ }
+    this.setHome(home, { quiet: true })
+  }
+
+  /**
+   * The home view: the crew map (who does what, who tells whom) or the 3D yard. The yard is not drawn while
+   * the map is the home, so the page draws nothing while the owner only looks.
+   */
+  setHome(mode) {
+    this.home = mode === 'yard' ? 'yard' : 'map'
+    this.root.classList.toggle('map-home', this.home === 'map')
+    for (const b of this.top.querySelectorAll('[data-home]')) b.setAttribute('aria-pressed', String(b.dataset.home === this.home))
+    this.crewMap.show(this.home === 'map')
+    try { localStorage.setItem('botyard.home', this.home) } catch { /* storage off */ }
+    this.actions.homeChanged?.(this.home)
   }
 
   /** The rail: the map's own entries, then the owner's own pages (server/lib/own-pages.mjs). */
@@ -682,6 +714,7 @@ export class Studio {
     this.cur = A
     A.el.hidden = false
     A.el.classList.remove('wide')
+    A.el.classList.toggle('tab-wide', tab === 'work' || tab === 'attention')
     const body = A.el.querySelector('.sheet-body')
     body.classList.add('studio-body')
     this.root.classList.add('studio-open')
@@ -810,13 +843,15 @@ export class Studio {
     this._cards = all
     const live = all.filter((a) => !a.archived)
     const archived = all.filter((a) => a.archived)
+    this._alsoHtml = ''
     if (!all.length) return ''
     const KIND = { approval: 'Wants your yes or no', question: 'Asks you', blocked: 'Blocked', review: 'To review', failed: 'Failed' }
     const card = (a) => {
       const n = all.indexOf(a)
+      // One action: Archive. Opening a card marks it read; the phone does the same.
       const sort = `<span class="sort">${a.archived
         ? `<button class="btn ghost small" data-act="card" data-card="${n}" data-archived="false" title="Back to the list">Restore</button>`
-        : `<button class="btn ghost small" data-act="card" data-card="${n}" data-read="${!a.read}" title="${a.read ? 'Show as new again' : 'Mark as read'}">${a.read ? 'Mark unread' : 'Mark read'}</button><button class="btn ghost small" data-act="card" data-card="${n}" data-archived="true" title="Put away; it comes back if anything new is asked">Archive</button>`}</span>`
+        : `<button class="btn ghost small" data-act="card" data-card="${n}" data-archived="true" title="Put away; it comes back if anything new is asked">Archive</button>`}</span>`
       const tone = { approval: 'warn', question: 'warn', review: 'look', blocked: 'bad', failed: 'bad' }[a.kind] || ''
       const label = `<span class="kind">${a.read ? '' : '<i class="new" aria-label="New"></i>'}<span class="state ${tone}">${esc(KIND[a.kind] || a.kind)}</span>${a.times > 1 ? ` ${a.times} times` : ''}</span><b>${esc(plainWords(a.title))}</b>${a.detail ? `<small>${esc(plainWords(a.detail))}${a.runs ? ` Its runs failed ${a.runs} time${a.runs === 1 ? '' : 's'}.` : ''}</small>` : ''}`
       // Only what waits for the owner's own answer wears the stripes; the rest is news to look at.
@@ -836,9 +871,18 @@ export class Studio {
       const goLine = go ? `<small class="go">${esc(go)} →</small>` : ''
       return `<div class="${cls}" data-card="${n}">${open ? `<button class="ask-open" ${open}>${label}${goLine}</button>` : `<div class="ask-open">${label}</div>`}${sort}</div>`
     }
-    const unread = live.filter((a) => !a.read).length
-    return (unread > 1 ? '<button class="btn ghost small all-read" data-act="cards-read">Mark all read</button>' : '')
-      + live.map(card).join('')
+    // "Needs you" holds only what waits for the owner's answer; the rest is news, listed under "Also going on".
+    const decide = live.filter(isDecision)
+    const other = live.filter((a) => !isDecision(a))
+    this._alsoHtml = other.map((a) => {
+      const n = all.indexOf(a)
+      const stopped = !a.id && !a.botId && a.kind === 'failed' ? this.view?.manager.bots.find((b) => b.name === a.title) : null
+      const open = a.kind !== 'question' && a.botId && !a.id ? `data-bot="${esc(a.botId)}"` : stopped ? `data-act="open-bot" data-id="${esc(stopped.id)}"` : a.id ? `data-line="${esc(a.id)}"` : ''
+      const tone = { review: 'look', blocked: 'bad', failed: 'bad' }[a.kind] || 'info'
+      const words = `<span class="state ${tone}">${esc(KIND[a.kind] || a.kind)}</span> ${esc(plainWords(a.title))}${a.times > 1 ? ` (${a.times} times)` : ''}`
+      return open ? `<button type="button" class="also" data-card="${n}" ${open}>${words}</button>` : `<p class="also" data-card="${n}">${words}</p>`
+    }).join('')
+    return decide.map(card).join('')
       + (archived.length ? `<details class="archived-cards"><summary>Archived (${archived.length})</summary>${archived.map(card).join('')}</details>` : '')
   }
 
@@ -941,7 +985,7 @@ setView(view) {
     // The whole sentence where there is room; on a narrow window, only how many are at work.
     const busy = m.bots.filter((b) => b.status === 'running').length
     // What waits for the owner is counted once: the top bar says the same number as the bell and the bays.
-    const waiting = (this._cards || this._needs || []).filter((a) => !a.read && !a.archived).length
+    const waiting = waitingCount(this._cards || this._needs || [])
     const said = m.state.replace(/ \d+ things? needs? a look\./, '') + (waiting ? ` ${waiting} ${waiting === 1 ? 'thing waits' : 'things wait'} for you.` : '')
     // Pairing a phone is optional: it never keeps the top bar asking on its own.
     const left = (this._first?.left || []).filter((s) => s !== 'phone')
@@ -995,13 +1039,14 @@ setView(view) {
 
   _putDock() {
     const m = this.view.manager
-    // The badge counts what Needs you lists as new, so the two never disagree.
-    const unread = (this._cards || this._needs || []).filter((a) => !a.read && !a.archived)
+    // The badge is THE Needs-you number: cards that wait for the owner's answer (lib/cards.mjs), the same on
+    // the crew map's owner plate, the bay tags, the sheet and the phone.
+    const waiting = waitingCount(this._cards || this._needs || [])
     const counts = {
-      attention: unread.length || m.trouble.filter((t) => t.level === 'bad').length,
+      attention: waiting,
       work: m.lines.filter((l) => l.open && !this._cleared.has(l.id)).length,
     }
-    const urgent = m.trouble.some((t) => t.level === 'bad') || unread.some((a) => a.kind === 'approval' || a.kind === 'question')
+    const urgent = waiting > 0
     const A = this.cols.a
     const here = A.el.hidden ? '' : A.screen || this.tab
     const items = this._dockItems()
@@ -1036,6 +1081,8 @@ setView(view) {
     if (!this.tab || !this.view || this.cols.a.screen) return
     const m = this.view.manager
     const A = this.cols.a.el
+    // The Work list is wider than the others: a job's title reads on one or two lines, not cut short.
+    A.classList.toggle('tab-wide', this.tab === 'work' || this.tab === 'attention')
     // A list's name and what it is for go in the column's own head, which stays put while the list scrolls.
     const head = (title, sub = '') => {
       A.querySelector('.col-head strong').textContent = title
@@ -1044,9 +1091,12 @@ setView(view) {
     }
     let html = ''
     if (this.tab === 'attention') {
-      html = head('Needs you', 'Your answers and approvals first, then what is going wrong') + this._asks() + (m.trouble.length
-        ? (this._needs?.length ? '<h3>Also going on</h3>' : '') + m.trouble.map((t) => `<p class="trouble ${esc(t.level)}"><i></i>${esc(t.text)}</p>`).join('')
-        : this._needs?.length ? '' : '<p class="none">Nothing needs you. The crew is getting on with it.</p>')
+      const asks = this._asks()
+      const waiting = waitingCount(this._cards || [])
+      const also = (this._alsoHtml || '') + m.trouble.map((t) => `<p class="trouble ${esc(t.level)}"><i></i>${esc(t.text)}</p>`).join('')
+      html = head('Needs you', waiting ? `${waiting} ${waiting === 1 ? 'card waits' : 'cards wait'} for your answer` : 'Your answers and approvals')
+        + (waiting ? asks : `<p class="none">Nothing waits for your answer. The crew is getting on with it.</p>${asks}`)
+        + (also ? `<h3>Also going on</h3>${also}` : '')
         + (m.feed.length ? `<h3>Lately</h3>${m.feed.slice(0, SHOWN_FEED).map((f) => `<p class="event ${esc(f.kind)}"><time>${clock(f.at)}</time>${esc(f.text)}</p>`).join('')}` : '')
     } else if (this.tab === 'work') {
       const done = m.lines.filter((l) => !l.open).slice(0, 10)
@@ -1209,7 +1259,7 @@ setView(view) {
         </div>`
         : `<div class="row"><button class="line ${l.late ? 'late' : ''}" style="${l.bot ? botStyle(l.bot) : ''}" data-line="${esc(l.id)}" data-job="${esc(l.ref)}" data-bot="${esc(m.bots.find((b) => b.name === l.bot)?.id || '')}">
         <span class="ref">${esc(l.ref)}</span><span class="title">${esc(l.title)}</span>
-        <span class="stage ${esc(STAGE[l.stage]?.[1] || '')}" title="${esc(l.steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', '))}">${esc(STAGE[l.stage]?.[0] || l.stage)}</span>
+        <span class="stage ${esc(STAGE[l.pill || l.stage]?.[1] || '')}" title="${esc(l.steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', '))}">${esc(STAGE[l.pill || l.stage]?.[0] || l.stage)}</span>
         <span class="note">${esc(noteOf(l))}</span>
       </button>${CLEARABLE.has(l.stage) ? `<button class="clear" data-clear="${esc(l.id)}" title="Clear ${esc(l.ref)}: no longer needed" aria-label="Clear ${esc(l.ref)}">${CLOSE_ICON}</button>` : ''}</div>`)).join('')
       : `<p class="none">${none}</p>`
@@ -1271,6 +1321,7 @@ setView(view) {
     const same = col.screen === id
     if (!same) this._leaveOwnPage(col)
     col.el.classList.toggle('wide', wide)
+    col.el.classList.remove('tab-wide')
     col.screen = id
     if (col === this.cols.a) { this.tab = null; this.root.classList.add('studio-open') }
     const body = col.el.querySelector('.sheet-body')
@@ -2188,7 +2239,8 @@ setView(view) {
     // not about a job (a question in a chat), on the bay the asking bot stands in, else the depot.
     const depot = this.view.depot
     for (const need of this._needs || []) {
-      if (need.archived) continue
+      // THE Needs-you number, split by bay: only cards that wait for the owner's answer.
+      if (need.archived || !isDecision(need)) continue
       const asker = m.bots.find((b) => b.id === need.botId)
       const home = need.project || (asker?.job && m.projects.find((p) => p.id === asker.projectId)?.name) || depot
       if (home) of(home).you++
@@ -2525,6 +2577,7 @@ setView(view) {
     if (act === 'confirm-yes') { const yes = this._confirmFn; this._confirmAsk(null); yes?.(); return true }
     if (act === 'confirm-no') { this._confirmAsk(null); return true }
     if (act === 'open-bot') { this._go(() => this.openBot(id)); return true }
+    if (act === 'crew-map') { this.closeSheet(); this.closeSheet(); this.setHome('map'); return true }
     if (act === 'open-run') { this._go(() => this.openRun(id)); return true }
     if (act === 'open-job') { this._go(() => this.openJob(id)); return true }
     if (act === 'models') { this._go(() => this.openMoney()); return true }
@@ -2631,7 +2684,7 @@ setView(view) {
   }
 
   openBots() {
-    this._openSheet('bots', 'Crew', 'Who runs on what, and whose runs are wasted', { wide: true })
+    this._openSheet('bots', 'Crew', 'Who runs on what, its share of the Claude week, and how its work ended', { wide: true })
     this._reopen = () => this.openBots()
     const seq = ++this._sheetSeq
     this._fill('bots', seq, () => call('/api/studio/bots'), (list) => botsScreen(list, this._liveBots(), (b) => this._face(b)))

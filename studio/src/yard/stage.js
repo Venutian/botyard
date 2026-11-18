@@ -93,6 +93,16 @@ export class Stage {
     if (this.veil) this.veil.dataset.hour = hour
   }
 
+  /**
+   * Stop drawing while another view is the home (the crew map), and draw once on coming back. Nothing
+   * else changes: the yard keeps its data, so the switch back is instant.
+   */
+  pause(on) {
+    this.paused = Boolean(on)
+    this.canvas.style.display = on ? 'none' : ''
+    if (!on) this.redraw()
+  }
+
   /** Something in the yard was built, moved or relit: its shadows are drawn again with the next picture. */
   reshade() {
     this.renderer.shadowMap.needsUpdate = true
@@ -101,7 +111,7 @@ export class Stage {
 
   /** Ask for one drawing. Any number of asks before the next frame make one drawing. */
   redraw() {
-    if (this._asked) return
+    if (this._asked || this.paused) return
     this._asked = true
     requestAnimationFrame((now) => {
       this._asked = false

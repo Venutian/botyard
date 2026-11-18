@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChatBot, Connection, getChats } from './api';
+import { ChatBot, Connection, getChats, NeedsYou } from './api';
 
 const REFRESH_MS = 20_000;
 
@@ -73,3 +73,8 @@ export const leadOf = <B extends { id: string; role?: string }>(bots: B[] | null
 export const handsOf = <B extends { id: string; role?: string }>(bots: B[] | null) => (bots ?? []).filter((bot) => bot.role !== 'lead');
 /** `replace` swaps the top screen, and steps back instead when that route is already underneath. */
 export type Nav = { push: (route: Route) => void; back: () => void; replace: (route: Route) => void };
+
+/** A card that waits on the owner's answer: an approval or a question. */
+export const isDecision = (n: Pick<NeedsYou, 'kind'>) => n.kind === 'approval' || n.kind === 'question';
+/** The one Needs-you number everywhere: decision cards that are not archived. */
+export const waitingCount = (items: Pick<NeedsYou, 'kind' | 'archived'>[]) => items.filter((n) => isDecision(n) && !n.archived).length;

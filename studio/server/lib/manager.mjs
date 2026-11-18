@@ -228,6 +228,8 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
       projectId: work.projectId || '',
       bot: who.build,
       stage,
+      // The pill: "Checking" while the lead checks, "Ruling" only when a bot whose role is ruler is on it.
+      pill: stage === 'ruling' && roles.get(latest(true)?.assigneeAgentId) === 'ruler' ? 'ruled' : stage,
       note,
       steps: STEPS.map((name) => steps[name].state),
       fixes,
@@ -242,9 +244,10 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
 }
 
 /** What each bot is doing this minute. A job marked running with no live run is said to be waiting. */
-function workingNow({ issues, names, projectNames, agents, liveAgents, now }) {
+function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), now }) {
   const models = new Map(agents.map((a) => [a.id, a.adapterConfig?.model || '']))
-  return issues.filter((i) => i.status === 'in_progress' && i.assigneeAgentId).map((issue) => {
+  // A run going on a job puts its bot in that job's bay, even before the job is marked in progress.
+  return issues.filter((i) => (i.status === 'in_progress' || (liveJobs.has(i.id) && i.status !== 'done' && i.status !== 'cancelled')) && i.assigneeAgentId).map((issue) => {
     const what = kindOf(issue.title)
     const since = stamp(issue.startedAt) || lastTouched(issue)
     return {
@@ -436,8 +439,14 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
 /** One sentence for the top of the screen. */
 function stateLine({ working, trouble, lines }) {
   const bad = trouble.filter((t) => t.level === 'bad').length
+  // The short title first and the code after it (the owner, 18 Nov 2026): "Lead checking Town kit LH-3".
+  const said = (w) => {
+    const checked = /^Checking ([A-Z]+-\d+)/.exec(w.stage || '')?.[1]
+    const verb = checked ? 'checking' : w.stage === 'Ruling' ? 'ruling on' : 'on'
+    return `${w.bot.split(' ')[0]} ${verb} ${short(w.title.replace(FIX, ''), 34)} ${checked || w.ref}`
+  }
   const doing = working.length
-    ? `${plural(working.length, 'bot is', 'bots are')} working: ${working.slice(0, 3).map((w) => `${w.bot.split(' ')[0]} ${/[A-Z]+-\d+/.test(w.stage || '') ? w.stage.toLowerCase().replace(/[a-z]+-\d+/, (ref) => ref.toUpperCase()) : `on ${w.ref}`}`).join(', ')}${working.length > 3 ? ' and more' : ''}`
+    ? `${plural(working.length, 'bot is', 'bots are')} working: ${working.slice(0, 3).map(said).join(', ')}${working.length > 3 ? ' and more' : ''}`
     : 'Nobody is working right now'
   const open = lines.filter((l) => l.open && !['build', 'check', 'ruling'].includes(l.stage)).length
   return `${doing}.${bad ? ` ${plural(bad, 'thing needs', 'things need')} a look.` : open ? ` ${plural(open, 'piece', 'pieces')} of work ${open === 1 ? 'is' : 'are'} waiting.` : ''}`
@@ -455,7 +464,8 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     const match = MERGED.exec(line.text)
     if (match) mergedAt.set(match[1], line.at)
   }
-  const working = workingNow({ issues, names, projectNames, agents, liveAgents, now })
+  const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
+  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, now })
   const lines = workLines({ issues, names, roles: new Map(agents.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now })
   const bots = botRows({ agents, issues, projectNames, liveAgents, working, files, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
