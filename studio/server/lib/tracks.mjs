@@ -48,7 +48,7 @@ export async function tripPage(id, options) {
   const request = await call(`/requests/${encodeURIComponent(trip.requestId)}`, options)
   const steps = trip.steps.map((s) => ({
     id: s.id, kind: s.kind, title: s.title, state: s.state, needs: s.needs, leaves: s.leaves, bot: s.bot || '', ruling: Boolean(s.ruling),
-    tries: s.tries.length, current: trip.current === s.id,
+    tries: s.tries.length, current: trip.current === s.id, ask: s.kind === 'gate' ? s.latest?.ask || null : null,
     verdict: s.latest?.snapshot?.verdict || '', findings: s.latest?.snapshot?.findings || '', summary: s.latest?.snapshot?.summary || '',
     leftNames: Object.keys(s.latest?.snapshot?.leaves || {}), left: s.latest?.snapshot?.leaves || {}, numbers: s.latest?.snapshot?.numbers || {},
     job: s.latest?.jobCode || '', jobId: s.latest?.jobId || '', note: s.latest?.inputs?.note || '', handedFindings: s.latest?.inputs?.findings || '',
@@ -59,7 +59,7 @@ export async function tripPage(id, options) {
     id: trip.id, status: trip.status, state: STATE_WORDS[trip.status] || trip.status, reason: trip.reason || '', current: trip.current, rounds: trip.rounds || {},
     track: trip.track, lines: trip.track.lines, steps, cost: dollars(trip.cost?.usd), costUsd: Number(trip.cost?.usd) || 0,
     request: requestRow(request), commit: trip.commit || '',
-    gate: gate ? { step: gate.id, title: gate.title, backTo: steps.slice(0, steps.indexOf(gate)).map((s) => ({ id: s.id, title: s.title })) } : null,
+    gate: gate ? { step: gate.id, title: gate.title, ask: gate.ask, backTo: steps.slice(0, steps.indexOf(gate)).map((s) => ({ id: s.id, title: s.title })) } : null,
     can: { pause: trip.status === 'running', resume: trip.status === 'paused', stop: !['done', 'stopped'].includes(trip.status), rerun: steps.map((s) => s.id) },
   }
 }

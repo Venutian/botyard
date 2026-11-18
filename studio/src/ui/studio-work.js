@@ -68,9 +68,16 @@ export function changesHtml(c) {
  * is open; `crew` and `projects` fill the edit form.
  */
 export function jobScreen(job, { line, steps, cards = '', bot, editing = false, crew = [], projects = [] }) {
-  const facts = [
+  // A request on a track is moved by its trip, not by a bot of its own: its state and who has it come from the trip.
+  const trip = line?.track && !['done', 'cancelled'].includes(job.status) ? line : null
+  const facts = trip ? [
+    ['State', `<span class="state ${trip.pill === 'waits' ? 'warn' : trip.stage === 'blocked' ? 'bad' : 'go'}">${trip.pill === 'waits' ? 'Waits for you' : trip.stage === 'blocked' ? 'Stuck' : 'On its track'}</span><small>${esc(trip.note)}</small>`],
+    ['Who', esc(trip.bot || (trip.pill === 'waits' ? 'You' : 'Nobody on its step yet')) + `<small>${trip.track.tripId ? `<button class="link" data-act="open-trip" data-id="${esc(trip.track.tripId)}">Open its trip: every step, what each said, what it cost</button>` : ''}</small>`],
+  ] : [
     ['State', `<span class="state ${STATE_CLASS[job.status] || ''}">${esc({ in_progress: 'Working', in_review: 'To review', blocked: 'Blocked', todo: 'Waiting', backlog: 'Backlog', done: 'Done', cancelled: 'Cancelled' }[job.status] || job.status)}</span>${job.run?.live ? `<small>Running now${job.run.bot ? `, ${esc(job.run.bot)}` : ''}</small>` : job.run?.why ? `<small class="bad">${esc(job.run.why)}</small>` : ''}`],
     ['Who', esc(job.bot || 'Nobody yet') + `<small>${esc(PRIORITY[job.priority] || job.priority)} priority${job.project ? `, ${esc(job.project)}` : ''}</small>`],
+  ]
+  facts.push(
     ...(job.engineRef && job.engineRef !== job.ref ? [['Engine code', `<small>${esc(job.engineRef)}</small>`]] : []),
     ...(job.parent ? [['Part of', link(job.parent)]] : []),
     ...(job.blockedBy?.length ? [['Waits on', job.blockedBy.map((b) => `${link(b)} <span class="dim">${esc(b.state)}</span>`).join('<br>')]] : []),
@@ -78,7 +85,7 @@ export function jobScreen(job, { line, steps, cards = '', bot, editing = false, 
     ...(job.cost?.runs ? [['Used', `${job.cost.tokens ? `${tokens(job.cost.tokens)} tokens in ` : ''}${job.cost.runs} run${job.cost.runs === 1 ? '' : 's'}, ${esc(duration(job.cost.seconds))}${job.cost.tokens ? '' : ' so far'}${job.cost.cents ? `, $${(job.cost.cents / 100).toFixed(2)}` : ''}${job.cost.withSubJobs && job.children?.length ? '<small>Its sub-jobs included</small>' : ''}`]] : []),
     ...(job.branch ? [['Branch', `<code>${esc(job.branch.name)}</code>${job.branch.changes ? `<small>${job.branch.changes.files} files, <span class="add">+${job.branch.changes.added}</span> <span class="del">−${job.branch.changes.removed}</span> <button class="link" data-act="job-changes">See the changes</button></small>` : ''}`]] : []),
     ...(job.previews?.length ? [['Play', job.previews.map((p) => (p.ok ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> <span class="dim">${esc(p.commit)}, ${esc(at(p.builtAt))}</span>` : `<span class="bad">${esc(p.name)} did not build</span>${p.note ? `<small>${esc(p.note.split('\n').slice(-2).join(' '))}</small>` : ''}`)).join('<br>')]] : []),
-  ]
+  )
   const open = !['done', 'cancelled'].includes(job.status)
   const acts = `<div class="acts">
     ${bot ? `<button class="btn" data-act="talk" data-id="${esc(bot.id)}">Talk to ${esc(bot.name.split(' ')[0])}</button>` : ''}

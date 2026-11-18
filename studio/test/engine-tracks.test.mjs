@@ -235,6 +235,47 @@ test('a blocked step fails with its words, and the next round starts from the la
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'aaa1111')
 })
 
+test('a gate with nothing to land says so: its yes sends the work back from the commit the findings name, its no stops it', async () => {
+  const SHA = '44a585bf9bd60064cfa56b214a688f7a92316a86'
+  for (const answer of ['accept', 'reject']) {
+    const { store, dataDir } = yard()
+    saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+    const io = fakeIo({})
+    const request = startRequest(store, 'co', { track: 'crew', title: 'Redesign the site', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+    const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+    await tick(1)
+    const tripId = store.row('SELECT id FROM trips').id
+    // The build stops at once: the work it should go on from is on another commit.
+    const build = workingJob(store, tripId, 'build')
+    const { addComment, settleCard } = await import('../server/engine/write.mjs')
+    addComment(store, build, { body: `Stopped: the fixes are in commit ${SHA}, which is not under this branch.` }, { now: T0, actor: { agent: 'b1' } })
+    store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', build), status: 'blocked' })
+    await tick(2)
+    assert.equal(tripView(store, tripId).current, 'decide')
+    const card = store.object("SELECT raw FROM cards WHERE status = 'pending'")
+    // The card names the request and says what each answer does: there is nothing to land.
+    assert.match(card.title, /^Your call: .*Redesign the site/)
+    assert.equal(card.payload.acceptLabel, 'Send it back to build')
+    assert.equal(card.payload.rejectLabel, 'Stop it')
+    assert.match(card.payload.prompt, /a step failed/)
+    assert.match(card.payload.prompt, /from 44a585bf9bd6, the commit the findings name/)
+    assert.match(card.payload.prompt, /Build starts again from 44a585bf9bd6.*There is nothing to land yet: no build passed/)
+    assert.match(card.payload.prompt, /Stop it: The request stops here and nothing is merged/)
+    settleCard(store, request.jobId, card.id, answer, answer === 'reject' ? { reason: 'Not now' } : {}, { now: T0 + 3000, actor: OWNER })
+    await tick(4)
+    if (answer === 'accept') {
+      // Back to the build, from the named commit, with the findings as its note.
+      const again = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build'))
+      assert.equal(again.startFrom, SHA)
+      assert.match(again.description, /not under this branch/)
+      assert.equal(tripView(store, tripId).status, 'running')
+    } else {
+      assert.equal(tripView(store, tripId).status, 'stopped')
+      assert.equal(store.object('SELECT raw FROM requests WHERE id = ?', request.id).status, 'stopped')
+    }
+  }
+})
+
 test('a track that delivers a change and leaves no commit is stuck, never done', async () => {
   const { store, dataDir } = yard()
   saveTrack(store, 'co', { key: 'nocommit', steps: [{ id: 'only', kind: 'script', command: 'ok' }, { id: 'decide', kind: 'gate' }], lines: [{ from: 'only', to: 'decide', on: 'fail' }] }, { actor: OWNER })

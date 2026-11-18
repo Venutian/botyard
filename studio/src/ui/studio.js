@@ -2512,7 +2512,7 @@ setView(view) {
       </form>`
     }
     if (card.kind === 'confirm') {
-      return `<div class="card" data-card="${esc(card.id)}">${head}<p><b>${esc(card.title)}</b></p>${card.question.prompt ? `<p>${esc(card.question.prompt)}</p>` : ''}
+      return `<div class="card" data-card="${esc(card.id)}">${head}<p><b>${esc(card.title)}</b></p>${card.question.prompt ? `<p class="prompt">${esc(card.question.prompt)}</p>` : ''}
         <div class="row"><button class="btn primary" data-verb="accept">${esc(card.question.accept)}</button><button class="btn ghost" data-verb="reject">${esc(card.question.reject)}</button></div></div>`
     }
     // A bot asked for a service: it is connected on the Connectors page, and the card is settled here.

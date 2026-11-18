@@ -1522,3 +1522,6 @@
   .studio-body .row .line .stage { grid-area: stage; }
   .studio-body .row .line .note { grid-area: note; }
 }
+
+/* A card's question keeps its own line breaks: what it is about, then what each answer does. */
+.studio-body .card p.prompt { white-space: pre-line; }

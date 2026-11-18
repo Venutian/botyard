@@ -463,16 +463,12 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     return { ...row, status: 'working', folder: dir, cwd, startedAt: iso(now) }
   }
   if (step.kind === 'gate') {
-    // The owner sees what the gate needs, what the step before it left, and any findings handed on.
     const order = version.steps.map((s) => s.id)
     const before = order.indexOf(step.id) > 0 ? latestRow(store, trip.id, order[order.indexOf(step.id) - 1]) : null
-    const named = [...new Set([...step.needs, ...Object.keys(before?.snapshot?.leaves || {}).filter((n) => !['workdir', 'branch'].includes(n)), ...(inputs.findings ? ['findings'] : [])])]
-    const shown = named.filter((n) => inputs[n] !== undefined).map((n) => `${n}: ${words(inputs[n], 600)}`).join('\n')
-    const card = createCard(store, request.jobId, {
-      kind: 'request_confirmation', title: `${step.title}`.slice(0, 500), summary: [step.words, shown].filter(Boolean).join('\n\n').slice(0, 4000),
-      continuationPolicy: 'none', idempotencyKey: `trip-step:${row.id}`, payload: { tripId: trip.id, stepId: step.id, rowId: row.id },
-    }, { now, actor: ENGINE })
-    return { ...row, status: 'working', cardId: card.id, startedAt: iso(now) }
+    const asked = gateCard(version, step, { ...row, beforeLeaves: before?.snapshot?.leaves || {} }, trip, request, inputs)
+    const card = createCard(store, request.jobId, asked, { now, actor: ENGINE })
+    // The trip's own page asks the same question in the same words as the card.
+    return { ...row, status: 'working', cardId: card.id, ask: { prompt: asked.payload.prompt, accept: asked.payload.acceptLabel, reject: asked.payload.rejectLabel }, startedAt: iso(now) }
   }
   // Another track: a trip of its own under this one, for the same request.
   const inner = store.object("SELECT raw FROM tracks WHERE company_id = ? AND key = ? AND status = 'active'", request.companyId, step.track)
@@ -482,6 +478,52 @@ async function startStep(store, trip, request, version, step, row, values, { dat
   if (missing.length) return { stuck: `Step "${step.id}" runs "${step.track}", which needs ${missing.join(', ')}` }
   const child = makeTrip(store, request, inner, innerVersion, { parentTripId: trip.id, parentStepRowId: row.id, inputs, now })
   return { ...row, status: 'working', childTripId: child.id, startedAt: iso(now) }
+}
+
+const lower = (title) => (title ? title.charAt(0).toLowerCase() + title.slice(1) : '')
+const upper = (title) => (title ? title.charAt(0).toUpperCase() + title.slice(1) : '')
+
+/**
+ * The owner's card at a gate: what is decided, why it waits for the owner, and what each answer does, in words.
+ * When the step after the gate cannot run (nothing to land: no build passed), a yes cannot mean "go on": it sends
+ * the work back to the step that makes the change (from the commit the findings name, when they name exactly one),
+ * and a no stops the request. Otherwise a yes goes on and a no sends the work back to the step before the gate.
+ */
+export function gateCard(version, step, row, trip, request, inputs) {
+  const order = version.steps.map((s) => s.id)
+  const at = order.indexOf(step.id)
+  const before = at > 0 ? version.steps[at - 1] : null
+  const passTo = version.lines.find((l) => l.from === step.id && (l.on === 'pass' || l.on === 'always'))
+  const next = passTo ? version.steps.find((s) => s.id === passTo.to) : null
+  const missing = next ? next.needs.filter((n) => inputs[n] === undefined || (n === 'commit' && !commitIn(inputs[n]))) : []
+  const maker = version.steps.slice(0, at).filter((s) => s.leaves.includes('commit')).at(-1) || before
+  const findings = inputs.findings ? words(inputs.findings, 1500) : ''
+  const named = [...new Set(String(findings).match(/\b[0-9a-f]{40}\b/g) || [])]
+  const blocked = Boolean(next && missing.length && maker)
+  const commit = commitIn(inputs.commit)
+  let yes, no, yesText, noText
+  if (blocked) {
+    const base = named.length === 1 ? named[0] : ''
+    yes = { label: `Send it back to ${lower(maker.title)}`, act: 'back', backTo: maker.id, ...(base ? { base } : {}) }
+    yesText = `${upper(maker.title)} starts again${base ? ` from ${base.slice(0, 12)}, the commit the findings name,` : ''} with the findings above as its note. There is nothing to ${lower(next.title)} yet: ${missing.includes('commit') ? 'no build passed' : `nothing left ${missing.join(', ')}`}.`
+    no = { label: 'Stop it', act: 'stop' }
+    noText = 'The request stops here and nothing is merged. Its jobs and branches are kept.'
+  } else {
+    yes = { label: next ? `Yes, ${lower(next.title)}` : 'Yes, finish it', act: 'pass' }
+    yesText = !next ? 'The request is finished.' : next.needs.includes('commit') && commit ? `${upper(next.title)}: ${commit.slice(0, 12)} is merged as it is.` : `The track goes on to ${lower(next.title)}.`
+    no = { label: before ? `No, back to ${lower(before.title)}` : 'No', act: 'back' }
+    noText = before ? `${upper(before.title)} runs again with your reason as its note.` : 'Your reason is kept with the request.'
+  }
+  const why = findings ? `It waits for you because a step failed. What it said:\n${findings}` : step.words || 'The steps before this one passed; the next one waits for your yes.'
+  // What the work is: what the gate needs and what the step before it left, for the owner to judge.
+  const made = [...new Set([...step.needs, ...Object.keys(row.beforeLeaves || {})])].filter((n) => !['workdir', 'branch', 'findings'].includes(n) && inputs[n] !== undefined)
+  const work = made.map((n) => `${n}: ${words(inputs[n], 600)}`).join('\n')
+  const prompt = [why, work && `What there is to look at:\n${work}`, `${yes.label}: ${yesText}\n${no.label}: ${noText}`].filter(Boolean).join('\n\n')
+  return {
+    kind: 'request_confirmation', title: `Your call: ${[request.jobCode, request.title].filter(Boolean).join(' ')}`.slice(0, 500), summary: prompt.slice(0, 4000),
+    continuationPolicy: 'none', idempotencyKey: `trip-step:${row.id}`,
+    payload: { tripId: trip.id, stepId: step.id, rowId: row.id, prompt: prompt.slice(0, 4000), acceptLabel: yes.label, rejectLabel: no.label, yes, no, findings },
+  }
 }
 
 function readJson(file) {
@@ -574,8 +616,14 @@ async function pollStep(store, step, row, { io, now }) {
   if (step.kind === 'gate') {
     const card = store.object('SELECT raw FROM cards WHERE id = ?', row.cardId)
     if (!card || card.status === 'pending') return null
-    if (card.status === 'accepted') return { verdict: 'pass', leaves: {}, findings: '' }
-    return { verdict: 'fail', leaves: {}, findings: card.result?.reason || 'The owner said no at the gate', gateNo: true }
+    const { yes, no, findings = '' } = card.payload || {}
+    if (card.status === 'accepted') {
+      if (yes?.act === 'back') return { verdict: 'fail', leaves: {}, findings: findings || 'The owner sent it back at the gate', gate: { backTo: yes.backTo, ...(yes.base ? { base: yes.base } : {}) } }
+      return { verdict: 'pass', leaves: {}, findings: '' }
+    }
+    const reason = card.result?.reason || ''
+    if (no?.act === 'stop') return { verdict: 'fail', leaves: {}, findings: reason || 'The owner stopped it at the gate', gate: { stop: true } }
+    return { verdict: 'fail', leaves: {}, findings: reason || 'The owner said no at the gate', gateNo: true }
   }
   const child = store.object('SELECT raw FROM trips WHERE id = ?', row.childTripId)
   if (!child) return { verdict: 'fail', findings: 'The inner trip is gone' }
@@ -628,6 +676,17 @@ function route(store, trip, version, step, row, outcome, now) {
   const lines = version.lines.filter((l) => l.from === step.id)
   const line = lines.find((l) => l.on === outcome) || lines.find((l) => l.on === 'always')
   const order = version.steps.map((s) => s.id)
+  // The owner's answer at a gate that could not go on: back to the step that makes the change, or stop.
+  const gate = step.kind === 'gate' ? row.snapshot?.gate : null
+  if (gate?.stop) {
+    const after = goTo(store, trip, version, version.steps[0].id, {}, now)
+    if (!trip.parentTripId) putRequest(store, { ...requestOr404(store, trip.requestId), status: 'stopped' }, now)
+    return { ...after, current: trip.current, handoff: null, status: 'stopped', reason: words(row.snapshot.findings, 500) || 'Stopped by the owner at the gate', endedAt: iso(now) }
+  }
+  if (gate?.backTo && order.includes(gate.backTo)) {
+    const said = row.snapshot?.findings || ''
+    return goTo(store, trip, version, gate.backTo, { findings: said, note: said, ...(gate.base ? { base: gate.base } : {}) }, now)
+  }
   if (!line) {
     if (outcome === 'pass') return { ...trip, ended: true }
     // A gate's "no" with no fail line: the work goes back to the step before the gate.
@@ -729,7 +788,7 @@ async function moveTrip(store, tripId, ctx) {
   if (row.status === 'working') {
     const result = await pollStep(store, step, row, ctx)
     if (!result) return false
-    const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}) }
+    const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}), ...(result.gate ? { gate: result.gate } : {}) }
     row = { ...row, status: result.verdict === 'pass' ? 'passed' : 'failed', snapshot, finishedAt: iso(now) }
     putRow(store, row, now)
   }
