@@ -1,0 +1,53 @@
+/* Tracks: the drawn track, the run view and the gate (studio-tracks.js). Still: no motion, colours from the page's own tokens. */
+.studio-sheet .track-diagram { display: block; width: 100%; max-width: 420px; height: auto; margin: 8px 0 4px; }
+.studio-sheet .track-diagram .step rect { fill: var(--raise); stroke: var(--line-strong); stroke-width: 1.5; }
+.studio-sheet .track-diagram .step .kind { fill: var(--muted); font-size: 12px; }
+.studio-sheet .track-diagram .step .name { fill: var(--text); font-size: 14px; font-weight: 600; }
+.studio-sheet .track-diagram .k-gate rect { stroke: var(--amber); stroke-dasharray: 5 3; }
+.studio-sheet .track-diagram .k-script rect { fill: var(--panel-solid); }
+.studio-sheet .track-diagram .s-passed rect { stroke: var(--green); }
+.studio-sheet .track-diagram .s-failed rect { stroke: var(--red); }
+.studio-sheet .track-diagram .s-working rect, .studio-sheet .track-diagram .s-waiting rect { stroke: var(--amber); stroke-width: 2.5; }
+.studio-sheet .track-diagram .now rect { stroke: var(--accent); stroke-width: 3; }
+.studio-sheet .track-diagram .s-not-started .name { fill: var(--muted); }
+.studio-sheet .track-diagram .ln { fill: none; stroke: var(--line-strong); stroke-width: 1.6; }
+.studio-sheet .track-diagram .ln.fail { stroke: var(--amber); }
+.studio-sheet .track-diagram .ln.back { stroke: var(--red); stroke-dasharray: 4 3; }
+.studio-sheet .track-diagram .tip { fill: var(--line-strong); }
+.studio-sheet .track-diagram .tip.back { fill: var(--red); }
+.studio-sheet .track-diagram .rounds { fill: var(--red); font-size: 12px; font-weight: 700; }
+
+.studio-sheet .track-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--panel); }
+.studio-sheet .track-card summary { cursor: pointer; line-height: 1.5; }
+
+.studio-sheet .trip-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 6px; }
+.studio-sheet .trip-head .cost { margin-left: auto; font-weight: 700; color: var(--text); }
+.studio-sheet .trip-body { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .studio-sheet .trip-body { grid-template-columns: 1fr; } .studio-sheet .trip-drawing { max-width: 340px; } }
+.studio-sheet .trip-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.studio-sheet .trip-step { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--panel); }
+.studio-sheet .trip-step.now { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.studio-sheet .trip-step-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.studio-sheet .trip-step-head .n { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; }
+.studio-sheet .trip-step-head .kind { font-size: 13px; color: var(--muted); }
+.studio-sheet .trip-step-head .cost { margin-left: auto; font-variant-numeric: tabular-nums; }
+.studio-sheet .trip-step pre { white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; font-size: 13px; margin: 4px 0; }
+.studio-sheet .trip-step .owner-note { margin: 4px 0; }
+
+.studio-sheet .gate-card { border: 2px solid var(--amber); border-radius: 12px; padding: 10px 14px 12px; margin: 10px 0 14px; background: var(--panel); }
+.studio-sheet .gate-card h3 { margin-top: 2px; }
+.studio-sheet .gate-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.studio-sheet .gate-acts .btn, .studio-sheet .trip-controls .btn { min-height: 44px; }
+.studio-sheet label.inline { display: inline-flex; gap: 6px; align-items: center; }
+.studio-sheet label.inline select { min-height: 40px; max-width: 220px; }
+.studio-sheet .trip-controls { margin-bottom: 16px; }
+.studio-sheet .trip-step .left { margin: 4px 0; }
+.studio-sheet .trip-step .left b { margin-right: 6px; }
+.studio-sheet .gate-card textarea, .studio-sheet .trip-controls textarea { width: 100%; box-sizing: border-box; }
+.studio-sheet .gate-acts .btn { white-space: normal; height: auto; padding-top: 8px; padding-bottom: 8px; text-align: center; }
+@media (max-width: 560px) {
+  .studio-sheet .gate-acts .btn, .studio-sheet .trip-controls > .btn { width: 100%; }
+  .studio-sheet label.inline { display: flex; flex-wrap: wrap; width: 100%; }
+  .studio-sheet label.inline select { flex: 1 1 160px; max-width: 100%; min-width: 0; }
+  .studio-sheet .gate-card { padding: 10px 10px 12px; }
+}

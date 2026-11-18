@@ -61,7 +61,9 @@ export type Route =
   | { name: 'firstRun'; step?: string }
   | { name: 'projectNew' }
   | { name: 'projectEdit'; id: string }
-  | { name: 'routine'; id: string };
+  | { name: 'routine'; id: string }
+  | { name: 'tracks' }
+  | { name: 'trip'; id: string };
 export type Tab = 'home' | 'studio' | 'style';
 /**
  * The one bot the owner chats with on the phone: the studio's lead, the bot whose role is `lead`.

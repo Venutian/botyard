@@ -1,6 +1,7 @@
 import './studio.css'
 import './plates.css'
 import './crew-map.css'
+import './tracks.css'
 import { CrewMap } from './crew-map.js'
 import { isDecision, waitingCount } from './needs-count.js'
 import { botStyle, learnColours } from './crew-colours.js'
@@ -15,6 +16,7 @@ import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, projectExtr
 import './lightbox.js'
 import './shape.css'
 import { shapeMethods } from './studio-shape-acts.js'
+import { trackMethods } from './studio-tracks.js'
 import { readWhen } from './studio-shape.js'
 import { mountThrottle } from './throttle.js'
 
@@ -126,6 +128,7 @@ const DOCK = [
   { id: 'improvements', name: 'Improve', icon: 'rise', screen: true, group: 'crew', title: 'Improvements: what the audits found worth improving, and who is on it' },
   { id: 'library', name: 'Library', icon: 'book', screen: true, group: 'make', title: 'What the crew made, and its skills', key: '7' },
   { id: 'routines', name: 'Routines', icon: 'clock', screen: true, group: 'make', title: 'Routines and helpers', key: '8' },
+  { id: 'tracks', name: 'Tracks', icon: 'track', screen: true, group: 'make', title: 'Tracks: how each request moves, step by step, and what it cost' },
   { id: 'setup', name: 'Setup', icon: 'wrench', screen: true, group: 'setup', title: 'What this studio needs: AI sign-ins, keys, git' },
   { id: 'models', name: 'Models', icon: 'gauge', screen: true, group: 'setup', title: 'Models, limits and money' },
   { id: 'connectors', name: 'Connectors', icon: 'plug', screen: true, group: 'setup', title: 'Services the crew may use, and its sign-ins' },
@@ -187,6 +190,7 @@ const ICONS = {
   help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8M12 17h.01"/>'),
   back: svg('<path d="m14 6-6 6 6 6"/>'),
   clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  track: svg('<circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 6h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7"/>'),
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
   bots: svg('<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5"/>'),
   runs: svg('<path d="M4 18h3l3-11 4 13 3-8h3"/>'),
@@ -637,7 +641,7 @@ export class Studio {
       const el = e.target.closest('[data-act],[data-bot],[data-verb],[data-line],[data-routine]')
       if (!el) return void recordClick(e.target)
       if (el.dataset.routine && !el.dataset.act) return this._go(() => this.openRoutine(el.dataset.routine))
-      if (this._crewAct(el) || this._workAct(el) || this._connectAct(el) || this._shapeAct(el)) return
+      if (this._crewAct(el) || this._workAct(el) || this._tracksAct(el) || this._connectAct(el) || this._shapeAct(el)) return
       if (el.dataset.act === 'close-sheet') return this.closeSheet()
       if (el.dataset.act === 'pause') return this.pause(el.dataset.bot)
       if (el.dataset.act === 'shelve') return this.shelve(el.dataset.project)
@@ -697,7 +701,7 @@ export class Studio {
   _sheetKey(e) {
     {
       // A table row that opens something opens on Enter too.
-      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')) { e.preventDefault(); this._crewAct(e.target) || this._workAct(e.target) || this._connectAct(e.target) || this._shapeAct(e.target); return }
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')) { e.preventDefault(); this._crewAct(e.target) || this._workAct(e.target) || this._tracksAct(e.target) || this._connectAct(e.target) || this._shapeAct(e.target); return }
       // Typing a number must not fire the map's own keys.
       if (e.target.closest('input,textarea,select')) e.stopPropagation()
       if (e.key === 'Escape' && !this.sheet.querySelector('.sheet-confirm').hidden) { e.stopPropagation(); this._confirmAsk(null); return }
@@ -1845,6 +1849,7 @@ setView(view) {
   _screen(id) {
     if (ownName(id)) return void this.openOwnPage(ownName(id))
     if (id === 'routines') return void this.openRoutines()
+    if (id === 'tracks') return void this.openTracks()
     if (id === 'setup') return void this.openSetup()
     if (id === 'connectors') return void this.openConnectors()
     if (id === 'bots') return void this.openBots()
@@ -2853,3 +2858,4 @@ setView(view) {
 }
 
 Object.assign(Studio.prototype, shapeMethods({ call, STAGE }))
+Object.assign(Studio.prototype, trackMethods({ call }))
