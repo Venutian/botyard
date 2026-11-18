@@ -111,7 +111,7 @@ export function overviewPrompt(chapters, commits = []) {
   const parts = chapters.map((c) => `## ${c.id}: ${c.title}\n${c.files.map((f) => `### ${f.path} (+${f.added} -${f.removed})\n${String(f.patch || '').slice(0, CLIP)}`).join('\n')}`)
   return [
     'You write overviews for a person reading a code change in chapters. For each chapter below, write exactly two short plain lines:',
-    'line 1 says what this part of the change does; line 2 says why it matters or what to look at. No markdown, no file lists, no praise.',
+    'line 1 says what this part of the change does; line 2 says why it matters or what to look at. Each line at most 20 words. No markdown, no file lists, no praise.',
     'Answer with JSON only, an object from chapter id to its two lines joined by a newline.',
     commits.length ? `Commits: ${commits.map((c) => c.subject).join(' | ')}` : '',
     ...parts,
@@ -146,7 +146,9 @@ export async function modelOverviews(chapters, { commits = [], folder, command =
   if (file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { /* not asked yet */ } }
   const answer = await ask(command, overviewPrompt(chapters, commits))
   if (!answer || typeof answer !== 'object') return null
-  const words = Object.fromEntries(chapters.map((c) => [c.id, String(answer[c.id] || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2).join('\n').slice(0, 400)]).filter(([, v]) => v))
+  // Each line kept short, cut at a word, so an overview never runs into the diff it sits beside.
+  const short = (line) => (line.length <= 180 ? line : `${line.slice(0, 180).replace(/\s+\S*$/, '')}…`)
+  const words = Object.fromEntries(chapters.map((c) => [c.id, String(answer[c.id] || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2).map(short).join('\n')]).filter(([, v]) => v))
   if (file && Object.keys(words).length) { fs.mkdirSync(folder, { recursive: true }); fs.writeFileSync(file, JSON.stringify(words)) }
   return words
 }
