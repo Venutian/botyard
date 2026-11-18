@@ -80,8 +80,10 @@ class RunnerPaths(unittest.TestCase):
             spec = crew.spec(slug)
             if spec['ai'] in ('codex', 'gemini'):
                 env = crew.config(spec)['env']
-                self.assertEqual(env['GIT_AUTHOR_EMAIL'], NO_REPLY, slug)
-                self.assertEqual(env['GIT_COMMITTER_NAME'], ident.first_name(slug), slug)
+                # The engine keeps each value as {'type': 'plain', 'value': ...}; older configs held the bare string.
+                value = lambda key: env[key]['value'] if isinstance(env[key], dict) else env[key]
+                self.assertEqual(value('GIT_AUTHOR_EMAIL'), NO_REPLY, slug)
+                self.assertEqual(value('GIT_COMMITTER_NAME'), ident.first_name(slug), slug)
                 with tempfile.TemporaryDirectory() as d:
                     plain = {k: (v['value'] if isinstance(v, dict) else v) for k, v in env.items() if k.startswith('GIT_') and k != 'GIT_CONFIG_GLOBAL'}
                     self.assertEqual(commit_as(plain, d), f'{ident.first_name(slug)} <{NO_REPLY}>|{ident.first_name(slug)} <{NO_REPLY}>')

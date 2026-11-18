@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Botyard's mark: a sign plate, bolted at its corners, with the yard's yellow nut on it. -->
-  <rect x="2" y="2" width="60" height="60" rx="9" fill="#1d1e22"/>
-  <rect x="5.5" y="5.5" width="53" height="53" rx="6" fill="none" stroke="#ffc61a" stroke-width="1.5" opacity=".55"/>
-  <g fill="#8d8f96">
-    <circle cx="11" cy="11" r="1.8"/><circle cx="53" cy="11" r="1.8"/><circle cx="11" cy="53" r="1.8"/><circle cx="53" cy="53" r="1.8"/>
-  </g>
-  <path d="M32 13.5 48 22.75v18.5L32 50.5 16 41.25v-18.5z" fill="#ffc61a"/>
-  <circle cx="32" cy="32" r="7.5" fill="#1d1e22"/>
+  <!-- Botyard's mark: the yard's yellow hex nut on a graphite sign plate. tools/make-icons.py draws the app icons from the same shapes. -->
+  <rect x="1" y="1" width="62" height="62" rx="12" fill="#1d1e22"/>
+  <rect x="1" y="57" width="62" height="6" rx="3" fill="#101114"/>
+  <path d="M32.80 14.00 L49.25 23.50 L49.25 42.50 L32.80 52.00 L16.35 42.50 L16.35 23.50Z" fill="#000" opacity=".45"/>
+  <path d="M32.00 12.00L48.45 21.50L45.16 23.40L32.00 15.80Z" fill="#ffdd6e"/><path d="M48.45 21.50L48.45 40.50L45.16 38.60L45.16 23.40Z" fill="#f2c23a"/><path d="M48.45 40.50L32.00 50.00L32.00 46.20L45.16 38.60Z" fill="#d9a10f"/><path d="M32.00 50.00L15.55 40.50L18.84 38.60L32.00 46.20Z" fill="#cc9200"/><path d="M15.55 40.50L15.55 21.50L18.84 23.40L18.84 38.60Z" fill="#e0aa18"/><path d="M15.55 21.50L32.00 12.00L32.00 15.80L18.84 23.40Z" fill="#f7d45a"/>
+  <path d="M32.00 15.80 L45.16 23.40 L45.16 38.60 L32.00 46.20 L18.84 38.60 L18.84 23.40Z" fill="#ffc61a"/>
+  <circle cx="32" cy="31" r="7.2" fill="#cc9200"/>
+  <circle cx="32" cy="31" r="6.4" fill="#101114"/>
 </svg>
