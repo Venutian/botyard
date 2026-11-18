@@ -23,6 +23,7 @@ import { companySettings, inviteMember, revokeInvite } from './lib/company.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { fromOwnPage, ownHost, readBytes, readJson, sendJson } from './lib/page-guard.mjs'
 import { savedStore } from './lib/saved.mjs'
+import { pageBuild } from './lib/built-page.mjs'
 import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -364,7 +365,7 @@ export async function apiMiddleware(req, res, next) {
       return await ownPagesRequest(req, res, url, { demo: process.env.BOTYARD_DEMO === '1', runHelper })
     }
     if (url.pathname === '/api/health' && req.method === 'GET') {
-      return send(res, 200, { service: 'botyard', workspace: path.resolve(here, '..') })
+      return send(res, 200, { service: 'botyard', workspace: path.resolve(here, '..'), page: pageBuild(path.resolve(here, '..', 'dist')) })
     }
     if (url.pathname === '/api/state' && req.method === 'GET') return send(res, 200, saved.read())
     if (url.pathname === '/api/state' && req.method === 'PUT') {

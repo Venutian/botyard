@@ -71,3 +71,22 @@ export function builtPage(root) {
     fs.createReadStream(entry.file).on('error', () => res.destroy()).pipe(res)
   }
 }
+
+const stamps = new Map()
+/**
+ * Which build of the page is being handed out: the hashed name of its entry script in `index.html`
+ * (Vite gives it a new name whenever the code changes), or '' with no build. An open page compares it
+ * with its own and reloads when they differ, so a window left open (the desktop app, a browser tab)
+ * shows the new page after a restart. Read again only when index.html changes.
+ */
+export function pageBuild(root) {
+  const file = path.join(root, 'index.html')
+  let mtime = 0
+  try { mtime = fs.statSync(file).mtimeMs } catch { return '' }
+  const seen = stamps.get(file)
+  if (seen && seen.mtime === mtime) return seen.build
+  let build = ''
+  try { build = /<script[^>]*type="module"[^>]*src="\/?(assets\/[^"]+\.js)"/.exec(fs.readFileSync(file, 'utf8'))?.[1] || '' } catch { /* unreadable: no build */ }
+  stamps.set(file, { mtime, build })
+  return build
+}
