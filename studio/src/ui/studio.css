@@ -1483,4 +1483,6 @@
 @media (max-width: 900px) { .ld-label { display: none; } }
 @media (pointer: coarse) { .ld-seg, .ld-resume, .ld-more { min-height: 44px; min-width: 44px; } .ld-scope { min-height: 44px; } }
 .ld-layer { position: absolute; z-index: 13; width: 260px; display: flex; flex-direction: column; gap: 8px; }
-.ld-line { width: 215px; }
+.ld-line { max-width: 240px; }
+.ld-line:empty { display: none; }
+.ld[data-level="full"] .ld-line { color: var(--red); font-weight: 600; }
