@@ -329,6 +329,26 @@ export async function getFlow(c: Connection, window: FlowWindow): Promise<Flow |
 export const getJob = (c: Connection, id: string) => call<JobDetail>(c, `/jobs/${id}`);
 export const getRoutines = (c: Connection) => call<{ routines: Routine[] }>(c, '/routines');
 export const getModels = (c: Connection) => call<Models>(c, '/models');
+
+// ── tracks: how each request moves, and the owner's hand on a trip (docs/tracks.md) ──
+export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
+export type TrackLine = { from: string; to: string; on: 'pass' | 'fail' | 'always'; rounds?: number; then?: string };
+export type TrackInfo = { id: string; key: string; title: string; description: string; version: number; builtIn: boolean; steps: TrackStep[]; lines: TrackLine[]; delivers: string };
+export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; costUsd: number; cost: string; updatedAt: string };
+export type TripStep = TrackStep & {
+  state: string; tries: number; current: boolean; verdict: string; findings: string; summary: string; leftNames: string[]; left: Record<string, unknown>;
+  numbers: Record<string, unknown>; job: string; jobId: string; note: string; handedFindings: string; costUsd: number; cost: string; startedAt: string; finishedAt: string;
+};
+export type Trip = {
+  id: string; status: string; state: string; reason: string; current: string; rounds: Record<string, number>; commit: string;
+  track: { key: string; version: number; title: string; delivers: string; main: string }; lines: TrackLine[]; steps: TripStep[]; cost: string; costUsd: number;
+  request: RequestRow; gate: { step: string; title: string; backTo: { id: string; title: string }[] } | null;
+  can: { pause: boolean; resume: boolean; stop: boolean; rerun: string[] };
+};
+export type TripAction = 'approve' | 'back' | 'context' | 'rerun' | 'pause' | 'resume' | 'stop';
+export const getTracks = (c: Connection) => call<{ tracks: TrackInfo[]; requests: RequestRow[] }>(c, '/tracks');
+export const getTrip = (c: Connection, id: string) => call<Trip>(c, `/trips/${encodeURIComponent(id)}`);
+export const tripAction = (c: Connection, id: string, action: TripAction, body: { step?: string; to?: string; note?: string } = {}) => call<Trip>(c, `/trips/${encodeURIComponent(id)}/${action}`, 'POST', body);
 export type NewRoutine = { title: string; description: string; botId?: string; projectId?: string; plan: Plan; timezone: string };
 export const addRoutine = (c: Connection, routine: NewRoutine) => call(c, '/routines', 'POST', routine);
 export const routineAction = (c: Connection, id: string, action: 'run' | 'pause' | 'resume' | 'remove') => call(c, `/routines/${id}/${action}`, 'POST', {});

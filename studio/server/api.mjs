@@ -26,6 +26,7 @@ import { savedStore } from './lib/saved.mjs'
 import { pageBuild } from './lib/built-page.mjs'
 import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
+import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = process.env.BOTYARD_DATA || dataDir()
@@ -83,6 +84,8 @@ async function studioRoute(req, res, url) {
     if (url.pathname === '/api/studio' && read) return send(res, 200, await studioView())
     if (url.pathname === '/api/studio/chat' && read) return send(res, 200, await chatThread(url.searchParams.get('bot') || ''))
     if (url.pathname === '/api/studio/routines' && read) return send(res, 200, { routines: await routineList() })
+    if (url.pathname === '/api/studio/tracks' && read) return send(res, 200, await tracksPage())
+    if (url.pathname === '/api/studio/trip' && read) return send(res, 200, await tripPage(url.searchParams.get('id') || ''))
     if (url.pathname === '/api/studio/job' && read) return send(res, 200, await jobPage(url.searchParams.get('id') || ''))
     if (url.pathname === '/api/studio/chats' && read) return send(res, 200, { chats: await chatList() })
     if (url.pathname === '/api/studio/settings' && read) return send(res, 200, readGuard(guardFolder()))
@@ -177,6 +180,7 @@ async function studioRoute(req, res, url) {
     // The owner's override of a finding: only the map's own page on this machine gets here (the guards above).
     const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
     if (finding && req.method === 'POST') return send(res, 200, await decideImprovement(finding[1], { action: String(body.action || ''), reason: body.reason }))
+    if (url.pathname === '/api/studio/trip' && req.method === 'POST') return changed(res, 200, await tripAct(String(body.id || ''), { action: String(body.action || ''), step: String(body.step || ''), to: String(body.to || ''), note: String(body.note || '') }))
     if (url.pathname === '/api/studio/chat' && req.method === 'POST') return send(res, 200, await sendChat(body.bot, body.text, randomUUID(), { pictures: body.pictures }))
     if (url.pathname === '/api/studio/job' && req.method === 'POST' && body.action === 'add') return send(res, 201, await addJob(body))
     // The owner's marks on a piece of a bot's work, sent as one message (lib/marks.mjs).

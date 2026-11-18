@@ -19,7 +19,8 @@ import os from 'node:os'
 import path from 'node:path'
 
 const env = process.env
-const commit = String(env.BOTYARD_IN_COMMIT || '').trim()
+// The commit id, from a value that may say more around it (`1f7431e on its-branch`).
+const commit = /\b[0-9a-f]{7,40}\b/i.exec(String(env.BOTYARD_IN_COMMIT || ''))?.[0] || String(env.BOTYARD_IN_COMMIT || '').trim()
 const repo = env.BOTYARD_IN_REPO || env.BOTYARD_PROJECT_FOLDER || ''
 const main = env.BOTYARD_MAIN || 'main'
 const title = String(env.BOTYARD_REQUEST_TITLE || 'a request').replace(/\s+/g, ' ').slice(0, 120)

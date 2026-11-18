@@ -179,15 +179,17 @@ export function renderReview({ piece, marks, note, verdict, owner = 'the owner' 
 
 /** The trip waiting at a gate on this job, if there is one: the owner's review answers it. */
 export function gateOf(store, jobId) {
-  const requests = store.rows('SELECT id FROM requests WHERE job_id = ?', jobId)
-  for (const { id } of requests) {
-    for (const { id: tripId } of store.rows("SELECT id FROM trips WHERE request_id = ? AND status = 'running' ORDER BY created_at DESC", id)) {
-      const trip = tripView(store, tripId)
-      const step = trip.steps.find((s) => s.id === trip.current)
-      if (step?.kind === 'gate' && step.state === 'working') {
-        const before = trip.steps.slice(0, trip.steps.indexOf(step)).map((s) => ({ id: s.id, title: s.title || s.id, kind: s.kind }))
-        return { tripId, stepId: step.id, title: step.title || step.id, before }
-      }
+  // The request's own job, or the job a step of a trip made (where the work to look at is).
+  const trips = [
+    ...store.rows("SELECT t.id FROM trips t JOIN requests r ON r.id = t.request_id WHERE r.job_id = ? AND t.status = 'running' ORDER BY t.created_at DESC", jobId),
+    ...store.rows("SELECT DISTINCT t.id FROM trips t JOIN trip_steps s ON s.trip_id = t.id WHERE s.job_id = ? AND t.status = 'running'", jobId),
+  ]
+  for (const { id: tripId } of trips) {
+    const trip = tripView(store, tripId)
+    const step = trip.steps.find((s) => s.id === trip.current)
+    if (step?.kind === 'gate' && step.state === 'working') {
+      const before = trip.steps.slice(0, trip.steps.indexOf(step)).map((s) => ({ id: s.id, title: s.title || s.id, kind: s.kind }))
+      return { tripId, stepId: step.id, title: step.title || step.id, before }
     }
   }
   return null

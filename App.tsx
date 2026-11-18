@@ -25,6 +25,8 @@ import { ReviewScreen } from './src/screens/Review';
 import { HomeScreen } from './src/screens/Home';
 import { DevicesScreen } from './src/screens/Devices';
 import { RoutinesScreen } from './src/screens/Routines';
+import { TracksScreen } from './src/screens/Tracks';
+import { TripScreen } from './src/screens/Trip';
 import { JobScreen, NewJobScreen } from './src/screens/Job';
 import { ImprovementsScreen } from './src/screens/Improvements';
 import { ModelsScreen } from './src/screens/Models';
@@ -159,6 +161,8 @@ function Pushed({ route, connection, crew, nav }: { route: Route; connection: Co
       {route.name === 'projectNew' ? <ProjectNewScreen connection={connection} nav={nav} /> : null}
       {route.name === 'projectEdit' ? <ProjectEditScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
       {route.name === 'routine' ? <RoutineScreen key={route.id} id={route.id} connection={connection} crew={crew} nav={nav} /> : null}
+      {route.name === 'tracks' ? <TracksScreen connection={connection} nav={nav} /> : null}
+      {route.name === 'trip' ? <TripScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
     </Animated.View>
   );
 }

@@ -27,6 +27,7 @@ import { ConnectorError, connectorList, loadTools, setAccess, settleHeld } from 
 import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { throttleAct, throttleState } from './lib/throttle.mjs'
+import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
 import { botBehind } from './engine/caller.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -382,6 +383,8 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
     const jobAction = /^\/v1\/jobs\/([^/]+)\/(stop|cancel|reopen)$/.exec(pathname)
     const question = /^\/v1\/jobs\/([^/]+)\/questions\/([^/]+)\/(respond|accept|reject)$/.exec(pathname)
     const routineAction = /^\/v1\/routines\/([^/]+)\/(run|pause|resume|remove)$/.exec(pathname)
+    const trip = /^\/v1\/trips\/([^/]+)$/.exec(pathname)
+    const tripDo = /^\/v1\/trips\/([^/]+)\/(approve|back|context|rerun|pause|resume|stop)$/.exec(pathname)
     const connectorAct = /^\/v1\/connectors\/([a-z0-9-]+)\/(access|check)$/.exec(pathname)
     const connectCard = /^\/v1\/connect-cards\/([^/]+)$/.exec(pathname)
     const deviceRevoke = /^\/v1\/devices\/([^/]+)\/revoke$/.exec(pathname)
@@ -519,6 +522,10 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
         return send(res, 201, await addComment(comment[1], body.text, options))
       }
       if (pathname === '/v1/routines' && req.method === 'GET') return send(res, 200, { routines: await routineList(options) })
+      // Tracks: the requests and their trips; the owner answers a gate or sends work back from the phone as from the page.
+      if (pathname === '/v1/tracks' && req.method === 'GET') return send(res, 200, await tracksPage(options))
+      if (trip && req.method === 'GET') return send(res, 200, await tripPage(decodeURIComponent(trip[1]), options))
+      if (tripDo && req.method === 'POST') { const b = await readBody(req); return send(res, 200, await tripAct(decodeURIComponent(tripDo[1]), { action: tripDo[2], step: String(b.step || ''), to: String(b.to || ''), note: String(b.note || '') }, options)) }
       if (pathname === '/v1/routines' && req.method === 'POST') return send(res, 201, await addRoutine(await readBody(req), options))
       if (routineAction && req.method === 'POST') return send(res, 200, await ROUTINE_ACTIONS[routineAction[2]](routineAction[1], options))
       if (pathname === '/v1/guard' && req.method === 'POST') return send(res, 200, writeGuard(guard, await readBody(req)))
