@@ -442,12 +442,13 @@ const helperJobs = [
   { name: 'token-guard', kind: 'script', what: 'Paces Claude so it lasts to the weekly reset', when: 'Every hour, on the hour', on: false, ready: false, notReady: 'Waits for Claude to be signed in', running: false, lastAt: null, lastOk: true, lastError: '', nextAt: null },
 ];
 const helpers = { available: true, state: 'on', why: '', jobs: helperJobs };
-/** The sample PC's load: Light by day, None at night, set from the phone or the page. */
-const pcLoad = { configured: true, levels: ['max', 'none', 'light', 'medium', 'heavy', 'full'], now: 'light', day: 'light', night: 'none', paused: 0, heldGb: 0, line: 'Light (day Light, night None)' };
-const loadNames: Record<string, string> = { none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' };
+/** The sample PC's pace: Jog by day, Run at night, set from the phone or the page. */
+const pcLoad = { configured: true, levels: ['sprint', 'run', 'jog', 'walk', 'crawl', 'stop'], now: 'jog', day: 'jog', night: 'run', paused: 0, heldGb: 0, label: 'Pace', labelSays: 'How fast the crew works. Sprint ignores the weekly Claude limit; Stop pauses heavy work.', line: 'Jog: a little slower. Up to 4 Claude, 8 free, 3 heavy (day Jog, night Run)', about: [{ id: 'sprint', name: 'Sprint', says: 'Sprint: everything at once, no weekly Claude limit; the week may run out early', numbers: 'Up to 6 Claude, 12 free, 4 heavy', warn: 'The weekly Claude limit is off: the week may run out early.' }, { id: 'run', name: 'Run', says: 'Run: full speed, keeps to the weekly Claude pace', numbers: 'Up to 6 Claude, 10 free, 4 heavy', warn: '' }, { id: 'jog', name: 'Jog', says: 'Jog: a little slower', numbers: 'Up to 4 Claude, 8 free, 3 heavy', warn: '' }, { id: 'walk', name: 'Walk', says: 'Walk: about half speed', numbers: 'Up to 3 Claude, 6 free, 2 heavy', warn: '' }, { id: 'crawl', name: 'Crawl', says: 'Crawl: slowest, the PC stays quiet', numbers: 'Up to 2 Claude, 3 free, 1 heavy', warn: '' }, { id: 'stop', name: 'Stop', says: 'Stop: heavy work paused, no new builds', numbers: '', warn: 'Asks first. Heavy work pauses and no new build starts until you press Resume or pick another pace.' }] };
+const loadNames: Record<string, string> = { sprint: 'Sprint', run: 'Run', jog: 'Jog', walk: 'Walk', crawl: 'Crawl', stop: 'Stop' };
 function pcLoadLine() {
-  if (pcLoad.now === 'full') return `Full: ${pcLoad.paused} job${pcLoad.paused === 1 ? '' : 's'} paused${pcLoad.heldGb ? `, ${pcLoad.heldGb} GB held` : ''}`;
-  return `${loadNames[pcLoad.now]}${pcLoad.day !== pcLoad.night ? ` (day ${loadNames[pcLoad.day]}, night ${loadNames[pcLoad.night]})` : ''}`;
+  if (pcLoad.now === 'stop') return `Stop: ${pcLoad.paused} job${pcLoad.paused === 1 ? '' : 's'} paused${pcLoad.heldGb ? `, ${pcLoad.heldGb} GB held` : ''}`;
+  const about = pcLoad.about.find((a) => a.id === pcLoad.now);
+  return `${about ? [about.says, about.numbers].filter(Boolean).join('. ') : loadNames[pcLoad.now]}${pcLoad.day !== pcLoad.night ? ` (day ${loadNames[pcLoad.day]}, night ${loadNames[pcLoad.night]})` : ''}`;
 }
 
 const firstNotes = { name: 'Lighthouse Labs', skipped: [] as string[], seen: ['setup'], closed: false, projects: [] as { id: string; name: string }[], job: null as null | { id: string; ref: string; title: string } };
@@ -535,7 +536,7 @@ function shaping(route: string, method: string, body: Record<string, any> = {}):
       if (body.scope !== 'night') pcLoad.day = level;
       if (body.scope !== 'day') pcLoad.night = level;
       pcLoad.now = pcLoad.day;
-      Object.assign(pcLoad, level === 'full' ? { paused: 2, heldGb: 9.4 } : { paused: 0, heldGb: 0 });
+      Object.assign(pcLoad, level === 'stop' ? { paused: 2, heldGb: 9.4 } : { paused: 0, heldGb: 0 });
     }
     return { ...pcLoad, line: pcLoadLine() };
   }

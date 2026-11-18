@@ -18,7 +18,29 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { configDir } from './home.mjs'
 
-export const LEVELS = ['max', 'none', 'light', 'medium', 'heavy', 'full']
+export const LEVELS = ['sprint', 'run', 'jog', 'walk', 'crawl', 'stop']
+/** The old names of the levels, still read from a tool and still accepted from a caller. */
+export const OLD_NAMES = { max: 'sprint', turbo: 'sprint', none: 'run', light: 'jog', medium: 'walk', heavy: 'crawl', full: 'stop', pause: 'stop' }
+export const NAMES = { sprint: 'Sprint', run: 'Run', jog: 'Jog', walk: 'Walk', crawl: 'Crawl', stop: 'Stop' }
+/**
+ * What each level means: the one source for the page's tooltips and the phone's list. A yard's tool may say it in
+ * its own words (`show --json` levels[].says); these are used where it does not.
+ */
+export const SAYS = {
+  sprint: 'Sprint: everything at once, no weekly Claude limit; the week may run out early',
+  run: 'Run: full speed, keeps to the weekly Claude pace',
+  jog: 'Jog: a little slower',
+  walk: 'Walk: about half speed',
+  crawl: 'Crawl: slowest, the PC stays quiet',
+  stop: 'Stop: heavy work paused, no new builds',
+}
+/** The two levels that carry a warning line on the phone. */
+export const WARNS = {
+  sprint: 'The weekly Claude limit is off: the week may run out early.',
+  stop: 'Asks first. Heavy work pauses and no new build starts until you press Resume or pick another pace.',
+}
+export const LABEL = 'Pace'
+export const LABEL_SAYS = 'How fast the crew works. Sprint ignores the weekly Claude limit; Stop pauses heavy work.'
 export const SCOPES = ['both', 'day', 'night']
 const WAIT_MS = 15_000
 
@@ -49,7 +71,12 @@ export function runTool(tool, args, { setBy = '', env } = {}) {
   })
 }
 
-const level = (v) => (LEVELS.includes(String(v)) ? String(v) : '')
+/** The level a word names, old names included, or ''. */
+export const levelName = (v) => {
+  const w = typeof v === 'string' ? v.trim() : ''
+  return LEVELS.includes(w) ? w : OLD_NAMES[w] || ''
+}
+const level = levelName
 const count = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : 0)
 
 /**
@@ -66,17 +93,33 @@ export function readShow(text) {
   const heldGb = Math.round((count(j.heldMB) / 1024) * 10) / 10
   // A tool may say in one line what the level lets run (and anything else the owner should see): shown under the button.
   const note = typeof j.note === 'string' ? j.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200) : ''
-  return { day: level(j.day) || now, night: level(j.night) || now, now, paused, heldGb, note }
+  // Each level's own sentence and numbers, when the tool gives them.
+  const told = {}
+  for (const row of Array.isArray(j.levels) ? j.levels : []) {
+    const id = level(row?.id)
+    if (!id) continue
+    const says = typeof row.says === 'string' ? row.says.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 160) : ''
+    const nums = ['claude', 'free', 'heavy'].every((k) => Number.isInteger(row[k]) && row[k] >= 0) ? { claude: row.claude, free: row.free, heavy: row.heavy } : null
+    told[id] = { says, nums }
+  }
+  return { day: level(j.day) || now, night: level(j.night) || now, now, paused, heldGb, note, told }
 }
 
-const NAMES = { max: 'Max', none: 'None', light: 'Light', medium: 'Medium', heavy: 'Heavy', full: 'Full' }
+/** Each level as the page and the phone show it: name, sentence, numbers ("Up to 6 Claude, 10 free, 4 heavy"), warning. */
+export function aboutLevels(told = {}) {
+  return LEVELS.map((id) => {
+    const t = told[id] || {}
+    const nums = t.nums && id !== 'stop' ? `Up to ${t.nums.claude} Claude, ${t.nums.free} free, ${t.nums.heavy} heavy` : ''
+    return { id, name: NAMES[id], says: t.says || SAYS[id], numbers: nums, warn: WARNS[id] || '' }
+  })
+}
 
 /** The one line under the control. */
 export function stateLine(s) {
   if (!s.now) return 'The PC load is not known'
-  if (s.now === 'full') {
+  if (s.now === 'stop') {
     const held = s.heldGb ? `, ${s.heldGb} GB held` : ''
-    return `Full: ${s.paused} job${s.paused === 1 ? '' : 's'} paused${held}`
+    return `Stop: ${s.paused} job${s.paused === 1 ? '' : 's'} paused${held}`
   }
   const split = s.day && s.night && s.day !== s.night ? ` (day ${NAMES[s.day]}, night ${NAMES[s.night]})` : ''
   return s.note ? `${s.note}${split}` : `${NAMES[s.now]}${split}`
@@ -87,8 +130,9 @@ export async function throttleState(options = {}) {
   const tool = options.tool ?? throttleTool(options)
   if (!tool) return { configured: false, levels: LEVELS }
   const shown = await runTool(tool, ['show', '--json'], options)
-  const s = readShow(shown.ok ? shown.out : '')
-  return { configured: true, ...s, levels: LEVELS, line: shown.ok ? stateLine(s) : 'The PC load could not be read' }
+  const { told, ...s } = readShow(shown.ok ? shown.out : '')
+  return { configured: true, ...s, levels: LEVELS, label: LABEL, labelSays: LABEL_SAYS, about: aboutLevels(told),
+    line: shown.ok ? stateLine(s) : 'The pace could not be read' }
 }
 
 /**
@@ -98,8 +142,8 @@ export async function throttleState(options = {}) {
 export async function throttleAct(body = {}, options = {}) {
   const tool = options.tool ?? throttleTool(options)
   if (!tool) return [404, { error: 'This yard has no PC load tool: name one in config/pc-load.json' }]
-  const wanted = typeof body?.level === 'string' ? body.level : ''
-  if (!LEVELS.includes(wanted)) return [400, { error: `The level must be one of ${LEVELS.join(', ')}` }]
+  const wanted = typeof body?.level === 'string' && /^[a-z]+$/i.test(body.level) ? levelName(body.level) : ''
+  if (!wanted) return [400, { error: `The level must be one of ${LEVELS.join(', ')}` }]
   const scope = body.scope === undefined ? 'both' : body.scope
   if (!SCOPES.includes(scope)) return [400, { error: `The scope must be one of ${SCOPES.join(', ')}` }]
   const ran = await runTool(tool, [wanted, ...(scope === 'both' ? [] : [`--${scope}`])], options)

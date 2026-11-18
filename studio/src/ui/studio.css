@@ -1475,10 +1475,10 @@
   font: 500 13px/1 var(--body); color: var(--text); background: transparent; border: 0; cursor: pointer;
 }
 .ld-seg + .ld-seg { border-left: 1px solid var(--line); }
-.ld-light { --c: var(--blue); }
-.ld-medium { --c: var(--amber); }
-.ld-heavy { --c: color-mix(in srgb, var(--amber) 55%, var(--red)); }
-.ld-full { --c: var(--red); }
+.ld-jog { --c: var(--blue); }
+.ld-walk { --c: var(--amber); }
+.ld-crawl { --c: color-mix(in srgb, var(--amber) 55%, var(--red)); }
+.ld-stop { --c: var(--red); }
 .ld-seg:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
 .ld-seg.on { font-weight: 700; background: color-mix(in srgb, var(--c) 30%, transparent); box-shadow: inset 0 -3px 0 var(--c); }
 .ld-seg.on span::before { content: '\2713\00a0' / ''; }
