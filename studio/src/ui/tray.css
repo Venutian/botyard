@@ -44,3 +44,6 @@
 .rec-text { margin: 0; padding: 10px 12px 12px; border-top: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; font: 400 13px/1.5 ui-monospace, 'JetBrains Mono', monospace; }
 .rec-cuts { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 0; }
 .rec-cuts img { display: block; max-height: 110px; max-width: 220px; border: 2px solid var(--edge, #15181d); border-radius: 5px; }
+
+/* A question keeps its own line breaks: why it waits, what there is to look at, what each answer does. */
+.tray-q p.prompt { white-space: pre-line; }
