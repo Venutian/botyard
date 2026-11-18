@@ -227,3 +227,18 @@ test('the sheet\'s reckoning: numbered lines, a box from a drag, a tap as a poin
   assert.equal(payloadOf({ ...state, marks: state.marks.slice(0, 1) }, 'back').piece.kind, 'brief')
   assert.deepEqual(payloadOf({ ...state, gate: { tripId: 't' } }, 'back', 'draft').gate, { tripId: 't', to: 'draft' })
 })
+
+test('the bot\'s next run is shown the marks: the review in its news, the cut copy beside it as a picture to open', async () => {
+  const { wakePrompt } = await import('../server/engine/prompt.mjs')
+  const { filesForRun } = await import('../server/engine/runner.mjs')
+  const { store, dataDir, job } = yard()
+  const shot = attach(store, 'co', job.id, { name: 'harbour.png', type: 'image/png', bytes: png(200, 100) }, { now: T0, actor: BOT, dataDir })
+  const review = sendReview(store, job.id, { piece: { kind: 'picture', ref: shot.id }, marks: [{ kind: 'picture', attachmentId: shot.id, box: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 }, comment: 'Brighter sky' }] }, { now: T0 + 1, actor: OWNER, dataDir })
+  const agent = store.object("SELECT raw FROM agents WHERE id = 'b1'")
+  const comments = store.objects('SELECT raw FROM comments WHERE job_id = ?', job.id)
+  const files = filesForRun(store, job, agent, comments, '', fs.mkdtempSync(path.join(os.tmpdir(), 'marks-run-')), { dataDir })
+  const prompt = wakePrompt({ agent, job: store.object('SELECT raw FROM jobs WHERE id = ?', job.id), wake: { reason: 'issue_commented' }, comments, files })
+  assert.ok(prompt.includes(review.text.split('\n')[0]))
+  assert.match(prompt, /The owner, .*:\n[\s\S]*Comment: Brighter sky/)
+  assert.match(prompt, /picture attached: .*mark-1-harbour\.png \(image\/png/)
+})
