@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -66,6 +67,10 @@ FREE = [('opencode/deepseek-v4.1-flash-free', 'deepseek', 'strong'),
         ('opencode/nemotron-3.5-lightning-free', 'nemotron', 'light')]
 # Groq is left out: its free tokens-per-minute is smaller than one OpenCode request.
 FREE_FOUND = f'{DIR}/free-found.json'
+FREE_LIMITS = f'{DIR}/free-limits.json'
+# A provider whose "free" offer ran out into paid credits answers every run with this ("Payment Required: Your credits
+# are used up"). It is not free, however it was found, so none of its models belong on the list (review of 18 Nov 2026).
+CREDIT_WORDS = re.compile(r'Payment Required|credits are used up|insufficient (?:credits|balance|funds)|add credits|out of credits', re.I)
 FREE_SCORES = f'{DIR}/free-scores.json'
 FREE_OUT = f'{DIR}/free-out.json'
 # What OpenCode itself lists on this computer, kept by free-scout.py and free-runner.py: {at, models}.
@@ -137,7 +142,20 @@ def offered(model, listed):
     return not any(m.startswith(provider) for m in listed)
 
 
-def free_list(has_key=None, listed=None):
+def credit_only_providers(limits=None):
+    """The providers whose models reported that credits are needed, read from what free-limits.py learned
+    ({'models': {'provider/model': {'rounds': [{'why': ...}]}}}). Their models stay off the free list."""
+    limits = read_json(FREE_LIMITS, {}) if limits is None else limits
+    models = limits.get('models') if isinstance(limits, dict) else None
+    found = set()
+    for model, row in (models or {}).items():
+        why = ' '.join(str(r.get('why') or '') for r in (row or {}).get('rounds') or [] if isinstance(r, dict))
+        if CREDIT_WORDS.search(why) and '/' in model:
+            found.add(model.split('/')[0])
+    return found
+
+
+def free_list(has_key=None, listed=None, credit_only=None):
     """Every free model this computer can ask, with its family and tier now: the list above, then what
     free-scout.py found, less any the tool itself no longer lists (a name that left the offer would only
     fail every run handed to it). With no OpenRouter or NVIDIA key the list is just shorter. A model
@@ -147,7 +165,10 @@ def free_list(has_key=None, listed=None):
     found = [tuple(row) for row in read_json(FREE_FOUND, []) if row[0] not in {m for m, _, _ in FREE}]
     scores = read_json(FREE_SCORES, {})
     rows = []
+    paid = credit_only_providers() if credit_only is None else credit_only
     for model, family, tier in FREE + found:
+        if model.split('/')[0] in paid:
+            continue
         if not reachable(model, has_key) or not offered(model, listed):
             continue
         score = scores.get(model, {})
