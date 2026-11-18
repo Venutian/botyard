@@ -18,3 +18,14 @@ test('a free model gets its Claude chip from how much of its checked work passed
   assert.equal(chipMeaning('-Haiku'), 'Weaker than Claude Haiku')
   assert.equal(claudeLike({ pass: 8, fail: 2 }).tier, 'sonnet')
 })
+
+test('a published benchmark grades a model first, whatever its provider; the crew record only fills in where none exists', async () => {
+  const { benchmarkGrade } = await import('../server/lib/models.mjs')
+  assert.equal(claudeLike({ model: 'opencode/glm-5.3-flash-free', pass: 0, fail: 9 }).chip, '+Sonnet', 'the benchmark wins over a poor record')
+  assert.equal(claudeLike({ model: 'hyperbolic/glm-5.3-flash' }).chip, '+Sonnet', 'any provider')
+  assert.equal(claudeLike({ model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b' }).from, 'benchmark')
+  assert.equal(claudeLike({ model: 'kilo/nvidia/nemotron-3.5-super-vl:free' }).chip, '+Haiku')
+  assert.equal(claudeLike({ model: 'opencode/deepseek-v4.1-flash-free', pass: 10, fail: 5 }).from, 'checks', 'no published score: the crew record')
+  assert.equal(claudeLike({ model: 'opencode/beam-free' }).chip, 'unrated')
+  assert.equal(benchmarkGrade('opencode/nemotron-3.5-lightning-free').score, 52.8)
+})

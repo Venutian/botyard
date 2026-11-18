@@ -298,7 +298,7 @@ function ClaudeChipTag({ claude }: { claude: NonNullable<FreeModel['claude']> })
   const { t } = useLook();
   const fill = CHIP_FILL[claude.tier];
   const name = claude.chip.replace(/^[+-]/, '');
-  const meaning = claude.chip === 'unrated' ? 'Not rated yet: fewer than three of its jobs have been checked' : claude.chip.startsWith('-') ? `Weaker than Claude ${name}` : `About as good as Claude ${name}${claude.chip.startsWith('+') ? ', a bit better' : ''}`;
+  const meaning = claude.chip === 'unrated' ? 'Not rated yet: fewer than three of its jobs have been checked' : claude.chip.startsWith('-') ? `Weaker than Claude ${name}` : `About as good as Claude ${name}${claude.chip.startsWith('+') ? ', a bit better' : ''}${claude.from === 'benchmark' ? ` (${claude.benchmark} ${claude.score})` : claude.from === 'checks' ? ", from the crew's own checks" : ''}`;
   return (
     <View accessible accessibilityLabel={meaning} style={[styles.chip, fill ? { backgroundColor: fill } : { borderWidth: 1.5, borderColor: t.ink3 }]}>
       <Txt size={12} weight={700} color={fill ? (claude.tier === 'opus' ? '#1d1304' : '#ffffff') : t.ink3}>{claude.chip}</Txt>

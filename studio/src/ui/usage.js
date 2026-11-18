@@ -81,5 +81,6 @@ export function claudeChip(claude) {
   const c = claude.chip
   const name = String(c).replace(/^[+-]/, '')
   const meaning = c === 'unrated' ? 'Not rated yet: fewer than three of its jobs have been checked' : c.startsWith('-') ? `Weaker than Claude ${name}` : `About as good as Claude ${name}${c.startsWith('+') ? ', a bit better' : ''}`
-  return `<b class="claude-chip c-${esc(claude.tier)}" title="${esc(meaning)}">${esc(c)}</b>`
+  const basis = claude.from === 'benchmark' ? ` (${claude.benchmark} ${claude.score})` : claude.from === 'checks' ? ' (from the crew\'s own checks; no published benchmark)' : ''
+  return `<b class="claude-chip c-${esc(claude.tier)}" title="${esc(meaning + basis)}">${esc(c)}</b>`
 }
