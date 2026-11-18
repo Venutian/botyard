@@ -1510,3 +1510,15 @@
 .ld-line { max-width: 320px; }
 .ld-line:empty { display: none; }
 .ld[data-level="full"] .ld-line { color: var(--red); font-weight: 600; }
+
+/* At phone width the piles are one row that scrolls sideways, and a work line puts its title under its code and
+   state, at full width, instead of squeezing it between them. */
+@media (max-width: 600px) {
+  .studio-sheet .piles { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; mask-image: linear-gradient(to right, #000 82%, transparent); }
+  .studio-sheet .piles::-webkit-scrollbar { display: none; }
+  .studio-body .row .line { grid-template-columns: 1fr auto; grid-template-areas: 'ref stage' 'title title' 'note note'; row-gap: 2px; }
+  .studio-body .row .line .ref { grid-area: ref; }
+  .studio-body .row .line .title { grid-area: title; }
+  .studio-body .row .line .stage { grid-area: stage; }
+  .studio-body .row .line .note { grid-area: note; }
+}
