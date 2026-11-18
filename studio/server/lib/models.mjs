@@ -175,6 +175,20 @@ export function freeForecast(state, now) {
   return out
 }
 
+/**
+ * Which Claude a free model is about as good as, from what the crew measured of it: its tier, and the share of
+ * its work that passed a check (free-scores.json). Strong and passing at least 70% of 5 or more checks is about
+ * Sonnet; strong with less proof, or 40-70%, about Haiku; light, or under 40%, below Haiku. No free model has
+ * been measured near Opus. It is the crew's own yardstick, not a published benchmark.
+ */
+export function claudeLike({ tier, pass = 0, fail = 0 }) {
+  const checked = pass + fail
+  const share = checked ? pass / checked : null
+  if (tier === 'light' || (checked >= 3 && share < 0.4)) return 'below Claude Haiku'
+  if (checked >= 5 && share >= 0.7) return 'about Claude Sonnet'
+  return 'about Claude Haiku'
+}
+
 function freeModels({ folder, now, listed, detail = false }) {
   const found = readJson(path.join(folder, 'free-found.json'), [])
     .filter((row) => Array.isArray(row) && row.length === 3 && row.every((v) => typeof v === 'string'))
@@ -195,8 +209,11 @@ function freeModels({ folder, now, listed, detail = false }) {
     const demoted = checked >= 3 && pass / checked < 0.5
     const aside = out[row.model] && typeof out[row.model] === 'object' && Number(out[row.model].until) > now ? out[row.model] : null
     const checkedAt = Number(ok[row.model]) > 0 ? Math.floor(Number(ok[row.model])) : null
+    const like = claudeLike({ tier: demoted ? 'light' : row.tier, pass, fail })
     return {
-      label: modelLabel(row.model),
+      // The Claude it compares with goes in brackets after the name, wherever the name is shown.
+      label: `${modelLabel(row.model)} (${like})`,
+      claudeLike: like,
       family: row.family,
       tier: demoted ? 'light' : row.tier,
       ...(demoted ? { demoted: true } : {}),
