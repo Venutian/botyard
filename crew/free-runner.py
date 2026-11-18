@@ -296,6 +296,19 @@ def alive(pid):
         return False
 
 
+def stop_child(child, wait=30):
+    """Waits for a stopped OpenCode to exit, and kills it if it has not after `wait` seconds: a slow exit crashed the
+    whole run with TimeoutExpired (18 Nov, four scout runs failed that way)."""
+    try:
+        child.wait(timeout=wait)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        child.wait()
+
+
 def provider_of(model):
     return (model or '').split('/')[0]
 
@@ -600,7 +613,7 @@ def main():
                     loops.prompt = guards.killed(shown, int(long[1]))
                     circling = (f'bash `{shown}`', f'ran {int(long[1])} seconds in the foreground')
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
             if line:
                 heard = time.time()
@@ -619,11 +632,11 @@ def main():
                     # once per start, so the run is stopped at a step's end and goes on in the same session with the notice.
                     told = noticed = True
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 if circling:
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 continue
             if time.time() - heard < QUIET:
@@ -636,7 +649,7 @@ def main():
                 continue
             ran_out = True
             os.killpg(child.pid, signal.SIGTERM)
-            child.wait(timeout=30)
+            stop_child(child)
             break
         code = child.wait()
         if told:

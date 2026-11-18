@@ -387,7 +387,7 @@ def skills_env(bot):
     want = bot['spec'].get('skills', 'all')
     if not isinstance(want, list):
         return {}
-    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want))
+    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want), reads=bot['spec'].get('reads'))
 
 
 def body_for(bot, path, existing, boss, dry=False):
