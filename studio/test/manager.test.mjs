@@ -237,7 +237,7 @@ test('the map asks one address: the one the service names, else this computer on
 
 test('a job marked done whose code is not in main is named in the trouble list, worst first', () => {
   const files = { ...noFiles(), notInMain: { at: new Date(NOW).toISOString(), jobs: [{ job: 'LH-7', branch: 'LH-7-x', commits: 2 }, { job: 'LH-7', branch: 'LH-7-y', commits: 1 }, { job: 'LH-9', branch: 'LH-9-z', commits: 1 }] } }
-  const manager = view([], { files })
+  const manager = view([job('Seven', 'done', 'senior')], { files })
   const line = manager.trouble.find((t) => /not in main/.test(t.text))
   assert.equal(line.level, 'bad')
   assert.equal(line.text, '2 jobs are marked done but their code is not in main: LH-7, LH-9')

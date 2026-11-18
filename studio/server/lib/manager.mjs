@@ -434,7 +434,8 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
   // Done jobs whose code never reached main (crew/not-in-main.py): a job is not done while its work is not in main.
   const left = (files.notInMain?.jobs || []).filter((j) => j && j.job)
   if (left.length) {
-    const named = [...new Set(left.map((j) => j.job))]
+    const byCode = new Map(issues.map((i) => [i.identifier, i]))
+    const named = [...new Set(left.map((j) => (byCode.has(j.job) ? refOf(byCode.get(j.job), projectNames) : j.job)))]
     out.push({ level: 'bad', text: `${plural(named.length, 'job is', 'jobs are')} marked done but ${named.length === 1 ? 'its' : 'their'} code is not in main: ${named.slice(0, 4).join(', ')}${named.length > 4 ? ' and more' : ''}` })
   }
   const unpushed = lines.filter((l) => l.stage === 'merged').length
