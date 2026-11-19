@@ -161,9 +161,6 @@ export class BrainField {
     this.renderer.domElement.className = 'bf-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
     host.prepend(this.renderer.domElement)
-    this.labels = document.createElement('div')
-    this.labels.className = 'bf-labels'
-    host.append(this.labels)
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#020309')
     this.scene.fog = new THREE.FogExp2('#020309', 0.0009)
@@ -359,7 +356,7 @@ export class BrainField {
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3), 3))
     geo.setAttribute('along', new THREE.BufferAttribute(Float32Array.from(along), 1))
     geo.setAttribute('lane', new THREE.BufferAttribute(Float32Array.from(lane), 1))
-    geo.setAttribute('speed', new Float32Array(pts.length).fill(1), 1)
+    geo.setAttribute('speed', new THREE.BufferAttribute(new Float32Array(pts.length).fill(1), 1))
     const mat = dashed
       ? new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 5, gapSize: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
       : new THREE.ShaderMaterial({ uniforms: { time: this.time, signals: this.signals, day: this.day }, vertexShader: FIBRE_VERT, fragmentShader: FIBRE_FRAG, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
@@ -374,7 +371,7 @@ export class BrainField {
    * chosen area; `chosen` and `near` light one note and its neighbours. `zoom` and `nearNote` come from the
    * frame loop while the camera is close; they are merged in so a repaint from the map never clears them.
    */
-  paint(state = {}) {
+  paint(state = this.state) {
     this.state = { ...this.state, ...state }
     if (!this.brain) return
     const notes = this.brain.notes
@@ -394,19 +391,19 @@ export class BrainField {
       const base = (n.kind === 'decision' ? 21 : n.kind === 'preference' ? 16 : 12) + (n.pinned ? 6 : 0) + Math.min(6, n.links.length * 1.5) + (fresh ? 6 : 0)
       let g = old ? 0.5 : n.kind === 'decision' ? 1.1 : 0.9
       if (fresh) g = 1.45
-      const out = state.dim(n.id) || (state.near && !state.near.has(n.id))
+      const out = this.state.dim(n.id) || (this.state.near && !this.state.near.has(n.id))
       if (out) g *= 0.12
-      if (n.id === state.chosen) g = Math.max(g, 1.8)
+      if (n.id === this.state.chosen) g = Math.max(g, 1.8)
       this.light.set(n.id, out ? 0.12 : 1)
       col.setXYZ(i, c.r, c.g, c.b)
-      size.setX(i, (n.id === state.chosen ? base * 1.6 : base) * (old ? 0.75 : 1))
+      size.setX(i, (n.id === this.state.chosen ? base * 1.6 : base) * (old ? 0.75 : 1))
       glow.setX(i, g)
       ring.setX(i, n.imported ? 1 : 0)
     })
     col.needsUpdate = size.needsUpdate = glow.needsUpdate = ring.needsUpdate = true
     this._paintLines(this.linkLines, this.links, 0.7)
     this._paintLines(this.replacedLines, this.replaced, 0.75, true)
-    for (const el of this.labels.children) el.classList.toggle('dim', Boolean(state.area) && el.dataset.area !== state.area)
+    for (const el of this.labels.children) el.classList.toggle('dim', Boolean(this.state.area) && el.dataset.area !== this.state.area)
     this.request()
   }
 
