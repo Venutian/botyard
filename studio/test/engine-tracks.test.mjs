@@ -368,6 +368,8 @@ test('whether work is public is decided from its project and the paths it change
   assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_projects: 'harbour' } })).current, 'review')
   assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_mark: 'SCORED BAR' }, brief: 'SCORED BAR: page bar' })).current, 'review')
   assert.equal((await run({ files: null })).current, 'review')
+  // A commit already in main shows no changed files: that is not "nothing public", it is scored.
+  assert.equal((await run({ files: [] })).current, 'review')
   // A brief that leaves the mark out does not skip it when the files are public.
   assert.equal((await run({ files: ['site/about.html'], defaults: { public_mark: 'SCORED BAR' }, brief: 'nothing said' })).current, 'review')
 })

@@ -589,6 +589,8 @@ export async function publicOf(store, request, version, inputs, io) {
   const repo = String(inputs.repo || projectFolder(store, request.projectId) || '')
   const files = commit && repo ? await io.changedFiles(repo, commit, version.main) : null
   if (!files) return { public: true, why: 'the changed files could not be read, so it is scored to be safe' }
+  // No files against main (the commit is already in main, or a merge commit): what it changes is unknown, so it is scored.
+  if (!files.length) return { public: true, why: 'its changes could not be told apart from main, so it is scored to be safe' }
   const shown = files.filter((f) => prefixes.some((p) => f.startsWith(p) || f.includes(`/${p}`)))
   return shown.length ? { public: true, why: `it changes ${shown.slice(0, 3).join(', ')}${shown.length > 3 ? ` and ${shown.length - 3} more` : ''}` } : { public: false, why: 'nothing it changes is seen by the public' }
 }
