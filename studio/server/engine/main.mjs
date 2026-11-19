@@ -21,6 +21,7 @@ import { DEFAULT_PORT, ENGINE_VARS, defaultDataDir, keysDir as keysIn, storeFile
 import { tickRoutines } from './routines.mjs'
 import { tick } from './runner.mjs'
 import { tickTracks } from './tracks.mjs'
+import { dailyBlockedSweep } from './signals.mjs'
 import { openStore } from './store.mjs'
 import { ensureStudio } from './studio.mjs'
 
@@ -120,6 +121,7 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
   const address = apiUrl || (server ? `http://127.0.0.1:${server.address().port}` : '')
 
   let ticking = false
+  const sweepState = {}
   let stopped = false
   /** One turn of the engine's own work: routines whose time has come, runs that ended, wakes that may start. */
   const turn = async ({ bots = true } = {}) => {
@@ -135,6 +137,8 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
       }
       // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
       for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
+      const swept = dailyBlockedSweep(store, sweepState)
+      if (swept) log(`[engine] blocked-jobs sweep: ${swept.closed} closed, ${swept.found - swept.closed} left for the owner or ruler`)
     } catch (err) {
       log(`[engine] tick failed: ${err.message}`)
     }
