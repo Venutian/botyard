@@ -309,6 +309,39 @@ def stop_child(child, wait=30):
         child.wait()
 
 
+PACE_WAIT, PACE_MOST = 300, 45 * 60
+
+
+def pace_kind(env=None):
+    env = env or os.environ
+    return 'check' if env.get('BOTYARD_CHECKER') else 'scout' if env.get('BOTYARD_FREE_TIER') == 'light' else 'build'
+
+
+def paced(env=None, run=subprocess.run, sleep=time.sleep, clock=time.time):
+    """Asks the studio's pace gate (BOTYARD_FREE_PACE, a command that exits 0 to go and 3 to hold) before the run's
+    first model call, so no starter can drain a daily free allowance at once. Waits while it holds, up to PACE_MOST;
+    '' when the run may go, else why it was held. No gate named: the run goes."""
+    env = env or os.environ
+    gate = env.get('BOTYARD_FREE_PACE', '').strip()
+    if not gate or not os.path.isfile(gate):
+        return ''
+    begun, told, why = clock(), False, ''
+    while True:
+        try:
+            done = run([sys.executable, gate, '--kind', pace_kind(env), '--grant'], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return ''
+        if done.returncode != 3:
+            return ''
+        why = (done.stdout or '').strip()[:200]
+        if clock() - begun >= PACE_MOST:
+            return why
+        if not told:
+            note(f"A free run waits for the day's pace: {why}")
+            told = True
+        sleep(PACE_WAIT)
+
+
 def provider_of(model):
     return (model or '').split('/')[0]
 
@@ -543,6 +576,10 @@ def main():
         # The engine also lists models and checks the version through this command: those go straight through.
         os.execv(bots.OPENCODE, [bots.OPENCODE, *args])
     list_again(bots)
+    held = paced()
+    if held:
+        sys.stderr.write(f'Held by the free pace for {PACE_MOST // 60} minutes ({held}); the job is woken again later.\n')
+        return 1
     prompt = sys.stdin.read() if not sys.stdin.isatty() else ''
     scratch = os.environ.get('TMPDIR') or ''
     if prompt and 'botyard-run-' in scratch:
