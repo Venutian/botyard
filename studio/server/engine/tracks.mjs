@@ -785,10 +785,16 @@ function stopped(store, trip, version, reason, now) {
   return { ...after, current: trip.current, handoff: null, status: 'stopped', reason: words(reason, 500), endedAt: iso(now) }
 }
 
-/** The commit the newest passing try of a step left, read as its id, or ''. */
+/**
+ * The commit the next round of a step goes on from: the newest passing try's commit, else the newest commit any
+ * try left (a build that reported NOT MET still holds the work its fix round continues; cut from main, the round
+ * starts without it: NGE-1728). A commit the repository lacks is handled where the branch is cut: it falls back to
+ * main and the bot is told.
+ */
 export function baseOf(store, tripId, stepId) {
   const tries = store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? ORDER BY created_at DESC, try_number DESC', tripId, stepId)
   for (const row of tries) if (row.snapshot?.verdict === 'pass' && commitIn(row.snapshot?.leaves?.commit)) return commitIn(row.snapshot.leaves.commit)
+  for (const row of tries) if (['failed', 'stale'].includes(row.status) && commitIn(row.snapshot?.leaves?.commit)) return commitIn(row.snapshot.leaves.commit)
   return ''
 }
 

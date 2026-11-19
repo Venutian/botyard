@@ -636,3 +636,30 @@ test('tracks, requests and trips through the engine\'s API', async () => {
     await engine.stop()
   }
 })
+// ── fix rounds start from the work ───────────────────────────────────────────────
+
+test('a fix round after a build that said NOT MET still starts from that build\'s commit, not from main', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', {
+    key: 'rounds', inputs: ['brief'],
+    steps: [
+      { id: 'build', kind: 'bot', bot: 'Builder', needs: ['brief'], leaves: ['commit'] },
+      { id: 'decide', kind: 'gate' },
+    ],
+    lines: [{ from: 'build', to: 'build', on: 'fail', rounds: 2, then: 'decide' }, { from: 'build', to: 'decide', on: 'pass' }],
+  }, { now: T0, actor: OWNER })
+  const io = fakeIo({})
+  startRequest(store, 'co', { track: 'rounds', title: 'Site', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  let n = 0
+  const tick = () => tickTracks(store, { dataDir, io, now: T0 + ++n * 1000 })
+  await tick()
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ddd4444', outcome: 'NOT MET: not deployed yet' }, T0)
+  await tick()
+  const round2 = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build'))
+  assert.equal(round2.startFrom, 'ddd4444')
+  // The round after that goes on from the newest commit, too.
+  botDoes(store, round2.id, { commit: 'eee5555', outcome: 'NOT MET' }, T0)
+  await tick()
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'eee5555')
+})
