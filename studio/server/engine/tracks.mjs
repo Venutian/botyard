@@ -264,16 +264,17 @@ export const BUILD_TRACK = {
   title: 'Build, check, land',
   description: 'A bot builds, the tests run, another bot checks; work the public will see is also scored by the reviewer before it lands; a failed check or score goes back to the builder with its findings; the work is finished when it is in main.',
   inputs: ['builder', 'checker', 'lead'],
-  optional: ['reviewer', 'public_paths', 'public_projects', 'public_mark'],
+  optional: ['ruler', 'reviewer', 'public_paths', 'public_projects', 'public_mark'],
+  // The ruling is the ruler's, a bot other than the one that checked, when the studio names one; else the lead's.
   // What counts as public: a project named here, a changed path starting with one of these, or a brief with this mark.
-  defaults: { reviewer: '', public_paths: 'site/,web/,public/,pages/,marketing/,store/,press/,trailer/,release-notes,CHANGELOG', public_projects: '', public_mark: '' },
+  defaults: { ruler: '', reviewer: '', public_paths: 'site/,web/,public/,pages/,marketing/,store/,press/,trailer/,release-notes,CHANGELOG', public_projects: '', public_mark: '' },
   steps: [
     { id: 'brief', kind: 'script', title: 'Brief check', command: 'node "$BOTYARD_TRACK_TOOLS/brief.mjs"', leaves: ['brief'], timeoutSec: 60 },
     { id: 'write-brief', kind: 'bot', bot: '$lead', title: 'Write the brief', needs: ['words'], leaves: ['brief'], words: 'Turn this request into a brief the builder can work from, with every section the brief check named in its findings. Save it as the document `brief`.' },
     { id: 'build', kind: 'bot', bot: '$builder', title: 'Build', needs: ['brief'], leaves: ['commit', 'report'], words: 'Build what the brief asks, commit it on this job\'s branch, and end your report with COMMIT: <sha> and OUTCOME: MET or NOT MET.' },
     { id: 'tests', kind: 'script', title: 'Tests', needs: ['commit'], command: 'sh -c "${BOTYARD_IN_TEST_COMMAND:-echo No test command is set for this project.}"', timeoutSec: 1800 },
     { id: 'check', kind: 'bot', bot: '$checker', title: 'Check', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'Check the build against the brief: run what proves it, read the change. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, what must change.' },
-    { id: 'rule', kind: 'bot', bot: '$lead', title: 'Ruling', ruling: true, needs: ['brief'], leaves: ['verdict'], words: 'The rounds back to the builder are used. Read the findings and the work, and rule: VERDICT: PASS lands it as it is, VERDICT: FAIL hands it to the owner with what you would do.' },
+    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: ['brief'], leaves: ['verdict'], words: 'The rounds back to the builder are used. Read the findings and the work, and rule: VERDICT: PASS lands it as it is, VERDICT: FAIL hands it to the owner with what you would do.' },
     { id: 'review', kind: 'bot', bot: '$reviewer', orBot: '$checker', title: 'Scored review', onlyFor: 'public', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'This work will be seen by the public. Score it against the bar that matches what changed: the page bar for pages, the kit bar for store listings, art and marketing kits, the release bar for release notes and public releases. Look at the real result (screenshots at phone and desktop width for pages), not only the code. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
     { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The crew could not finish this on its own. Approve to land it as it is, or send it back to a step with a note.' },
     { id: 'land', kind: 'script', title: 'Land in main', needs: ['commit'], leaves: ['commit'], command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"', timeoutSec: 3600 },
@@ -538,7 +539,9 @@ async function startStep(store, trip, request, version, step, row, values, { dat
   if (step.kind === 'gate') {
     const order = version.steps.map((s) => s.id)
     const before = order.indexOf(step.id) > 0 ? latestRow(store, trip.id, order[order.indexOf(step.id) - 1]) : null
-    const asked = gateCard(version, step, { ...row, beforeLeaves: before?.snapshot?.leaves || {} }, trip, request, inputs)
+    const tried = store.rows('SELECT DISTINCT step_id FROM trip_steps WHERE trip_id = ?', trip.id).map((r) => r.step_id)
+    const failedStep = store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND status = 'failed' ORDER BY created_at DESC LIMIT 1", trip.id)[0]?.stepId || ''
+    const asked = gateCard(version, step, { ...row, beforeLeaves: before?.snapshot?.leaves || {}, tried, failedStep }, trip, request, inputs)
     const card = createCard(store, request.jobId, asked, { now, actor: ENGINE })
     // The trip's own page asks the same question in the same words as the card.
     return { ...row, status: 'working', cardId: card.id, ask: { prompt: asked.payload.prompt, accept: asked.payload.acceptLabel, reject: asked.payload.rejectLabel }, startedAt: iso(now) }
@@ -569,16 +572,20 @@ export function gateCard(version, step, row, trip, request, inputs) {
   const passTo = version.lines.find((l) => l.from === step.id && (l.on === 'pass' || l.on === 'always'))
   const next = passTo ? version.steps.find((s) => s.id === passTo.to) : null
   const missing = next ? next.needs.filter((n) => inputs[n] === undefined || (n === 'commit' && !commitIn(inputs[n]))) : []
-  const maker = version.steps.slice(0, at).filter((s) => s.leaves.includes('commit')).at(-1) || before
   const findings = inputs.findings ? words(inputs.findings, 1500) : ''
+  // Where the work goes back to: the step that makes the change, once it has run; before that, the step that failed.
+  const makes = version.steps.slice(0, at).filter((s) => s.leaves.includes('commit')).at(-1)
+  const failed = version.steps.find((s) => s.id === row.failedStep && order.indexOf(s.id) < at)
+  const maker = (makes && (!row.tried || row.tried.includes(makes.id)) ? makes : failed || makes) || before
   const named = [...new Set(String(findings).match(/\b[0-9a-f]{40}\b/g) || [])]
-  const blocked = Boolean(next && missing.length && maker)
+  // A gate reached because a step failed never offers to go on as if it had passed: its yes sends the work back.
+  const blocked = Boolean(next && maker && (missing.length || findings))
   const commit = commitIn(inputs.commit)
   let yes, no, yesText, noText
   if (blocked) {
     const base = named.length === 1 ? named[0] : ''
     yes = { label: `Send it back to ${lower(maker.title)}`, act: 'back', backTo: maker.id, ...(base ? { base } : {}) }
-    yesText = `${upper(maker.title)} starts again${base ? ` from ${base.slice(0, 12)}, the commit the findings name,` : ''} with the findings above as its note. There is nothing to ${lower(next.title)} yet: ${missing.includes('commit') ? 'no build passed' : `nothing left ${missing.join(', ')}`}.`
+    yesText = `${upper(maker.title)} starts again${base ? ` from ${base.slice(0, 12)}, the commit the findings name,` : ''} with the findings above as its note. ${missing.length ? `There is nothing to ${lower(next.title)} yet: ${missing.includes('commit') ? 'no build passed' : `nothing left ${missing.join(', ')}`}.` : `The work did not pass, so going on to ${lower(next.title)} is not offered here; to do it anyway, run its trip again from that step.`}`
     no = { label: 'Stop it', act: 'stop' }
     noText = 'The request stops here and nothing is merged. Its jobs and branches are kept.'
   } else {
@@ -620,6 +627,8 @@ export async function publicOf(store, request, version, inputs, io) {
   const repo = String(inputs.repo || projectFolder(store, request.projectId) || '')
   const files = commit && repo ? await io.changedFiles(repo, commit, version.main) : null
   if (!files) return { public: true, why: 'the changed files could not be read, so it is scored to be safe' }
+  // No files against main (the commit is already in main, or a merge commit): what it changes is unknown, so it is scored.
+  if (!files.length) return { public: true, why: 'its changes could not be told apart from main, so it is scored to be safe' }
   const shown = files.filter((f) => prefixes.some((p) => f.startsWith(p) || f.includes(`/${p}`)))
   return shown.length ? { public: true, why: `it changes ${shown.slice(0, 3).join(', ')}${shown.length > 3 ? ` and ${shown.length - 3} more` : ''}` } : { public: false, why: 'nothing it changes is seen by the public' }
 }

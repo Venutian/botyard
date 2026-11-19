@@ -27,8 +27,9 @@ export function attention(store, companyId, { now = Date.now() } = {}) {
   const items = []
   for (const card of store.objects("SELECT raw FROM cards WHERE status = 'pending' ORDER BY created_at DESC")) {
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', card.issueId)
-    // A card in a conversation is shown in that conversation, not in this feed.
-    if (!job || job.conversationAgentId || ['done', 'cancelled'].includes(job.status)) continue
+    // A card in a conversation is shown in that conversation, not in this feed. A card still waiting on a job marked
+    // done is still the owner's to answer (an idea's stop card, say): it is shown. Only a cancelled job's card is moot.
+    if (!job || job.conversationAgentId || job.status === 'cancelled') continue
     items.push({ companyId, sourceKind: 'issue_thread_interaction', subject: { kind: 'interaction', id: card.id, companyId, title: card.title || 'A bot asks you', identifier: job.identifier, status: 'pending', metadata: { issueId: job.id, kind: card.kind } }, whyNow: card.kind === 'request_confirmation' && card.summary ? `${displayOf(store, job.identifier)}: ${String(card.summary).replace(/\s+/g, ' ').slice(0, 280).trim()}${String(card.summary).length > 280 ? '…' : ''}` : `${displayOf(store, job.identifier)} is waiting for your answer.`, inlineResolvable: true })
   }
   const seen = new Set()
