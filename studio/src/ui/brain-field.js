@@ -76,9 +76,11 @@ export function layoutTitles(cands, { w, h, max = 12, least = 6, pad = 6, avoid 
   const taken = [...avoid]
   const shown = []
   const put = (c) => {
-    for (let k = 0; k < 13; k += 1) {
+    // Rows down and up first, as far as the stage goes; then the same rows half a plate to either side.
+    const rows = 2 * Math.ceil(h / (c.h + 4)) + 1
+    for (const dx of [0, -0.6 * c.w, 0.6 * c.w]) for (let k = 0; k < rows; k += 1) {
       const step = Math.ceil(k / 2) * (k % 2 ? 1 : -1) * (c.h + 4)
-      const box = clampBox(c.x, c.y + step, c.w, c.h, w, h, pad)
+      const box = clampBox(c.x + dx, c.y + step, c.w, c.h, w, h, pad)
       if (!taken.some((t) => hits(t, box, 2))) { taken.push(box); shown.push({ ...c, box }); return }
     }
   }
