@@ -35,6 +35,16 @@ class Guard(unittest.TestCase):
         self.assertIn('refused in a main checkout', done.stderr)
         self.assertEqual(git(self.repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout.strip(), 'main')
 
+    def test_claude_and_codex_bots_get_only_the_main_checkout_rule(self):
+        env = {**os.environ, 'BOTYARD_GIT_MAIN_ONLY': '1'}
+        done = subprocess.run([WRAP, 'checkout', '-b', 'x'], cwd=self.repo, capture_output=True, text=True, env=env)
+        self.assertIn('refused in a main checkout', done.stderr)
+        open(os.path.join(self.wt, 'b'), 'w').write('b')
+        subprocess.run([WRAP, 'add', 'b'], cwd=self.wt, env=env)
+        done = subprocess.run([WRAP, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'b'], cwd=self.wt,
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
     def test_a_worktree_still_moves_freely(self):
         self.assertEqual(git(self.wt, 'checkout', '-q', '-b', 'job-two', wrap=True).returncode, 0)
         self.assertEqual(git(self.wt, 'status', '--short', wrap=True).returncode, 0)

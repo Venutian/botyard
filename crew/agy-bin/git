@@ -11,6 +11,9 @@ GIT = '/usr/bin/git'
 NEVER = {'push', 'merge', 'rebase', 'commit', 'clean'}
 # The free builder commits to its own branch, so its PATH lets commit through.
 NEVER -= set(os.environ.get('BOTYARD_GIT_ALLOW', '').split(','))
+# Claude and Codex bots keep their own rules for the rest and get only the main-checkout rule below from this git.
+if os.environ.get('BOTYARD_GIT_MAIN_ONLY'):
+    NEVER = set()
 # git's own options that take the next word as their value.
 TAKES_VALUE = {'-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env', '--super-prefix'}
 
@@ -19,8 +22,8 @@ i = 0
 while i < len(args) and args[i].startswith('-'):
     i += 2 if args[i] in TAKES_VALUE else 1
 command, rest = (args[i], args[i + 1:]) if i < len(args) else ('', [])
-if (command in NEVER or (command == 'reset' and '--hard' in rest)
-        or (command == 'worktree' and rest[:1] == ['remove'])):
+if (command in NEVER or (not os.environ.get('BOTYARD_GIT_MAIN_ONLY') and command == 'reset' and '--hard' in rest)
+        or (not os.environ.get('BOTYARD_GIT_MAIN_ONLY') and command == 'worktree' and rest[:1] == ['remove'])):
     sys.exit(f'git {command}: refused. It needs the owner\'s approval, so leave it to a Claude Code session or the owner.')
 # A repository's main checkout is what the service and the scripts run from: a bot never moves it to another branch or
 # rewinds it (19 Nov 2026: a build's `git checkout -b` in a main checkout left it on the job branch for seven hours, and
