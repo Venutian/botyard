@@ -27,7 +27,7 @@ class Reads(unittest.TestCase):
         out = got['external_directory']
         self.assertEqual(out[d], 'allow')
         self.assertEqual(out[f'{d}/*'], 'allow')
-        self.assertEqual(out['*'], 'ask')
+        self.assertEqual(out['*'], 'deny')
         keys = list(out)
         self.assertEqual(out[notes], 'deny')
         self.assertGreater(keys.index(f'{notes}/*'), keys.index(f'{d}/*'), 'the notes rule comes after, so it wins')

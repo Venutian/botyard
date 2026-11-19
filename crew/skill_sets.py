@@ -158,12 +158,15 @@ def brain_denials(env=None):
     if not paths:
         return {'edit': {'*': 'allow', f'{root}/*': 'deny', f'*{name}/*': 'deny'}}
     deny = {'*': 'allow', **{p: 'deny' for p in paths}}
-    shell = {'*': 'allow', **{f'*{os.path.join(root, t)}*': 'deny' for t in tops}, **{f'*{t}/*': 'deny' for t in tops}, **{f'*{os.path.basename(f)}*': 'deny' for f in files}}
+    # Named by the vault's own path only: a bare `*money/*` refused every command on a folder that merely has the
+    # same name (pages/money, a lifecycle/ folder), 19 Nov 2026.
+    shell = {'*': 'allow', **{f'*{os.path.join(root, t)}*': 'deny' for t in tops}, **{f'*{name}/{t}*': 'deny' for t in tops},
+             **{f'*{os.path.basename(f)}*': 'deny' for f in files}}
     # A search names a pattern, not a folder, so the whole vault is kept outside the run (OpenCode's
     # external_directory, where anything else outside the worktree is asked, which an unattended run refuses),
     # and a shell command that names the vault is refused: the bots read work notes through brain.py.
     shell.update({f'*{root}*': 'deny', f'*{name}/*': 'deny'})
-    outside = {'*': 'ask', root: 'deny', f'{root}/*': 'deny'}
+    outside = {'*': 'deny', root: 'deny', f'{root}/*': 'deny'}
     return {'read': deny, 'glob': deny, 'grep': deny, 'list': deny, 'edit': {**deny, f'{root}/*': 'deny', f'*{name}/*': 'deny'}, 'bash': shell, 'external_directory': outside}
 
 
@@ -177,7 +180,7 @@ def read_only(perm, reads, own=None):
         return perm
     perm = {k: (dict(v) if isinstance(v, dict) else v) for k, v in perm.items()}
     closed = {k: v for k, v in (perm.get('external_directory') or {}).items() if v == 'deny'}
-    outside = {'*': 'ask', **{p: 'allow' for f in folders for p in (f, f'{f}/*')}, **closed}
+    outside = {'*': 'deny', **{p: 'allow' for f in folders for p in (f, f'{f}/*')}, **closed}
     edit = perm.get('edit') if isinstance(perm.get('edit'), dict) else {'*': 'allow'}
     mine = os.path.realpath(os.path.expanduser(own)).rstrip('/') if own else ''
     # The bot's own folder stays its to edit, even inside a folder it only reads.
@@ -208,7 +211,7 @@ def protected_denials(env=None):
     out = {'edit': {'*': 'allow', **edit}}
     if read:
         out.update({tool: {'*': 'allow', **read} for tool in ('read', 'glob', 'grep', 'list')})
-        out['external_directory'] = {'*': 'ask', **read}
+        out['external_directory'] = {'*': 'deny', **read}
     return out
 
 
@@ -228,11 +231,11 @@ def scratch_open(perm):
     """The run's own scratch folder (the engine's botyard-run-* folder under the temporary folder, where TMPDIR points and OpenCode keeps its
     settings) opened outside the run's folder: a refusal there stopped runs (18 Nov: 68 free-model runs were refused in it or in /tmp)."""
     import tempfile
-    mine = perm.get('external_directory') if isinstance(perm.get('external_directory'), dict) else {'*': 'ask'}
+    mine = perm.get('external_directory') if isinstance(perm.get('external_directory'), dict) else {'*': 'deny'}
     scratch = {p: 'allow' for t in sorted({'/tmp', tempfile.gettempdir()}) for p in (f'{t}/botyard-run-*', f'{t}/botyard-run-*/*')}
     closed = {k: v for k, v in mine.items() if v == 'deny'}
     opened = {k: v for k, v in mine.items() if v == 'allow'}
-    return {**perm, 'external_directory': {'*': mine.get('*', 'ask'), **opened, **scratch, **closed}}
+    return {**perm, 'external_directory': {'*': mine.get('*', 'deny'), **opened, **scratch, **closed}}
 
 
 def claude_denials(env=None):
