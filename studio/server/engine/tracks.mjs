@@ -291,7 +291,45 @@ export const BUILD_TRACK = {
   ],
 }
 
-const BUILT_IN = [SAMPLE_TRACK, BUILD_TRACK]
+/**
+ * A product's release to the stores (docs/launch.md): the crew builds it, writes the listing, makes the store images
+ * and scores them; a script checks everything a store would refuse and uploads to the stores' testing lanes; the
+ * owner says yes before anything is sent for review; the stores are then watched until it is live. Nothing goes to
+ * main: what it delivers is a release.
+ */
+export const RELEASE_TRACK = {
+  key: 'release-app',
+  title: 'Release to the stores',
+  description: 'Build, write the listing, make and score the store images, check what a store would refuse, upload to testing, your yes, send for review, watch it go live.',
+  delivers: 'nothing',
+  inputs: ['builder', 'writer', 'artist'],
+  optional: ['reviewer', 'package', 'bundle', 'notes', 'rollout', 'watch_hours', 'watch_every_ms'],
+  defaults: { reviewer: '', package: '', bundle: '', notes: '', rollout: '0.2', watch_hours: '20', watch_every_ms: '' },
+  steps: [
+    { id: 'build', kind: 'bot', bot: '$builder', title: 'Build the release', leaves: ['aab', 'version', 'build', 'ios_build'], words: 'Build this app\'s next release for the stores named below (Google Play when it has a package, the App Store when it has a bundle id). Raise the version and the build number above what each store already holds; commit that raise on this job\'s branch. Build the Android App Bundle (.aab) for release, signed with the app\'s upload key, and, when the app ships on iOS, the iOS build through the app\'s own cloud build, sending it to TestFlight. Leave in your last comment: AAB: <full path of the .aab on this computer>, VERSION: <version name>, BUILD: <build number / version code>, IOS_BUILD: <the iOS build number, or none>.' },
+    { id: 'listing', kind: 'bot', bot: '$writer', title: 'Write the store listing', needs: ['version'], leaves: ['listing'], words: 'Write this release\'s store listing and save it as the document `listing`, as JSON: {"language": "en-US", "play": {"title", "short", "full", "whatsNew"}, "appstore": {"name", "subtitle", "keywords", "description", "promo", "whatsNew"}, "privacyUrl", "supportUrl"}. Keep each store\'s limits (Play: title 30, short 80, full 4000, what\'s new 500; App Store: name 30, subtitle 30, keywords 100, description 4000, promo 170). Every claim must be true of the app as it is: read its code. No placeholder text. Leave out a store the app is not on.' },
+    { id: 'art', kind: 'bot', bot: '$artist', title: 'Make the store images', needs: ['listing'], leaves: ['art'], words: 'Make this release\'s store images from the real app: screenshots captured on the test phone (no mock-ups), then each store\'s set at its exact sizes: Play icon 512 x 512, feature graphic 1024 x 500, 2 to 8 phone screenshots; App Store at least 3 iPhone 6.9 inch screenshots (1320 x 2868). Put them all in one folder and leave ART: <the folder\'s full path>.' },
+    { id: 'score', kind: 'bot', bot: '$reviewer', orBot: '$writer', title: 'Score the listing and images', needs: ['listing', 'art'], leaves: ['verdict'], words: 'Score this release\'s store listing (the document `listing`) and its images (the folder named below) against the store kit bar: true to the app, clear, no slop, each store\'s sizes and limits. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
+    { id: 'ready', kind: 'script', title: 'Check what a store would refuse', needs: ['listing', 'art'], leaves: ['ready'], command: 'node "$BOTYARD_TRACK_TOOLS/release-ready.mjs"', timeoutSec: 600 },
+    { id: 'upload', kind: 'script', title: 'Upload to testing', needs: ['version'], leaves: ['uploaded', 'play_code'], command: 'node "$BOTYARD_TRACK_TOOLS/release-upload.mjs"', timeoutSec: 3600 },
+    { id: 'owner', kind: 'gate', title: 'Send it for review?', needs: ['listing', 'ready', 'uploaded'], words: 'The release is built, its listing and images are scored, the checks pass and it is on the stores\' testing lanes. Yes sends it for review: the listing goes onto each store, Play gets a staged rollout, the App Store version goes to Apple.' },
+    { id: 'submit', kind: 'script', title: 'Send for review', needs: ['listing', 'uploaded'], leaves: ['sent'], command: 'node "$BOTYARD_TRACK_TOOLS/release-submit.mjs"', timeoutSec: 900 },
+    { id: 'watch', kind: 'script', title: 'Watch the review', needs: ['sent'], leaves: ['outcome'], command: 'node "$BOTYARD_TRACK_TOOLS/release-watch.mjs"', timeoutSec: 24 * 3600 },
+  ],
+  lines: [
+    { from: 'build', to: 'listing', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'owner' },
+    { from: 'listing', to: 'art', on: 'pass' }, { from: 'listing', to: 'owner', on: 'fail' },
+    { from: 'art', to: 'score', on: 'pass' }, { from: 'art', to: 'owner', on: 'fail' },
+    { from: 'score', to: 'ready', on: 'pass' }, { from: 'score', to: 'listing', on: 'fail', rounds: 2, then: 'owner' },
+    { from: 'ready', to: 'upload', on: 'pass' }, { from: 'ready', to: 'build', on: 'fail', rounds: 2, then: 'owner' },
+    { from: 'upload', to: 'owner', on: 'pass' }, { from: 'upload', to: 'owner', on: 'fail' },
+    { from: 'owner', to: 'submit', on: 'pass' },
+    { from: 'submit', to: 'watch', on: 'pass' }, { from: 'submit', to: 'owner', on: 'fail' },
+    { from: 'watch', to: 'build', on: 'fail', rounds: 1, then: 'owner' },
+  ],
+}
+
+const BUILT_IN = [SAMPLE_TRACK, BUILD_TRACK, RELEASE_TRACK]
 const seeded = new WeakSet()
 /** The built-in tracks, saved once in every studio that does not have them yet. */
 export function ensureBuiltIns(store, { now = Date.now() } = {}) {
