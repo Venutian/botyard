@@ -129,7 +129,14 @@ export async function pageShot(address, { width = 1280, height = 800, scrollX = 
   const w = Math.max(200, Math.min(3840, Math.round(width)))
   const h = Math.max(200, Math.min(2400, Math.round(height)))
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'botyard-look-'))
-  const child = spawn(browser, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${w},${h}`, '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
+  const child = spawn(browser, [
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${w},${h}`,
+    '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio',
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    '--disable-dev-shm-usage',
+    ...(process.env.CI || process.getuid?.() === 0 ? ['--no-sandbox'] : []),
+    'about:blank',
+  ], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
   let err = ''
   child.stderr.on('data', (d) => { err += d })
   const stop = () => { try { if (process.platform === 'win32') child.kill('SIGKILL'); else process.kill(-child.pid, 'SIGKILL') } catch { /* gone */ } setTimeout(() => fs.rmSync(profile, { recursive: true, force: true }), 500) }
