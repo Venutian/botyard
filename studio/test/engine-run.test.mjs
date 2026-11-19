@@ -537,3 +537,20 @@ test('a run going on a job keeps its workspace when the job moves projects', asy
   const done = await until(s, (r) => r.finished.find((f) => f.id === run.id), 30000)
   assert.equal(done.status, 'succeeded')
 })
+
+test('the owner\'s message to a bot goes ahead of the jobs queued for it', async () => {
+  const s = studio({ script: 'sleep 1; echo \'{"type":"result","subtype":"success","usage":{}}\'' })
+  // A run is going, and two crew jobs queue behind it.
+  createJob(s.store, COMPANY, { title: 'Busy', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  assert.equal((await tick(s.store, s.opts())).started.length, 1)
+  createJob(s.store, COMPANY, { title: 'Queued one', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  createJob(s.store, COMPANY, { title: 'Queued two', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  // Then the owner writes in the chat: that wake is the newest.
+  const chat = openChat(s.store, COMPANY, 'bot-builder', { actor: { user: 'local-board' } })
+  addComment(s.store, chat.id, { body: 'Why no reply?' }, { actor: { user: 'local-board' } })
+  // The first run started once the busy one ends is the chat's, though its wake came last.
+  await until(s, () => s.store.rows('SELECT id FROM runs').length >= 2, 15000)
+  const runs = s.store.objects('SELECT raw FROM runs ORDER BY created_at')
+  assert.equal(runs[1].issueId, chat.id, 'the chat runs before the queued jobs')
+  await until(s, () => s.store.rows('SELECT id FROM runs').length >= 4 && !s.store.rows("SELECT id FROM runs WHERE status = 'running'").length, 20000)
+})
