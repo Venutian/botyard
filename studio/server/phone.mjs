@@ -28,7 +28,7 @@ import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { throttleAct, throttleState } from './lib/throttle.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
-import { launchView, tellState } from './lib/launch.mjs'
+import { launchView, startRelease, tellState } from './lib/launch.mjs'
 import { botBehind } from './engine/caller.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -531,6 +531,7 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (pathname === '/v1/launch' && req.method === 'GET') return send(res, 200, await launchView())
       if (pathname === '/v1/launch' && req.method === 'POST') {
         const b = await readBody(req)
+        if (b.action === 'release') await startRelease(String(b.product || ''), options)
         if (b.action === 'tell') tellState({ product: String(b.product || ''), channel: String(b.channel || ''), state: String(b.state || ''), tone: String(b.tone || ''), next: String(b.next || '') })
         return send(res, 200, await launchView({ force: b.action === 'check' }))
       }
