@@ -91,3 +91,24 @@ test('the daily sweep runs once in 24 hours', () => {
   assert.equal(dailyBlockedSweep(store, {}, { now: NOW + 5 * H }), null)
   assert.notEqual(dailyBlockedSweep(store, state, { now: NOW + 25 * H }), null)
 })
+
+import { addComment, putDocument } from '../server/engine/write.mjs'
+import { spinning } from '../server/engine/runner.mjs'
+
+test('a job whose last four runs ended well and left nothing is stopped, not run a fifth time', () => {
+  const store = yard()
+  const a = job(store, 'Loop', 'in_progress', 10)
+  const base = () => store.object('SELECT raw FROM jobs WHERE id = ?', a.id)
+  for (let i = 0; i < 4; i++) run(store, a.id, 'succeeded', 8 - i, { finishedAt: new Date(NOW - (8 - i) * H + 20_000).toISOString() })
+  assert.equal(spinning(store, base()), true)
+  // A comment since the first of them, or a failed run among them, ends the streak.
+  addComment(store, a.id, { body: 'noted' }, { now: NOW - 5 * H, actor: OWNER, quiet: true })
+  assert.equal(spinning(store, base()), false)
+  const b = job(store, 'Fine', 'in_progress', 10)
+  for (let i = 0; i < 4; i++) run(store, b.id, i === 2 ? 'failed' : 'succeeded', 8 - i, { finishedAt: new Date(NOW - (8 - i) * H + 20_000).toISOString() })
+  assert.equal(spinning(store, store.object('SELECT raw FROM jobs WHERE id = ?', b.id)), false)
+  const c = job(store, 'Working', 'in_progress', 10)
+  for (let i = 0; i < 4; i++) run(store, c.id, 'succeeded', 8 - i, { finishedAt: new Date(NOW - (8 - i) * H + 20_000).toISOString() })
+  putDocument(store, c.id, 'notes', { body: 'x' }, { now: NOW - 6 * H, actor: { agent: 'b1' } })
+  assert.equal(spinning(store, store.object('SELECT raw FROM jobs WHERE id = ?', c.id)), false)
+})

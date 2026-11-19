@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
-import { addComment } from './write.mjs'
+import { addComment, patchJob } from './write.mjs'
 import { fileOf } from './files.mjs'
 import { instructionsOf, wakePrompt } from './prompt.mjs'
 import { MAY_NOT_VAR, PASS_PREFIX, PROVIDER_KEYS, isHidden, keysDir, runLogsDir, runVars, runsDir, worktreeDir } from './names.mjs'
@@ -253,6 +253,26 @@ const limitOf = (agent) => Math.min(50, Math.max(1, Number(agent.runtimeConfig?.
 const liveRuns = (store, where, ...params) => store.objects(`SELECT raw FROM runs WHERE status IN ('running', 'queued') AND ${where}`, ...params)
 
 /** Why this wake cannot start now, or '' when it can. `skip` means it never will. */
+/** How many runs in a row may end well and leave nothing before the job is stopped (18 Nov: 20 such runs on one job). */
+export const MOST_EMPTY_RUNS = 4
+
+/**
+ * True when the job's last runs all "succeeded" and left nothing: no comment, no document, no card,
+ * and nobody has written to the job since. Waking it again only spends a run. (A person's new
+ * comment ends the streak, and so does anything a run leaves.)
+ */
+export function spinning(store, job) {
+  if (job.conversationAgentId || ['done', 'cancelled', 'blocked'].includes(job.status)) return false
+  const runs = store.objects('SELECT raw FROM runs WHERE job_id = ? AND finished_at IS NOT NULL ORDER BY started_at DESC LIMIT ?', job.id, MOST_EMPTY_RUNS)
+  if (runs.length < MOST_EMPTY_RUNS || runs.some((r) => r.status !== 'succeeded')) return false
+  const first = runs.at(-1).startedAt
+  if (store.row('SELECT COUNT(*) AS n FROM comments WHERE job_id = ? AND created_at >= ? AND deleted_at IS NULL', job.id, first).n) return false
+  if (store.row('SELECT COUNT(*) AS n FROM document_versions WHERE job_id = ? AND created_at >= ?', job.id, first).n) return false
+  if (store.row('SELECT COUNT(*) AS n FROM cards WHERE job_id = ? AND created_at >= ?', job.id, first).n) return false
+  // A status poked back to todo by a script is a re-wake, not news: only words, documents and cards count.
+  return true
+}
+
 function hold(store, wake, agent, job) {
   if (!agent) return { skip: 'That bot no longer exists' }
   if (agent.status === 'terminated') return { skip: 'That bot was removed' }
@@ -260,6 +280,7 @@ function hold(store, wake, agent, job) {
   if (!job) return { skip: 'A wake needs a job' }
   // A chat with a bot is never closed, so a word in it always reaches the bot.
   if (!job.conversationAgentId && ['done', 'cancelled'].includes(job.status)) return { skip: 'The job is closed' }
+  if (spinning(store, job)) return { spin: `The last ${MOST_EMPTY_RUNS} runs on this job left nothing` }
   if (agent.status === 'paused') return { wait: 'The bot is paused' }
   if ((job.blockedBy || []).length) return { wait: 'The job waits on another job' }
   if (liveRuns(store, 'job_id = ?', job.id).length) return { wait: 'A run is already going on this job' }
@@ -497,6 +518,14 @@ export async function tick(store, { dataDir, apiUrl, io = realIo, now = Date.now
     const agent = store.object('SELECT raw FROM agents WHERE id = ?', wake.agentId)
     const held = hold(store, wake, agent, job)
     if (held.skip) { store.put('wakes', { ...wake, status: 'skipped', error: held.skip, finishedAt: iso(now), updatedAt: iso(now) }); report.skipped.push({ id: wake.id, why: held.skip }); continue }
+    if (held.spin) {
+      // The job is stopped, with the reason where its step (or its owner) reads it, instead of running a fifth time.
+      store.put('wakes', { ...wake, status: 'skipped', error: held.spin, finishedAt: iso(now), updatedAt: iso(now) })
+      addComment(store, job.id, { body: `${held.spin}: no comment, no document, no card. Blocked so that it is not run again for nothing. Say what is missing (or what to do differently), then set it to todo.` }, { now, actor: { user: 'engine:runs' }, quiet: true })
+      patchJob(store, job.id, { status: 'blocked' }, { now, actor: { user: 'engine:runs' } })
+      report.skipped.push({ id: wake.id, why: held.spin })
+      continue
+    }
     if (held.wait) continue
     try {
       report.started.push(await startRun(store, wake, { dataDir, apiUrl, io, now, env }))
