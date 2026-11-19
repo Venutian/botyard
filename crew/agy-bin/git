@@ -22,4 +22,27 @@ command, rest = (args[i], args[i + 1:]) if i < len(args) else ('', [])
 if (command in NEVER or (command == 'reset' and '--hard' in rest)
         or (command == 'worktree' and rest[:1] == ['remove'])):
     sys.exit(f'git {command}: refused. It needs the owner\'s approval, so leave it to a Claude Code session or the owner.')
+# A repository's main checkout is what the service and the scripts run from: a bot never moves it to another branch or
+# rewinds it (19 Nov 2026: a build's `git checkout -b` in a main checkout left it on the job branch for seven hours, and
+# twelve commits meant for main landed there). Bots work in their job's worktree.
+MOVES = {'checkout', 'switch', 'reset', 'restore'}
+
+
+def main_checkout(args):
+    import subprocess
+    where = [a for k, a in zip(args, args[1:]) if k == '-C']
+    cwd = os.path.join(os.getcwd(), *where) if where else os.getcwd()
+    try:
+        out = subprocess.run([GIT, '-C', cwd, 'rev-parse', '--absolute-git-dir', '--git-common-dir'], capture_output=True,
+                             text=True, timeout=10).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if len(out) != 2:
+        return False
+    common = out[1] if os.path.isabs(out[1]) else os.path.normpath(os.path.join(cwd, out[1]))
+    return os.path.realpath(out[0]) == os.path.realpath(common)
+
+
+if command in MOVES and not os.environ.get('BOTYARD_MAIN_CHECKOUT_OK') and main_checkout(args[:i]):
+    sys.exit(f'git {command}: refused in a main checkout. Work in your job\'s worktree; the main checkout stays on its branch.')
 os.execv(GIT, [GIT] + args)

@@ -22,7 +22,8 @@ CHECKS = {'identity': lambda: load('identity-check.py').faults(repos=[os.path.di
           'connectors': lambda: load('connectors-check.py').faults(),
           'not-in-main': lambda: load('not-in-main.py').faults(),
           'notes-backup': lambda: load('brain-backup-check.py').faults(),
-          'folders': lambda: load('folder-check.py').faults()}
+          'folders': lambda: load('folder-check.py').faults(),
+          'main-checkouts': lambda: load('main-checkout.py').faults(dry=True)}
 
 
 def main():
