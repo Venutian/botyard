@@ -478,9 +478,13 @@ export async function tick(store, { dataDir, apiUrl, io = realIo, now = Date.now
     }
     report.finished.push(finishRun(store, made, result, { dataDir, now }))
   }
-  for (const wake of store.objects("SELECT raw FROM wakes WHERE status = 'queued' ORDER BY requested_at")) {
+  // The owner's conversation with a bot goes first: a message from the owner is not left behind the bot's queued
+  // jobs (18 Nov: a question waited eleven minutes behind four crew jobs). Otherwise, oldest first.
+  const queued = store.objects("SELECT raw FROM wakes WHERE status = 'queued' ORDER BY requested_at")
+    .map((wake) => ({ wake, job: store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '') }))
+    .sort((a, b) => Number(Boolean(b.job?.conversationAgentId)) - Number(Boolean(a.job?.conversationAgentId)))
+  for (const { wake, job } of queued) {
     const agent = store.object('SELECT raw FROM agents WHERE id = ?', wake.agentId)
-    const job = store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '')
     const held = hold(store, wake, agent, job)
     if (held.skip) { store.put('wakes', { ...wake, status: 'skipped', error: held.skip, finishedAt: iso(now), updatedAt: iso(now) }); report.skipped.push({ id: wake.id, why: held.skip }); continue }
     if (held.wait) continue

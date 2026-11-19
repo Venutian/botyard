@@ -186,12 +186,22 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(card.issueId, request.jobId)
   assert.match(card.summary, /FAIL a third time/)
   assert.throws(() => answerGate(store, tripId, { action: 'approve' }, { actor: { agent: 'b1' } }), /Only the owner/)
+  // The checks failed, so the gate never offers to land it: its yes sends the work back to the build with the findings.
+  assert.equal(card.payload.acceptLabel, 'Send it back to build')
+  assert.match(card.payload.prompt, /The work did not pass, so going on to land is not offered here/)
   answerGate(store, tripId, { action: 'approve' }, { now: T0 + 9000, actor: OWNER })
   await tick(10)
-  // Landed by the script, but not in main yet: not finished.
+  const build5 = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build'))
+  assert.match(build5.description, /FAIL a third time/)
+  assert.equal(io.ran.filter((r) => r.line === 'land it').length, 0, 'nothing landed on the yes')
+  botDoes(store, build5.id, { commit: 'eee5555' }, T0)
+  await tick(11)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'PASS' }, T0)
+  await tick(12)
+  // Landed by the script once a check passed, but not in main yet: not finished.
   view = tripView(store, tripId)
   assert.equal(view.status, 'not-in-main')
-  assert.equal(view.commit, 'ddd4444-merged')
+  assert.equal(view.commit, 'eee5555-merged')
   assert.equal(getRequest(store, request.id).status, 'not-in-main')
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
   landed = true
@@ -202,8 +212,8 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'done')
   // The build rounds the landed one replaced are closed as superseded; the round that landed stays done.
   const builds = store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = 'build' ORDER BY created_at", tripId)
-  assert.deepEqual(builds.map((b) => store.object('SELECT raw FROM jobs WHERE id = ?', b.jobId).status), ['cancelled', 'cancelled', 'cancelled', 'done'])
-  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ?', builds[0].jobId).at(-1).body, /^Superseded: a later round of this request landed in main \(ddd4444-merg/)
+  assert.deepEqual(builds.map((b) => store.object('SELECT raw FROM jobs WHERE id = ?', b.jobId).status), ['cancelled', 'cancelled', 'cancelled', 'cancelled', 'done'])
+  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ?', builds[0].jobId).at(-1).body, /^Superseded: a later round of this request landed in main \(eee5555-merg/)
   // Cost is added up across every step and round of the request.
   assert.equal(shown.cost.usd, 1.75)
   assert.equal(shown.cost.inputTokens, 100)
@@ -369,6 +379,9 @@ test('the built-in crew track scores public work before landing, and its ruling 
   assert.ok(lines.some((l) => l.from === 'check' && l.to === 'review' && l.on === 'pass'))
   assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' })
   assert.equal(BUILD_TRACK.steps.find((s) => s.id === 'review').onlyFor, 'public')
+  // The ruling is the ruler's (a bot other than the checker, when the studio names one), else the lead's.
+  const rule = BUILD_TRACK.steps.find((s) => s.id === 'rule')
+  assert.deepEqual([rule.bot, rule.orBot], ['$ruler', '$lead'])
   assert.equal(checkTrack(BUILD_TRACK, { selfKey: 'build-check-land' }).optional.includes('reviewer'), true)
 })
 
