@@ -29,8 +29,25 @@ jobs:
           python-version: '3.12'
       - name: Nothing personal, secret or heavy in the tree
         run: node tools/release-check.mjs
+      - name: A Chromium-family browser for the screenshot test
+        id: browser
+        run: |
+          # The runner image ships Google Chrome. Install it when an image does not, so the
+          # screenshot assertion in the suite never silently skips for lack of a browser.
+          if ! command -v google-chrome >/dev/null 2>&1; then
+            echo "Installing Google Chrome..."
+            wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg >/dev/null
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
+            sudo apt-get update -y
+            sudo apt-get install -y google-chrome-stable
+          fi
+          path="$(command -v google-chrome || command -v google-chrome-stable)"
+          echo "Browser: $path ($("$path" --version))"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
       - name: The service's tests
         working-directory: studio
+        env:
+          BOTYARD_BROWSER: ${{ steps.browser.outputs.path }}
         run: |
           npm ci --no-audit --no-fund
           npm run build
