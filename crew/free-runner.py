@@ -499,7 +499,7 @@ def with_connectors(env, folder=None):
     if not own or env.get('BOTYARD_CONNECTORS') == 'off':
         return own
     folder = folder or env.get('BOTYARD_BOT_CONNECTORS') or botyard_home.state('connectors')
-    given = os.path.join(folder, os.path.basename(own))
+    given = os.path.join(folder, re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own)))
     try:
         with open(given) as f:
             mcp = json.load(f).get('mcp') or {}
@@ -507,7 +507,10 @@ def with_connectors(env, folder=None):
             return own
         with open(own) as f:
             config = json.load(f)
-        merged = os.path.join(folder, os.path.basename(own).replace('.opencode.json', '.with-connectors.opencode.json'))
+        # One merged file per bot, whatever it is started from: a run started with the merged file already in
+        # OPENCODE_CONFIG stacked ".with-connectors" on each start (19 Nov: eight files, six suffixes deep).
+        base = re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own))
+        merged = os.path.join(folder, base.replace('.opencode.json', '.with-connectors.opencode.json'))
         text = json.dumps({**config, 'mcp': {**(config.get('mcp') or {}), **mcp}}, indent=1)
         try:
             with open(merged) as f:
@@ -541,6 +544,11 @@ def main():
         os.execv(bots.OPENCODE, [bots.OPENCODE, *args])
     list_again(bots)
     prompt = sys.stdin.read() if not sys.stdin.isatty() else ''
+    scratch = os.environ.get('TMPDIR') or ''
+    if prompt and 'botyard-run-' in scratch:
+        # 19 Nov: runs wrote /tmp/report.md, outside every folder they may use, and ended on the refusal.
+        prompt += (f"\n\nScratch files go in {scratch} (also in $TMPDIR), never in /tmp itself. Folders outside your job's "
+                   "folders are closed to you: a refused path is closed, so do not try it again; use this folder instead.")
     model = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ('--model', '-m')), None)
     session = None
     child = None
