@@ -30,7 +30,7 @@ import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/
 import { guidedChange } from './lib/chapters.mjs'
 import { openLook, pageShot } from './lib/look.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
-import { launchView, tellState } from './lib/launch.mjs'
+import { launchView, startRelease, tellState } from './lib/launch.mjs'
 import { brainRoute } from './lib/brain.mjs'
 import { botBehind } from './engine/caller.mjs'
 
@@ -199,6 +199,7 @@ async function studioRoute(req, res, url) {
     const finding = url.pathname.match(/^\/api\/studio\/improvements\/(IMP-\d{1,6})$/)
     if (finding && req.method === 'POST') return send(res, 200, await decideImprovement(finding[1], { action: String(body.action || ''), reason: body.reason }))
     if (url.pathname === '/api/studio/launch' && req.method === 'POST') {
+      if (body.action === 'release') await startRelease(String(body.product || ''))
       if (body.action === 'tell') tellState({ product: String(body.product || ''), channel: String(body.channel || ''), state: String(body.state || ''), tone: String(body.tone || ''), next: String(body.next || ''), waits: String(body.waits || '') })
       return send(res, 200, await launchView({ force: body.action === 'check' }))
     }
