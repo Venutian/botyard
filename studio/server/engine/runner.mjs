@@ -94,6 +94,15 @@ const dropToken = (store, runId) => {
 // ── where a job is worked ───────────────────────────────────────────────────────────
 
 /**
+ * The run this one tries again: a job whose newest earlier run ended failed or timed out is being run again
+ * (whoever woke it), so the link is kept and retries can be counted. Null for a first run or a run after a good one.
+ */
+export function retryOf(store, jobId, now) {
+  const last = store.row('SELECT id, status FROM runs WHERE job_id = ? AND started_at <= ? ORDER BY started_at DESC, created_at DESC LIMIT 1', jobId, new Date(now + 1000).toISOString())
+  return last && ['failed', 'timed_out'].includes(last.status) ? last.id : null
+}
+
+/**
  * The folder a job is worked in: its own git worktree on its own branch, cut from the project's
  * main line, kept between runs. A project that is not a git repository is worked in place.
  */
@@ -351,7 +360,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
     invocationSource: wake.source, triggerDetail: wake.reason, wakeupRequestId: wake.id, status: 'running',
     startedAt: iso(now), finishedAt: null, error: null, errorCode: null, exitCode: null, signal: null, usageJson: null, resultJson: null,
     sessionIdBefore: session || null, sessionIdAfter: null, logStore: 'local_file', logRef, logBytes: 0, stdoutExcerpt: '', stderrExcerpt: '',
-    retryOfRunId: wake.payload?.failedRunId || null, contextSnapshot: { issueId: job.id, wakeReason: wake.reason, wakeSource: wake.source, model, cwd, command, args: args.map((a) => (a.length > 300 ? `${a.slice(0, 300)}…` : a)) },
+    retryOfRunId: wake.payload?.failedRunId || retryOf(store, job.id, now), contextSnapshot: { issueId: job.id, wakeReason: wake.reason, wakeSource: wake.source, model, cwd, command, args: args.map((a) => (a.length > 300 ? `${a.slice(0, 300)}…` : a)) },
     createdAt: iso(now), updatedAt: iso(now),
   }
   store.tx(() => {
