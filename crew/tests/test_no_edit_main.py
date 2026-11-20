@@ -17,7 +17,7 @@ class NoEditMain(unittest.TestCase):
         self.repo = os.path.join(self.projects, 'product')
         os.makedirs(os.path.join(self.repo, 'src'))
         subprocess.run(['git', 'init', '-q', '-b', 'main', self.repo], check=True)
-        self.wt = os.path.join(self.repo, '.botyard', 'worktrees', 'NGE-1-x')
+        self.wt = os.path.join(self.repo, '.botyard', 'worktrees', 'JOB-1-x')
         os.makedirs(self.wt)
         open(os.path.join(self.wt, '.git'), 'w').write('gitdir: ../../../.git/worktrees/x\n')
         self.saved = guard.botyard_home.projects
