@@ -42,6 +42,7 @@ const PREVIEW_LOOKBACK = 5
 const PREVIEW_CHARS = 140
 const PRIORITIES = new Set(['critical', 'high', 'medium', 'low'])
 const FAILED_RUNS = new Set(['failed', 'timed_out'])
+const PACE_HOLD = 'pace_hold'
 const SHOWN_RUNS = 50
 const MAX_ANSWERS = 20
 const REPORT_MS = 24 * 60 * 60 * 1000
@@ -452,7 +453,7 @@ function cardView(interaction, chat) {
 function runView(runs, live, names) {
   const latest = live[0] || runs.find((r) => r.issueId)
   if (!latest) return null
-  const failed = !live.length && FAILED_RUNS.has(latest.status)
+  const failed = !live.length && FAILED_RUNS.has(latest.status) && latest.errorCode !== PACE_HOLD
   return {
     id: latest.id,
     live: live.length > 0,

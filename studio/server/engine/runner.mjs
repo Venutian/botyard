@@ -395,6 +395,7 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
   const log = readLog(path.join(runLogsDir(dataDir), made.logRef || ''))
   const read = readOutput(agent.adapterType, log.lines)
   const status = result.cancelled ? 'cancelled' : result.timedOut ? 'timed_out' : result.exitCode === 0 && !read.failed ? 'succeeded' : 'failed'
+  const held = /Held by the free pace/i.test(log.stderr)
   const why = status === 'succeeded' ? null
     : result.cancelled ? 'Cancelled'
       : result.timedOut ? 'It was stopped at its time limit'
@@ -403,7 +404,7 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
   const usage = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
   const done = {
     ...made, status, finishedAt: result.finishedAt || iso(now), exitCode: result.exitCode ?? null, signal: result.signal || null,
-    error: why, errorCode: status === 'timed_out' ? 'timeout' : status === 'failed' ? 'adapter_failed' : null,
+    error: why, errorCode: status === 'timed_out' ? 'timeout' : status === 'failed' ? (held ? 'pace_hold' : 'adapter_failed') : null,
     usageJson: usage, resultJson: { summary: read.said.slice(0, 2000) }, sessionIdAfter: read.session || made.sessionIdBefore || null,
     logBytes: result.logBytes || 0, stdoutExcerpt: log.stdout, stderrExcerpt: log.stderr, updatedAt: iso(now),
   }

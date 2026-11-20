@@ -211,7 +211,7 @@ export function runRow(run, names, jobs) {
   const job = jobs.get(run.issueId)
   const start = stamp(run.startedAt || run.createdAt)
   const end = stamp(run.finishedAt)
-  const failed = FAILED.has(run.status)
+  const failed = FAILED.has(run.status) && run.errorCode !== 'pace_hold'
   return {
     id: run.id,
     bot: names.get(run.agentId) || 'A bot',
@@ -399,7 +399,7 @@ export async function runList({ bot = '', status = '', page = 0, ...options } = 
   ])
   const nameOf = new Map(agents.map((a) => [a.id, a.name]))
   const rows = runs.filter((r) => nameOf.has(r.agentId))
-    .filter((r) => !status || (status === 'failed' ? FAILED.has(r.status) : status === 'running' ? ['running', 'queued'].includes(r.status) : r.status === status))
+    .filter((r) => !status || (status === 'failed' ? FAILED.has(r.status) && r.errorCode !== 'pace_hold' : status === 'running' ? ['running', 'queued'].includes(r.status) : r.status === status))
   const from = Math.max(0, Number(page) || 0) * RUNS_PAGE
   return {
     runs: rows.slice(from, from + RUNS_PAGE).map((r) => runRow(r, nameOf, names.jobs)),
@@ -519,6 +519,7 @@ export async function activityPage({ page = 0, bot = '', ...options } = {}) {
   }
   for (const span of timeline?.spans || []) {
     if (!FAILED.has(span.status) || (bot && span.actorId !== `agent:${bot}`)) continue
+    if (span.errorCode === 'pace_hold') continue
     const job = names.jobs.get(span.issueId)
     items.push({ at: stamp(span.end || span.start), who: actors.get(span.actorId) || 'A bot', what: span.status === 'cancelled' ? 'had a run stopped on' : 'had a run fail on', to: '', job: job ? { id: job.id, ref: job.ref, title: job.title } : { id: span.issueId, ref: withRefs(span.issueIdentifier || ''), title: cut(plainTitle(withRefs(span.issueTitle || '')), 90) }, actor: span.actorId, issue: span.issueId, kind: 'failed', run: span.runId, times: 1 })
   }

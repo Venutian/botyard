@@ -13,6 +13,7 @@ import { jobCounts } from './read.mjs'
 import { Refused } from './write.mjs'
 
 const HOUR = 3_600_000
+const PACE_HOLD = /Held by the free pace/i
 const DAY = 24 * HOUR
 const iso = (ms) => new Date(ms).toISOString()
 const company = (store, id) => {
@@ -40,6 +41,7 @@ export function attention(store, companyId, { now = Date.now() } = {}) {
     if (seen.has(key)) continue
     seen.add(key)
     if (!['failed', 'timed_out'].includes(row.status) || !row.job_id) continue
+    if (PACE_HOLD.test(row.error || '')) continue
     const job = store.row('SELECT status, identifier FROM jobs WHERE id = ?', row.job_id)
     if (!job || ['done', 'cancelled'].includes(job.status)) continue
     const who = names.get(row.agent_id) || 'A bot'
