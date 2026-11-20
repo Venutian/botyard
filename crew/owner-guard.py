@@ -132,6 +132,53 @@ def worktree_at_root(command, cwd=None, root=None, depth=0):
     return False
 
 
+MAIN_TOLD = ('Refused: that file is in a repository\'s main checkout, which the service runs from. Work in your job\'s '
+             'worktree (it is your working folder); the change reaches main through the landing, with its tests.')
+# Shell writes the hook can see: a redirect, tee, sed -i.
+WRITES = re.compile(r"""(?:>>?|\btee\s+(?:-a\s+)?)\s*(["']?)([^\s|;&<>"']+)\1""")
+
+
+def main_checkout_of(path, root=None):
+    """The main checkout a file is in (a repository directly in the projects folder whose .git is a folder), or ''.
+    A job worktree (its .git is a file) and anything outside the projects folder are free."""
+    root = os.path.realpath(root or botyard_home.projects())
+    here = os.path.realpath(path)
+    while True:
+        dot = os.path.join(here, '.git')
+        if os.path.exists(dot):
+            return here if os.path.isdir(dot) and os.path.dirname(here) == root else ''
+        up = os.path.dirname(here)
+        if up == here:
+            return ''
+        here = up
+
+
+def written_paths(command, cwd=None):
+    """The files a shell command visibly writes (redirects, tee, sed -i), as absolute paths."""
+    here = cwd or os.getcwd()
+    out = []
+    for part in re.split(r'&&|\|\||;|\n', command):
+        words = part.split()
+        if words[:1] == ['cd'] and len(words) > 1:
+            here = os.path.join(here, os.path.expanduser(os.path.expandvars(words[1])))
+            continue
+        targets = []
+        for piece in part.split('|'):
+            try:
+                w = shlex.split(piece)
+            except ValueError:
+                w = piece.split()
+            if w[:1] == ['sed'] and any(x.startswith('-i') or x.startswith('--in-place') or (x.startswith('-') and not x.startswith('--') and 'i' in x[1:]) for x in w[1:]):
+                targets.append(w[-1])
+        for m in WRITES.finditer(part):
+            targets.append(m.group(2))
+        for target in targets:
+            if target.startswith('&') or target in ('/dev/null', '/dev/stderr', '/dev/stdout') or target.isdigit():
+                continue
+            out.append(os.path.normpath(os.path.join(here, os.path.expanduser(os.path.expandvars(target)))))
+    return out
+
+
 def check(event):
     """The refusal text for this tool call, or None."""
     tool = event.get('tool_name') or ''
@@ -143,10 +190,17 @@ def check(event):
             return told
     if SEND_TOOLS.search(tool):
         return TOLD.format(what=tool)
+    # A bot never edits a main checkout in place (20 Nov 2026): job worktrees only.
+    if tool in ('Edit', 'Write', 'MultiEdit', 'NotebookEdit'):
+        target = given.get('file_path') or given.get('notebook_path')
+        if target and main_checkout_of(os.path.join(event.get('cwd') or os.getcwd(), os.path.expanduser(str(target)))):
+            return MAIN_TOLD
     if tool == 'Bash':
         command = str((event.get('tool_input') or {}).get('command', ''))
         if 'worktree' in command and worktree_at_root(command, event.get('cwd')):
             return WORKTREE_TOLD
+        if any(main_checkout_of(p) for p in written_paths(command, event.get('cwd'))):
+            return MAIN_TOLD
         m = SENDS.search(command)
         if m:
             return TOLD.format(what=f'"{m.group(0).strip()}"')
