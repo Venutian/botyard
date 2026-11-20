@@ -9,6 +9,7 @@ else is a fault line for the health check, saying what is there.
     main-checkout.py           put drifted main checkouts back, print what could not be (exit 1 when any)
     main-checkout.py --dry     only say what it would do
 """
+import json
 import os
 import subprocess
 import sys
@@ -44,6 +45,30 @@ def home_branch(repo):
     return out.split('/', 1)[1] if code == 0 and '/' in out else ''
 
 
+CODE = ('.py', '.mjs', '.js', '.cjs', '.ts', '.tsx', '.sh', '.css', '.html')
+
+
+def ignored(repo, settings=None):
+    """Paths a studio keeps live state in (a bot's ledger, say), from config/main-checkout.json {"ignore": {repo: [prefix]}}."""
+    try:
+        with open(settings or os.path.join(botyard_home.config_dir(), 'main-checkout.json')) as f:
+            return tuple((json.load(f).get('ignore') or {}).get(os.path.basename(repo), []))
+    except (OSError, ValueError, AttributeError):
+        return ()
+
+
+def uncommitted(repo, settings=None):
+    """'' unless code files in the main checkout differ from its commit: the service runs them, and nothing tested them
+    (20 Nov 2026: six engine and runner files edited in place ran live through every restart)."""
+    skip = ignored(repo, settings)
+    files = [line.split(None, 1)[-1] for line in git(repo, 'status', '--porcelain', '--untracked-files=no')[1].splitlines() if line.strip()]
+    code = [f for f in files if f.endswith(CODE) and not f.startswith(skip)]
+    if not code:
+        return ''
+    return (f'{os.path.basename(repo)}: main checkout has uncommitted code edits ({", ".join(code[:6])}'
+            f'{" and more" if len(code) > 6 else ""}); they run live untested. Move them to a branch with tests and land them')
+
+
 def check(repo, dry=False):
     """'' when the checkout is on its main branch (or was put back), else the fault."""
     home = home_branch(repo)
@@ -51,7 +76,7 @@ def check(repo, dry=False):
         return ''
     code, now = git(repo, 'symbolic-ref', '-q', '--short', 'HEAD')
     if code == 0 and (now == home or now in HOMES):
-        return ''
+        return uncommitted(repo)
     name = os.path.basename(repo)
     if git(repo, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')[0] == 0 or os.path.exists(os.path.join(repo, '.git', 'rebase-merge')):
         return f'{name}: main checkout is mid-merge or rebase on {now or "a detached commit"}; finish or abort it by hand'

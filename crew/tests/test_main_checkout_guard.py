@@ -89,6 +89,21 @@ class Keeper(unittest.TestCase):
         self.assertEqual(git(self.repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout.strip(), 'main')
         self.assertEqual(git(self.repo, 'log', '-1', '--format=%s', 'job').stdout.strip(), 'b')
 
+    def test_uncommitted_code_on_main_is_said_and_state_files_are_not(self):
+        open(os.path.join(self.repo, 'run.py'), 'w').write('x = 1\n')
+        open(os.path.join(self.repo, 'ledger.json'), 'w').write('{}\n')
+        git(self.repo, 'add', 'run.py', 'ledger.json')
+        git(self.repo, 'commit', '-qm', 'files')
+        open(os.path.join(self.repo, 'ledger.json'), 'w').write('{"a": 1}\n')
+        self.assertEqual(self.mc.faults(self.folder), [])
+        open(os.path.join(self.repo, 'run.py'), 'w').write('x = 2\n')
+        got = self.mc.faults(self.folder)
+        self.assertEqual(len(got), 1)
+        self.assertIn('uncommitted code edits (run.py)', got[0])
+        settings = os.path.join(self.folder, 'mc.json')
+        open(settings, 'w').write('{"ignore": {"r": ["run.py"]}}')
+        self.assertEqual(self.mc.uncommitted(self.repo, settings), '')
+
     def test_changed_files_are_left_and_said(self):
         git(self.repo, 'checkout', '-q', '-b', 'job')
         open(os.path.join(self.repo, 'a'), 'w').write('changed')
