@@ -127,7 +127,7 @@ test('a store that refuses the key for one app says which step fixes it, and wai
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-'))
   const plan = { found: true, products: [{ name: 'Lamp', kind: 'app', channels: { play: { package: 'com.example.lamp' } } }] }
   const fetcher = async (url) => (String(url).includes('oauth2') ? json({ access_token: 't', expires_in: 3600 }) : json({ error: { message: 'The caller does not have permission' } }, 403))
-  const key = { secret: { account: { client_email: 'bot@example.iam', private_key: (await import('node:crypto')).generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }) }, packageName: '' } }
+  const key = { secret: { account: { client_email: 'release-bot', private_key: (await import('node:crypto')).generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }) }, packageName: '' } }
   const state = await checkAll({ fetcher, useGh: false, now: NOW, plan, file: path.join(dir, 's.json'), keys: { play: key } })
   const c = state.cells['Lamp|play']
   assert.equal(c.state, 'Not known: the key may not see this app')
