@@ -43,7 +43,21 @@ def main_checkout(args):
     if len(out) != 2:
         return False
     common = out[1] if os.path.isabs(out[1]) else os.path.normpath(os.path.join(cwd, out[1]))
-    return os.path.realpath(out[0]) == os.path.realpath(common)
+    if os.path.realpath(out[0]) != os.path.realpath(common):
+        return False
+    # Only a repository the studio runs from: one directly in the projects folder. A test's own temporary repository
+    # (20 Nov 2026: the crew's suite runs `git checkout -qb fix` in temp repos, and this guard refused all of them) is
+    # not a main checkout of anything.
+    top = os.path.dirname(os.path.realpath(out[0]))
+    return os.path.dirname(top) == projects_folder()
+
+
+def projects_folder():
+    """$BOTYARD_PROJECTS, else the folder beside the repository this git wrapper lives in."""
+    if os.environ.get('BOTYARD_PROJECTS'):
+        return os.path.realpath(os.environ['BOTYARD_PROJECTS'])
+    here = os.path.dirname(os.path.realpath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.dirname(here)))
 
 
 if command in MOVES and not os.environ.get('BOTYARD_MAIN_CHECKOUT_OK') and main_checkout(args[:i]):

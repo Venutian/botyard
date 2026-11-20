@@ -13,12 +13,19 @@ def git(cwd, *args, wrap=False):
     env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@example.com', 'GIT_COMMITTER_NAME': 't',
            'GIT_COMMITTER_EMAIL': 't@example.com'}
     env.pop('BOTYARD_MAIN_CHECKOUT_OK', None)
+    env.update(EXTRA)
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+
+
+EXTRA = {}
 
 
 class Guard(unittest.TestCase):
     def setUp(self):
-        self.repo = tempfile.mkdtemp()
+        self.projects = tempfile.mkdtemp()
+        EXTRA['BOTYARD_PROJECTS'] = self.projects
+        self.repo = os.path.join(self.projects, 'product')
+        os.makedirs(self.repo)
         git(self.repo, 'init', '-q', '-b', 'main')
         open(os.path.join(self.repo, 'a'), 'w').write('a')
         git(self.repo, 'add', 'a')
@@ -36,7 +43,7 @@ class Guard(unittest.TestCase):
         self.assertEqual(git(self.repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout.strip(), 'main')
 
     def test_claude_and_codex_bots_get_only_the_main_checkout_rule(self):
-        env = {**os.environ, 'BOTYARD_GIT_MAIN_ONLY': '1'}
+        env = {**os.environ, 'BOTYARD_GIT_MAIN_ONLY': '1', **EXTRA}
         done = subprocess.run([WRAP, 'checkout', '-b', 'x'], cwd=self.repo, capture_output=True, text=True, env=env)
         self.assertIn('refused in a main checkout', done.stderr)
         open(os.path.join(self.wt, 'b'), 'w').write('b')
@@ -44,6 +51,14 @@ class Guard(unittest.TestCase):
         done = subprocess.run([WRAP, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'b'], cwd=self.wt,
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_repository_outside_the_projects_folder_is_not_a_main_checkout(self):
+        temp = tempfile.mkdtemp()
+        git(temp, 'init', '-q', '-b', 'main')
+        open(os.path.join(temp, 'a'), 'w').write('a')
+        git(temp, 'add', 'a')
+        git(temp, 'commit', '-qm', 'a')
+        self.assertEqual(git(temp, 'checkout', '-qb', 'fix', wrap=True).returncode, 0)
 
     def test_a_worktree_still_moves_freely(self):
         self.assertEqual(git(self.wt, 'checkout', '-q', '-b', 'job-two', wrap=True).returncode, 0)
