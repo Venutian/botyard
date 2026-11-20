@@ -25,7 +25,7 @@ const iso = (now) => new Date(now).toISOString()
 const ENGINE = { user: 'engine:tracks' }
 
 export const STEP_KINDS = ['bot', 'script', 'gate', 'track']
-export const LINE_ON = ['pass', 'fail', 'always']
+export const LINE_ON = ['pass', 'fail', 'always', 'ask']
 /** What a request gives every trip without saying so. */
 export const GIVEN = ['title', 'words']
 /** What a step may be handed besides what it needs: the last check's findings, the owner's note, the work it continues. */
@@ -274,19 +274,21 @@ export const BUILD_TRACK = {
     { id: 'build', kind: 'bot', bot: '$builder', title: 'Build', needs: ['brief'], leaves: ['commit', 'report'], words: 'Build what the brief asks, commit it on this job\'s branch, and end your report with COMMIT: <sha> and OUTCOME: MET or NOT MET.' },
     { id: 'tests', kind: 'script', title: 'Tests', needs: ['commit'], command: 'sh -c "${BOTYARD_IN_TEST_COMMAND:-echo No test command is set for this project.}"', timeoutSec: 1800 },
     { id: 'check', kind: 'bot', bot: '$checker', title: 'Check', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'Check the build against the brief: run what proves it, read the change. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, what must change.' },
-    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: ['brief'], leaves: ['verdict'], words: 'The rounds back to the builder are used. Read the findings and the work, and rule: VERDICT: PASS lands it as it is, VERDICT: FAIL hands it to the owner with what you would do.' },
+    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: [], leaves: ['verdict'], words: 'A step failed past its rounds. You decide in the owner\'s place: read the findings and the work, then end with one verdict. VERDICT: PASS when the work is good enough as it is (it goes on to land). VERDICT: FAIL followed by your plan, when it can be fixed: the plan goes to the builder as its note, so name the commit to start from, what to change and how it will be proven. VERDICT: STOP with the reason, when it should not go on. VERDICT: ASK OWNER followed by the options and your pick, only when you truly cannot decide or it needs the owner (a spend, a sign-in, a final release).' },
     { id: 'review', kind: 'bot', bot: '$reviewer', orBot: '$checker', title: 'Scored review', onlyFor: 'public', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'This work will be seen by the public. Score it against the bar that matches what changed: the page bar for pages, the kit bar for store listings, art and marketing kits, the release bar for release notes and public releases. Look at the real result (screenshots at phone and desktop width for pages), not only the code. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
-    { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The crew could not finish this on its own. Approve to land it as it is, or send it back to a step with a note.' },
+    { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The ruler could not decide this one and asks you, with the options and the pick below.' },
     { id: 'land', kind: 'script', title: 'Land in main', needs: ['commit'], leaves: ['commit'], command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"', timeoutSec: 3600 },
   ],
   lines: [
     { from: 'brief', to: 'build', on: 'pass' }, { from: 'brief', to: 'write-brief', on: 'fail' },
-    { from: 'write-brief', to: 'build', on: 'pass' }, { from: 'write-brief', to: 'owner', on: 'fail' },
+    { from: 'write-brief', to: 'build', on: 'pass' }, { from: 'write-brief', to: 'rule', on: 'fail' },
     { from: 'build', to: 'tests', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
     { from: 'tests', to: 'check', on: 'pass' }, { from: 'tests', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
     { from: 'check', to: 'review', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
-    { from: 'review', to: 'land', on: 'pass' }, { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' },
-    { from: 'rule', to: 'review', on: 'pass' }, { from: 'rule', to: 'owner', on: 'fail' },
+    { from: 'review', to: 'land', on: 'pass' }, { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    // The ruler decides every failure past its rounds: PASS goes on, FAIL sends it back with his plan, STOP ends it,
+    // and only ASK OWNER reaches the owner's gate.
+    { from: 'rule', to: 'review', on: 'pass' }, { from: 'rule', to: 'build', on: 'fail', rounds: 2, then: 'rule' }, { from: 'rule', to: 'owner', on: 'ask' },
     { from: 'owner', to: 'land', on: 'pass' },
     { from: 'land', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
   ],
@@ -452,6 +454,9 @@ export const commitIn = (value) => /\b[0-9a-f]{7,40}\b/i.exec(String(value || ''
 export function verdictOf(text) {
   // A verdict kept as a document often repeats its own name: "VERDICT: PASS" is read as PASS.
   const t = String(text || '').trim().replace(/^\**\s*verdict\s*\**\s*:\s*\**\s*/i, '')
+  // A ruler's two other answers: hand it to the owner with the options, or end the request.
+  if (/^ask(\s+the)?\s+owner\b/i.test(t)) return 'ask'
+  if (/^stop\b/i.test(t)) return 'stop'
   if (/^(fail|failed|not met|rejected|no go|no-go|not approved)\b/i.test(t)) return 'fail'
   if (/^(pass|passed|met|approved|go|ok|report only)\b/i.test(t)) return 'pass'
   return null
@@ -680,7 +685,9 @@ async function pollStep(store, step, row, { io, now }) {
     // The verdict: a PASS or FAIL it said, or else its report's OUTCOME (MET or NOT MET), or else a closed job passes
     // unless the step asks for a verdict.
     const said = left('verdict') || left('outcome')
-    const verdict = said ? verdictOf(said) || 'fail' : step.ruling || step.leaves.includes('verdict') ? 'fail' : 'pass'
+    const read = said ? verdictOf(said) || 'fail' : step.ruling || step.leaves.includes('verdict') ? 'fail' : 'pass'
+    // ASK OWNER and STOP are a ruler's answers; from any other step they are a fail.
+    const verdict = ['ask', 'stop'].includes(read) && !step.ruling ? 'fail' : read
     const leaves = {}
     for (const name of step.leaves) { const value = left(name); if (value !== undefined && value !== '') leaves[name] = words(value, VALUE_CHARS) }
     // A report line often says more than the commit (`COMMIT: 1f7431e on its-branch`): the commit is its id.
@@ -771,6 +778,13 @@ function goTo(store, trip, version, target, handoff, now) {
   return { ...trip, current: target, handoff: { step: target, ...handoff, ...(base ? { base } : {}) } }
 }
 
+/** A trip that ends here: every step at work is let go of, the request is stopped, and the reason is kept. */
+function stopped(store, trip, version, reason, now) {
+  const after = goTo(store, trip, version, version.steps[0].id, {}, now)
+  if (!trip.parentTripId) putRequest(store, { ...requestOr404(store, trip.requestId), status: 'stopped' }, now)
+  return { ...after, current: trip.current, handoff: null, status: 'stopped', reason: words(reason, 500), endedAt: iso(now) }
+}
+
 /** The commit the newest passing try of a step left, read as its id, or ''. */
 export function baseOf(store, tripId, stepId) {
   const tries = store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? ORDER BY created_at DESC, try_number DESC', tripId, stepId)
@@ -781,15 +795,15 @@ export function baseOf(store, tripId, stepId) {
 /** Where a step's outcome sends the trip, and the trip after it. */
 function route(store, trip, version, step, row, outcome, now) {
   const lines = version.lines.filter((l) => l.from === step.id)
+  // A ruler's STOP ends the request here, with his words as the reason.
+  if (outcome === 'stop') return stopped(store, trip, version, row.snapshot?.findings || row.snapshot?.leaves?.verdict || `${step.title} stopped it`, now)
+  // ASK OWNER takes its own line when the track has one; otherwise it is a fail.
+  if (outcome === 'ask' && !lines.some((l) => l.on === 'ask')) outcome = 'fail'
   const line = lines.find((l) => l.on === outcome) || lines.find((l) => l.on === 'always')
   const order = version.steps.map((s) => s.id)
   // The owner's answer at a gate that could not go on: back to the step that makes the change, or stop.
   const gate = step.kind === 'gate' ? row.snapshot?.gate : null
-  if (gate?.stop) {
-    const after = goTo(store, trip, version, version.steps[0].id, {}, now)
-    if (!trip.parentTripId) putRequest(store, { ...requestOr404(store, trip.requestId), status: 'stopped' }, now)
-    return { ...after, current: trip.current, handoff: null, status: 'stopped', reason: words(row.snapshot.findings, 500) || 'Stopped by the owner at the gate', endedAt: iso(now) }
-  }
+  if (gate?.stop) return stopped(store, trip, version, row.snapshot.findings || 'Stopped by the owner at the gate', now)
   if (gate?.backTo && order.includes(gate.backTo)) {
     const said = row.snapshot?.findings || ''
     return goTo(store, trip, version, gate.backTo, { findings: said, note: said, ...(gate.base ? { base: gate.base } : {}) }, now)
@@ -808,6 +822,8 @@ function route(store, trip, version, step, row, outcome, now) {
   // The work the round continues: the last commit a passing try of the step being redone left (a try that
   // failed or stopped may name a commit that holds nothing new).
   const before = baseOf(store, trip.id, line.to)
+  // A ruler whose own rounds back are used has already decided twice: the request stops instead of asking him again.
+  if (taken >= line.rounds && line.then === step.id) return stopped(store, trip, version, `${step.title} sent it back ${line.rounds} time${line.rounds === 1 ? "" : "s"} and it still failed: ${findings}`.slice(0, 500), now)
   if (taken < line.rounds) return goTo(store, { ...trip, rounds: { ...trip.rounds, [key]: taken + 1 } }, version, line.to, { findings, ...(before ? { base: before } : {}) }, now)
   return goTo(store, trip, version, line.then, { findings: `${findings}\n\n(${line.rounds} round${line.rounds === 1 ? '' : 's'} back to "${line.to}" used; this step decides.)`.trim() }, now)
 }
@@ -900,7 +916,8 @@ async function moveTrip(store, tripId, ctx) {
     putRow(store, row, now)
   }
   // The step has ended (now, or before a restart came between): take its line.
-  let next = route(store, trip, version, step, row, row.status === 'passed' ? 'pass' : 'fail', now)
+  const outcome = row.status === 'passed' ? 'pass' : step.ruling && ['ask', 'stop'].includes(row.snapshot?.verdict) ? row.snapshot.verdict : 'fail'
+  let next = route(store, trip, version, step, row, outcome, now)
   if (next.ended) { delete next.ended; next = await endTrip(store, next, version, ctx) }
   putTrip(store, next, now)
   return next.status === 'running'

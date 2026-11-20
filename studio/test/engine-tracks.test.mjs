@@ -379,12 +379,100 @@ test('the built-in crew track scores public work before landing, and its ruling 
   assert.deepEqual(lines.filter((l) => l.to === 'land').map((l) => l.from).sort(), ['owner', 'review'])
   assert.ok(lines.some((l) => l.from === 'rule' && l.to === 'review' && l.on === 'pass'))
   assert.ok(lines.some((l) => l.from === 'check' && l.to === 'review' && l.on === 'pass'))
-  assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' })
+  assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'rule' })
+  // Only the ruler's ASK OWNER reaches the owner's gate on this track.
+  assert.deepEqual(lines.filter((l) => l.to === 'owner').map((l) => `${l.from}:${l.on}`), ['rule:ask'])
   assert.equal(BUILD_TRACK.steps.find((s) => s.id === 'review').onlyFor, 'public')
   // The ruling is the ruler's (a bot other than the checker, when the studio names one), else the lead's.
   const rule = BUILD_TRACK.steps.find((s) => s.id === 'rule')
   assert.deepEqual([rule.bot, rule.orBot], ['$ruler', '$lead'])
   assert.equal(checkTrack(BUILD_TRACK, { selfKey: 'build-check-land' }).optional.includes('reviewer'), true)
+})
+
+/** A crew track with the ruler deciding every failure past its rounds; only his ASK OWNER reaches the owner. */
+const RULED = {
+  key: 'ruled', inputs: ['brief'],
+  steps: [
+    { id: 'build', kind: 'bot', bot: 'Builder', needs: ['brief'], leaves: ['commit'] },
+    { id: 'check', kind: 'bot', bot: 'Checker', needs: ['commit'], leaves: ['verdict'] },
+    { id: 'rule', kind: 'bot', bot: 'Judge', ruling: true, leaves: ['verdict'] },
+    { id: 'decide', kind: 'gate' },
+    { id: 'land', kind: 'script', command: 'land it', needs: ['commit'], leaves: ['commit'] },
+  ],
+  lines: [
+    { from: 'build', to: 'check', on: 'pass' }, { from: 'build', to: 'rule', on: 'fail' },
+    { from: 'check', to: 'land', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'rule', to: 'land', on: 'pass' }, { from: 'rule', to: 'build', on: 'fail', rounds: 1, then: 'rule' }, { from: 'rule', to: 'decide', on: 'ask' },
+    { from: 'decide', to: 'land', on: 'pass' }, { from: 'land', to: 'rule', on: 'fail' },
+  ],
+}
+
+test('a failure past its rounds goes to the ruler, who passes it, sends it back with his plan, stops it, or asks the owner', async () => {
+  const run = async (said) => {
+    const { store, dataDir } = yard()
+    saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+    const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+    const request = startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+    const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+    await tick(1)
+    const tripId = store.row('SELECT id FROM trips').id
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+    await tick(2)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL: row 2 wrong' }, T0)
+    await tick(3)
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: 'bbb2222' }, T0)
+    await tick(4)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL: row 2 still wrong' }, T0)
+    await tick(5)
+    // The check's round is used: the ruler is asked, the owner is not.
+    assert.equal(tripView(store, tripId).current, 'rule')
+    assert.equal(store.rows("SELECT id FROM cards WHERE status = 'pending'").length, 0, 'no card to the owner')
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: said }, T0)
+    await tick(6)
+    return { store, tripId, request, io }
+  }
+  // PASS: it lands, with no card to the owner.
+  const pass = await run('PASS: good enough as it is')
+  assert.equal(tripView(pass.store, pass.tripId).status, 'done')
+  assert.equal(pass.store.rows('SELECT id FROM cards').length, 0)
+  // FAIL with a plan: back to the build, the plan as its note.
+  const fail = await run('FAIL. Plan: start from bbb2222, redo row 2 with the town in frame, prove it with a capture.')
+  assert.equal(tripView(fail.store, fail.tripId).current, 'build')
+  assert.match(fail.store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(fail.store, fail.tripId, 'build')).description, /redo row 2 with the town in frame/)
+  assert.equal(fail.store.rows('SELECT id FROM cards').length, 0)
+  // STOP: the request ends, with his reason, and nothing is asked of the owner.
+  const stop = await run('STOP: the kit is not worth a sixth round')
+  assert.equal(tripView(stop.store, stop.tripId).status, 'stopped')
+  assert.match(tripView(stop.store, stop.tripId).reason, /not worth a sixth round/)
+  assert.equal(stop.store.object('SELECT raw FROM requests WHERE id = ?', stop.request.id).status, 'stopped')
+  assert.equal(stop.store.rows('SELECT id FROM cards').length, 0)
+  // ASK OWNER: only now does the owner get a card, with his options.
+  const ask = await run('ASK OWNER: redesign with the artist (my pick) or a sixth fix round')
+  assert.equal(tripView(ask.store, ask.tripId).current, 'decide')
+  assert.match(ask.store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /redesign with the artist \(my pick\)/)
+})
+
+test('a ruler who sends the same work back past his own rounds stops it instead of being asked again', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+  startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  const fails = async (n) => {
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: `c${n}c${n}c${n}c` }, T0); await tick(n * 10 + 1)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL' }, T0); await tick(n * 10 + 2)
+    if (workingJob(store, tripId, 'build')) { botDoes(store, workingJob(store, tripId, 'build'), { commit: `d${n}d${n}d${n}d` }, T0); await tick(n * 10 + 3); botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL' }, T0); await tick(n * 10 + 4) }
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: 'FAIL. Try again from the last commit.' }, T0); await tick(n * 10 + 5)
+  }
+  await fails(1)
+  assert.equal(tripView(store, tripId).current, 'build')
+  await fails(2)
+  const view = tripView(store, tripId)
+  assert.equal(view.status, 'stopped')
+  assert.match(view.reason, /sent it back 1 time and it still failed/)
+  assert.equal(store.rows('SELECT id FROM cards').length, 0)
 })
 
 test('a track that delivers a change and leaves no commit is stuck, never done', async () => {
