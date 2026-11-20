@@ -838,7 +838,7 @@ function stopped(store, trip, version, reason, now) {
 /**
  * The commit the next round of a step goes on from: the newest passing try's commit, else the newest commit any
  * try left (a build that reported NOT MET still holds the work its fix round continues; cut from main, the round
- * starts without it: NGE-1728). A commit the repository lacks is handled where the branch is cut: it falls back to
+ * starts without it). A commit the repository lacks is handled where the branch is cut: it falls back to
  * main and the bot is told.
  */
 export function baseOf(store, tripId, stepId) {

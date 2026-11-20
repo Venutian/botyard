@@ -12,7 +12,7 @@ const OWNER = { user: 'local-board' }
 
 function yard() {
   const store = openStore(':memory:')
-  store.put('company', { id: 'co', name: 'Works', issuePrefix: 'NGE', issueCounter: 0 })
+  store.put('company', { id: 'co', name: 'Works', issuePrefix: 'LH', issueCounter: 0 })
   store.put('agents', { id: 'b1', companyId: 'co', name: 'Builder', status: 'idle', adapterType: 'claude_local', adapterConfig: {} })
   return store
 }
@@ -57,8 +57,8 @@ test('signals count runs per finished job, retries, failed runs, stale steps and
 
 test('the blocked sweep closes dead track steps, unblock loops and unread digests, and only lists the rest', () => {
   const store = yard()
-  const target = job(store, 'Rule on landing: NGE-9', 'blocked', 30)
-  const loop = job(store, `Unblock: ${target.identifier}: Gideon ruled in NGE-1 and then`, 'blocked', 30)
+  const target = job(store, 'Rule on landing: LH-9', 'blocked', 30)
+  const loop = job(store, `Unblock: ${target.identifier}: the ruler ruled in LH-1 and then`, 'blocked', 30)
   const digest = job(store, 'Crew digest 18 Nov: 2 to act on', 'blocked', 30)
   const orphan = job(store, 'Build', 'blocked', 30, { description: 'x\n\nTRACK STEP: 00000000-0000-0000-0000-000000000000/build/1' })
   const plain = job(store, 'Plan: money path', 'blocked', 30)

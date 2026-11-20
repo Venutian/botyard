@@ -71,7 +71,7 @@ export function blockedSweep(store, { now = Date.now(), olderThanHours = 24, app
       const row = store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND job_id = ?', mark[1], job.id)[0]
       if (!trip || ['done', 'stopped'].includes(trip.status) || row?.status === 'stale') { kind = 'close'; why = 'A track step whose trip has moved on: nobody reads it' }
     } else if (/^Unblock:/i.test(job.title || '')) {
-      const target = /Unblock:\s*(NGE-\d+|[A-Z]+-\d+)/.exec(job.title || '')?.[1]
+      const target = /Unblock:\s*([A-Z]+-\d+)/.exec(job.title || '')?.[1]
       const same = blocked.filter((j) => /^Unblock:/i.test(j.title || '') && target && j.title.includes(target)).length
       if (target && (stillBlocked.has(target) || same > 1)) { kind = 'close'; why = `An unblock job that loops: ${target} is still blocked` }
     } else if (/^Crew digest/i.test(job.title || '')) {
