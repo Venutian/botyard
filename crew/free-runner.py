@@ -181,6 +181,9 @@ PER_DAY = ('free-models-per-day', 'per day', 'daily limit', 'daily')
 # STANDARDS.md rule 22: "quota" alone may be one model's; with one of these it speaks for the whole provider.
 WIDE = ('every model', 'all models', 'all free models', 'provider', 'account', 'free tier', 'free-tier')
 BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
+# A prompt that outgrew the model's context window: the model cannot take the work, so the run hands
+# over to a model that can (same session), instead of failing the run.
+CONTEXT = ('context length', 'context window', 'context limit', 'maximum context length', 'prompt is too long', 'token count exceeds', 'exceeds the context', 'too many tokens')
 
 
 # Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
@@ -286,6 +289,13 @@ def error_of(event):
     err = event.get('error') or {}
     data = err.get('data') if isinstance(err, dict) else None
     return str((data or {}).get('message') or (err.get('name') if isinstance(err, dict) else err) or 'error')[:300]
+
+
+def context_error(text):
+    """True when an error says the prompt outgrew the model's context window: the model cannot take the work, so
+    the run goes on in the same session on a model that can, instead of failing the run."""
+    text = (text or '').lower()
+    return any(w in text for w in CONTEXT)
 
 
 def alive(pid):
@@ -768,7 +778,7 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
-        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS)):
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
             return code
