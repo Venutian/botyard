@@ -663,3 +663,62 @@ test('a fix round after a build that said NOT MET still starts from that build\'
   await tick()
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'eee5555')
 })
+
+test('the land step refuses work whose last check failed unless the trip is run again from it with a written reason', async () => {
+  const { landRefusal } = await import('../server/engine/tracks.mjs')
+  const { store } = yard()
+  const version = { steps: [{ id: 'check' }, { id: 'rule' }, { id: 'land' }] }
+  const step = { id: 'land', command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"' }
+  const put = (id, stepId, status, at) => store.put('trip_steps', { id, tripId: 't1', requestId: 'r1', stepId, kind: 'bot', title: stepId === 'check' ? 'Check' : 'Ruling', try: 1, status, snapshot: { verdict: status === 'passed' ? 'pass' : 'fail', findings: 'row 2 wrong' }, createdAt: at, finishedAt: at })
+  put('a', 'check', 'failed', '2026-11-20T10:00:00Z')
+  assert.match(landRefusal(store, { id: 't1' }, version, step, {}), /^Not landed: the last check failed/)
+  // A written reason on a rerun from the land step lets it through.
+  assert.equal(landRefusal(store, { id: 't1' }, version, step, { inputs: { note: 'Land it: the row is fixed by hand' } }), '')
+  // A ruler's later PASS is the last word.
+  put('b', 'rule', 'passed', '2026-11-20T11:00:00Z')
+  assert.equal(landRefusal(store, { id: 't1' }, version, step, {}), '')
+  // Only the land script is guarded.
+  assert.equal(landRefusal(store, { id: 't1' }, version, { id: 'x', command: 'echo' }, {}), '')
+})
+
+test('every scored review is kept in the reviews table with its piece kind and verdict; a skipped one is not', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', SCORED, { now: T0, actor: OWNER })
+  const io = { ...fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) }), changedFiles: async () => ['marketing/steam/capsule.png'] }
+  startRequest(store, 'co', { track: 'scored', title: 'Steam kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+  await tick(2)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'PASS' }, T0)
+  await tick(3)
+  botDoes(store, workingJob(store, tripId, 'review'), { verdict: 'VERDICT: FAIL. The capsule is blurry.' }, T0)
+  await tick(4)
+  const kept = store.objects('SELECT raw FROM reviews')
+  assert.equal(kept.length, 1)
+  assert.deepEqual([kept[0].piece.kind, kept[0].verdict, kept[0].source], ['kit', 'fail', 'track'])
+  assert.match(kept[0].text, /capsule is blurry/)
+})
+
+test('a request has one open card at a time: a new question updates it and says how often it was asked', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+  startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  // The build fails straight to the ruler, who asks the owner; the owner sends it back; it fails again and is asked again.
+  for (let round = 0; round < 2; round++) {
+    const b = workingJob(store, tripId, 'build')
+    store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', b), status: 'cancelled' })
+    await tick(round * 10 + 2)
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: 'ASK OWNER: redesign or stop' }, T0)
+    await tick(round * 10 + 3)
+    if (round === 0) { answerGate(store, tripId, { action: 'back', to: 'build', note: 'one more try' }, { now: T0 + 4000, actor: OWNER }); await tick(round * 10 + 5) }
+  }
+  const pending = store.objects("SELECT raw FROM cards WHERE status = 'pending'")
+  assert.equal(pending.length, 1, 'one open card')
+  assert.match(pending[0].title, /\(asked 2 times\)$/)
+})

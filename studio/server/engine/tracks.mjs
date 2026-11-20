@@ -512,6 +512,7 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     const seen = await publicOf(store, request, version, inputs, io)
     if (!seen.public) return { ...row, status: 'passed', snapshot: { verdict: 'pass', leaves: {}, findings: '', summary: `Not run: ${seen.why}`, skipped: true }, startedAt: iso(now), finishedAt: iso(now) }
     inputs.public_why = seen.why
+    row = { ...row, public: { kind: seen.kind || 'work', why: seen.why } }
   }
   if (step.kind === 'bot') {
     const pick = (ref) => (ref?.startsWith('$') ? String(inputs[ref.slice(1)] || '') : ref || '')
@@ -527,6 +528,8 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     return { ...row, status: 'working', jobId: job.id, jobCode: job.identifier, botId: bot.id, startedAt: iso(now) }
   }
   if (step.kind === 'script') {
+    const refused = landRefusal(store, trip, version, step, row)
+    if (refused) return { ...row, status: 'failed', snapshot: { verdict: 'fail', leaves: {}, findings: refused, summary: refused }, startedAt: iso(now), finishedAt: iso(now) }
     const dir = path.join(dataDir, 'trips', trip.id, row.id)
     fs.mkdirSync(dir, { recursive: true })
     const cwd = [inputs.workdir, projectFolder(store, request.projectId)].find((d) => d && fs.existsSync(d)) || dir
@@ -547,7 +550,7 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     const tried = store.rows('SELECT DISTINCT step_id FROM trip_steps WHERE trip_id = ?', trip.id).map((r) => r.step_id)
     const failedStep = store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND status = 'failed' ORDER BY created_at DESC LIMIT 1", trip.id)[0]?.stepId || ''
     const asked = gateCard(version, step, { ...row, beforeLeaves: before?.snapshot?.leaves || {}, tried, failedStep }, trip, request, inputs)
-    const card = createCard(store, request.jobId, asked, { now, actor: ENGINE })
+    const card = openCardFor(store, request, trip, asked, now)
     // The trip's own page asks the same question in the same words as the card.
     return { ...row, status: 'working', cardId: card.id, ask: { prompt: asked.payload.prompt, accept: asked.payload.acceptLabel, reject: asked.payload.rejectLabel }, startedAt: iso(now) }
   }
@@ -614,6 +617,53 @@ export function gateCard(version, step, row, trip, request, inputs) {
   }
 }
 
+/**
+ * The land step's own guard: work whose last check, ruling or scored review failed is not merged, unless the owner
+ * ran the trip again from this step with a written reason (its note). A ruler's later PASS counts as the last word.
+ */
+export function landRefusal(store, trip, version, step, row) {
+  if (!/land\.mjs/.test(step.command || '')) return ''
+  if (String(row?.inputs?.note || '').trim()) return ''
+  const order = version.steps.map((s) => s.id)
+  const judged = rowsOf(store, trip.id).filter((r) => r.status !== 'stale' && ['check', 'rule', 'review'].includes(r.stepId) && ['passed', 'failed'].includes(r.status) && !r.snapshot?.skipped)
+    .sort((a, b) => String(a.finishedAt || a.createdAt).localeCompare(String(b.finishedAt || b.createdAt)) || order.indexOf(a.stepId) - order.indexOf(b.stepId))
+  const last = judged.at(-1)
+  if (!last || last.status !== 'failed') return ''
+  return `Not landed: the last ${String(last.title || last.stepId).toLowerCase()} failed. To land it anyway, run the trip again from this step with a written reason.\n${words(last.snapshot?.findings, 1500)}`.trim()
+}
+
+/** What kind of piece a set of public files is, for counting reviews: kit, release, page or work. */
+export function pieceKind(files = []) {
+  const all = files.join('\n').toLowerCase()
+  if (/(^|\/)(kits?|store|store-listing|portal|capsules?|steam|trailer|press|screenshots)(\/|-|\.|$)/.test(all)) return 'kit'
+  if (/release-notes|changelog/.test(all)) return 'release'
+  if (/(^|\/)(site|web|pages|public|apps\/web)\//.test(all)) return 'page'
+  return 'work'
+}
+
+/** The scored review's verdict, kept in the `reviews` table so the reviews can be counted (project, piece, verdict). */
+function recordReview(store, request, trip, step, row, now) {
+  if (row.snapshot?.skipped) return
+  const job = row.jobId ? store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId) : null
+  store.put('reviews', {
+    id: `track-${row.id}`, companyId: request.companyId, jobId: row.jobId || request.jobId, jobRef: request.jobCode || null, projectId: request.projectId || null, botId: job?.assigneeAgentId || row.botId || null,
+    piece: { kind: row.public?.kind || 'work', title: request.title, commit: '' }, verdict: row.snapshot.verdict, note: '', marks: [], text: words(row.snapshot.findings || row.snapshot.leaves?.verdict, 4000), commentId: null,
+    gate: null, cuts: [], source: 'track', tripId: trip.id, stepId: step.id, why: row.public?.why || '', createdAt: iso(now), by: 'track',
+  })
+}
+
+/** One open card per request: a card still waiting is updated for the new question, never doubled; a repeat says so. */
+function openCardFor(store, request, trip, asked, now) {
+  const earlier = store.objects('SELECT raw FROM cards WHERE job_id = ?', request.jobId).filter((c) => c.payload?.tripId === trip.id && String(c.idempotencyKey || '').startsWith('trip-step:'))
+  const titled = earlier.length ? { ...asked, title: `${asked.title} (asked ${earlier.length + 1} times)`.slice(0, 500) } : asked
+  const open = earlier.find((c) => c.status === 'pending')
+  if (!open) return createCard(store, request.jobId, titled, { now, actor: ENGINE })
+  const position = store.row('SELECT position FROM cards WHERE id = ?', open.id).position
+  const card = { ...open, title: titled.title, summary: titled.summary, payload: titled.payload, idempotencyKey: titled.idempotencyKey, updatedAt: iso(now) }
+  store.put('cards', card, { position })
+  return card
+}
+
 const listOf = (value) => String(value || '').split(',').map((x) => x.trim()).filter(Boolean)
 
 /**
@@ -635,7 +685,7 @@ export async function publicOf(store, request, version, inputs, io) {
   // No files against main (the commit is already in main, or a merge commit): what it changes is unknown, so it is scored.
   if (!files.length) return { public: true, why: 'its changes could not be told apart from main, so it is scored to be safe' }
   const shown = files.filter((f) => prefixes.some((p) => f.startsWith(p) || f.includes(`/${p}`)))
-  return shown.length ? { public: true, why: `it changes ${shown.slice(0, 3).join(', ')}${shown.length > 3 ? ` and ${shown.length - 3} more` : ''}` } : { public: false, why: 'nothing it changes is seen by the public' }
+  return shown.length ? { public: true, kind: pieceKind(shown), why: `it changes ${shown.slice(0, 3).join(', ')}${shown.length > 3 ? ` and ${shown.length - 3} more` : ''}` } : { public: false, why: 'nothing it changes is seen by the public' }
 }
 
 function readJson(file) {
@@ -920,6 +970,7 @@ async function moveTrip(store, tripId, ctx) {
     const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}), ...(result.gate ? { gate: result.gate } : {}) }
     row = { ...row, status: result.verdict === 'pass' ? 'passed' : 'failed', snapshot, finishedAt: iso(now) }
     putRow(store, row, now)
+    if (step.onlyFor === 'public') recordReview(store, request, trip, step, row, now)
   }
   // The step has ended (now, or before a restart came between): take its line.
   const outcome = row.status === 'passed' ? 'pass' : step.ruling && ['ask', 'stop'].includes(row.snapshot?.verdict) ? row.snapshot.verdict : 'fail'
