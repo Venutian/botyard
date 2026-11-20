@@ -250,7 +250,7 @@ function createSql(name, table) {
   return out
 }
 
-const pack = (object) => zlib.deflateSync(Buffer.from(JSON.stringify(object)))
+export const pack = (object) => zlib.deflateSync(Buffer.from(JSON.stringify(object)))
 /** A stored object back as it was: text, or the compressed bytes of a large one. */
 export function unpack(value) {
   if (value === null || value === undefined) return null
