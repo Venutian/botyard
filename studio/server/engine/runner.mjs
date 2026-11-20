@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
+import { lastPrinted, ownShare } from './run-usage.mjs'
 import { addComment, patchJob } from './write.mjs'
 import { fileOf } from './files.mjs'
 import { instructionsOf, wakePrompt } from './prompt.mjs'
@@ -431,7 +432,9 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
       : result.timedOut ? 'It was stopped at its time limit'
         : read.why || result.error || (log.stderr.trim().split('\n').at(-1) || '').slice(0, 400) || (result.lost ? 'Its keeper stopped without leaving a result' : `The tool ended with code ${result.exitCode}`)
   // `partial` says the tool never added its tokens up (the run was cut): the counts are what its messages reported, at least.
-  const usage = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
+  const reported = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
+  // A resumed session's tool may print the session's running total: the run is booked with its own share (run-usage.mjs).
+  const usage = ownShare(agent.adapterType, reported, made.sessionIdBefore ? lastPrinted(store, made.agentId, made.sessionIdBefore, made.createdAt) : null)
   const done = {
     ...made, status, finishedAt: result.finishedAt || iso(now), exitCode: result.exitCode ?? null, signal: result.signal || null,
     error: why, errorCode: status === 'timed_out' ? 'timeout' : status === 'failed' ? (held ? 'pace_hold' : 'adapter_failed') : null,

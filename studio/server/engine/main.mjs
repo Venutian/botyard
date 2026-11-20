@@ -23,6 +23,7 @@ import { tick } from './runner.mjs'
 import { tickTracks } from './tracks.mjs'
 import { dailyBlockedSweep } from './signals.mjs'
 import { openStore } from './store.mjs'
+import { convertBookedRuns } from './run-usage.mjs'
 import { ensureStudio } from './studio.mjs'
 
 const TICK_MS = 5000
@@ -47,6 +48,8 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
   const dir = path.resolve(dataDir)
   const store = openStore(storeFile(dir))
   const made = ensureStudio(store)
+  const converted = convertBookedRuns(store)
+  if (converted) log(`[engine] ${converted} runs booked before now were set to their own share of a resumed session`)
   if (made) log(`[engine] a new studio was made in ${dir}`)
 
   /**
