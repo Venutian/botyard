@@ -13,10 +13,15 @@ MAIL = 'bot@users.noreply.github.com'
 LEAD = ''.join(reversed('ynoT'))  # a first studio's lead, refused by the push check (spelled backwards, as it does)
 
 
+# wrap=False means plain git. In a bot's run the bots' own git (crew/agy-bin) leads PATH and would rename the author itself, so ask for the real one.
+PLAIN_PATH = os.pathsep.join(p for p in os.environ.get('PATH', '').split(os.pathsep) if os.path.basename(os.path.normpath(p)) != 'agy-bin')
+REAL_GIT = shutil.which('git', path=PLAIN_PATH) or 'git'
+
+
 def git(cwd, *args, name='Fred', wrap=True):
-    env = {**os.environ, 'GIT_AUTHOR_NAME': name, 'GIT_AUTHOR_EMAIL': MAIL, 'GIT_COMMITTER_NAME': name,
+    env = {**os.environ, 'PATH': PLAIN_PATH, 'GIT_AUTHOR_NAME': name, 'GIT_AUTHOR_EMAIL': MAIL, 'GIT_COMMITTER_NAME': name,
            'GIT_COMMITTER_EMAIL': MAIL, 'BOTYARD_PROJECTS': tempfile.gettempdir(), 'BOTYARD_GIT_MAIN_ONLY': '1'}
-    return subprocess.run(([WRAP] if wrap else ['git']) + list(args), cwd=cwd, capture_output=True, text=True, env=env)
+    return subprocess.run(([WRAP] if wrap else [REAL_GIT]) + list(args), cwd=cwd, capture_output=True, text=True, env=env)
 
 
 class PublicName(unittest.TestCase):

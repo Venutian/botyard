@@ -34,7 +34,12 @@ CREATE TABLE comments (id TEXT, created_by_run_id TEXT, deleted_at TEXT);
 
 class Yard(unittest.TestCase):
     def setUp(self):
-        self.d = os.path.realpath(tempfile.mkdtemp())
+        # A run's TMPDIR is its own botyard-run-* scratch folder, which every OpenCode bot may read by design: a demo yard inside it would
+        # always look open. Build the yard beside it, not in it.
+        base = tempfile.gettempdir()
+        if os.path.basename(base).startswith('botyard-run-'):
+            base = os.path.dirname(base)
+        self.d = os.path.realpath(tempfile.mkdtemp(dir=base))
         self.addCleanup(shutil.rmtree, self.d, True)
         self.home = os.path.join(self.d, 'yard')
         self.crew = os.path.join(self.home, 'crew')
