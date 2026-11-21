@@ -21,6 +21,7 @@ import { rankProjects } from './rank.js'
 import { botScreen, botsScreen, editSummary, improvementsScreen, labelTables, moneyScreen, recordClick, runScreen, runsScreen, toggleRecord } from './studio-crew.js'
 import { FeedView, feedFrameHtml } from './run-feed.js'
 import { usageHtml } from './usage.js'
+import { chipLevel, chipText, runningHtml } from './running.js'
 import { connectorNewScreen, connectorScreen, connectorsScreen } from './studio-connect.js'
 import { changesHtml, docHistory, jobScreen, jobsScreen, madeScreen, pileTabs, projectExtras, projectGoal, projectPlan, routineScreen, routinesScreen, skillScreen, skillsScreen } from './studio-work.js'
 import './lightbox.js'
@@ -266,6 +267,7 @@ const TEMPLATE = `
   <div class="home-seg" role="group" aria-label="Home view"><button type="button" data-home="map" aria-pressed="true" title="Who does what and who tells whom (M)">Crew map</button><button type="button" data-home="yard" aria-pressed="false" title="The 3D yard (M)">Yard</button><button type="button" data-home="brain" aria-pressed="false" title="Engram: your notes, decisions and preferences">Engram</button></div>
   <button class="btn primary new-job" data-act="new-job">${ICONS.plus}<span>New job</span></button>
   <div class="ld" data-part="load"></div>
+  <button type="button" class="usage-btn run-btn" data-act="running" aria-expanded="false" aria-controls="running-pop" title="What runs on this PC now, and for which bot and job"><span class="run-chip" data-part="run-chip">PC</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
   <button type="button" class="usage-btn" data-act="usage" aria-expanded="false" aria-controls="usage-pop" title="Usage of each AI, and what is left">${ICONS.gauge}<span class="meters" data-part="meters"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
   <button class="btn icon ghost" data-act="shift" title="Day plates or night plates">${ICONS.shift}</button>
   <button class="btn icon ghost" data-act="home" title="See the whole studio (0)">${ICONS.home}</button>
@@ -274,6 +276,7 @@ const TEMPLATE = `
 </header>
 <div class="ld-layer" data-part="load-layer"></div>
 <div class="usage-pop panel" id="usage-pop" role="dialog" aria-label="Usage of each AI" hidden></div>
+<div class="usage-pop running-pop panel" id="running-pop" role="dialog" aria-label="What runs on this PC now" hidden></div>
 <nav class="studio-dock panel" aria-label="Studio"></nav>
 <div class="studio-deck">${COL('a')}${COL('b')}</div>
 <footer class="studio-crew panel" aria-label="The crew"></footer>
@@ -412,6 +415,7 @@ export class Studio {
       if (act === 'new-job') return this._beside(() => this.openNewJob())
       if (act === 'shift') return this._shift()
       if (act === 'usage') return this.usageOpen ? this.closeUsage() : this.openUsage()
+      if (act === 'running') return this.runningOpen ? this.closeRunning() : this.openRunning()
       if (act) this.actions[act]?.()
     })
     this._load = mountThrottle(this.top.querySelector('[data-part="load"]'), { call, layer: this.root.querySelector('[data-part="load-layer"]') })
@@ -420,6 +424,15 @@ export class Studio {
     document.addEventListener('pointerdown', (e) => { if (this.usageOpen && !e.target.closest('.usage-pop, .usage-btn')) this.closeUsage() })
     this.root.querySelector('.usage-pop').addEventListener('click', (e) => { if (e.target.closest('[data-act="usage-more"]')) { this.closeUsage(); this._enter('a', () => this.openMoney()) } })
     window.addEventListener('resize', () => this.usageOpen && this._placeUsage())
+    // What runs on this PC: the chip reads every 20 s, the open list every 5 s (lib/heavy.mjs takes about a second).
+    document.addEventListener('pointerdown', (e) => { if (this.runningOpen && !e.target.closest('.running-pop, .run-btn')) this.closeRunning() })
+    this.root.querySelector('.running-pop').addEventListener('click', (e) => {
+      const run = e.target.closest('[data-act="running-run"]')?.dataset.run
+      if (run) { this.closeRunning(); this._go(() => this.openRun(run)) }
+    })
+    window.addEventListener('resize', () => this.runningOpen && this._placeRunning())
+    this._readRunning()
+    this._runningTimer = setInterval(() => this._readRunning(), 20_000)
     this.dock.addEventListener('click', (e) => this._dockOpen(this._dockItems().find((d) => d.id === e.target.closest('[data-tab]')?.dataset.tab)))
     this.crewBar.addEventListener('click', (e) => {
       const bot = e.target.closest('[data-bot]')?.dataset.bot
@@ -1042,6 +1055,7 @@ setView(view) {
 
   /** The list under the meters: every AI the crew runs on, what is used and what is left. Read on each open. */
   async openUsage() {
+    this.closeRunning()
     const pop = (this._usagePop = this.root.querySelector('.usage-pop'))
     const button = this.top.querySelector('.usage-btn')
     pop.hidden = false
@@ -1063,6 +1077,49 @@ setView(view) {
     const host = this.root.getBoundingClientRect()
     this._usagePop.style.top = `${Math.round(b.bottom - host.top + 10)}px`
     this._usagePop.style.right = `${Math.max(8, Math.round(host.right - b.right))}px`
+  }
+
+  get runningOpen() { return Boolean(this._runningPop && !this._runningPop.hidden) }
+
+  /** The chip's numbers, and the list when it is open. */
+  async _readRunning() {
+    if (this._runningBusy) return
+    this._runningBusy = true
+    try {
+      const data = await call('/api/studio/running')
+      const chip = this.top.querySelector('[data-part="run-chip"]')
+      if (chip) { chip.textContent = chipText(data) || 'PC'; chip.dataset.level = chipLevel(data) }
+      if (this.runningOpen) { const html = runningHtml(data); if (html !== this._runningHtml) this._runningPop.innerHTML = this._runningHtml = html }
+    } catch (err) {
+      if (this.runningOpen && !this._runningHtml) this._runningPop.innerHTML = `<p class="u-empty">${esc(err.message || 'What runs could not be read')}</p>`
+    } finally { this._runningBusy = false }
+  }
+
+  openRunning() {
+    this.closeUsage()
+    const pop = (this._runningPop = this.root.querySelector('.running-pop'))
+    pop.hidden = false
+    this._placeRunning()
+    this.top.querySelector('.run-btn').setAttribute('aria-expanded', 'true')
+    if (!pop.innerHTML) pop.innerHTML = runningHtml(null)
+    this._readRunning()
+    clearInterval(this._runningFast)
+    this._runningFast = setInterval(() => (this.runningOpen ? this._readRunning() : clearInterval(this._runningFast)), 5_000)
+  }
+
+  _placeRunning() {
+    const b = this.top.querySelector('.run-btn').getBoundingClientRect()
+    const host = this.root.getBoundingClientRect()
+    this._runningPop.style.top = `${Math.round(b.bottom - host.top + 10)}px`
+    this._runningPop.style.right = `${Math.max(8, Math.round(host.right - b.right))}px`
+  }
+
+  closeRunning() {
+    if (!this.runningOpen) return false
+    this._runningPop.hidden = true
+    clearInterval(this._runningFast)
+    this.top.querySelector('.run-btn').setAttribute('aria-expanded', 'false')
+    return true
   }
 
   closeUsage() {
