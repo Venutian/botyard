@@ -933,3 +933,38 @@
 .hud.studio .usage-pop .u-empty { margin: 0; padding: 14px; color: var(--muted); }
 .hud.studio .usage-pop .u-foot { margin: 0; padding: 9px 14px; }
 @media (max-width: 700px) { .hud.studio .usage-pop { left: 8px; right: 8px !important; width: auto; } }
+
+/* Narrow screens: the load control takes its own row under the brand line, so every level keeps a 44px target and nothing is clipped. */
+@media (max-width: 720px) {
+  .hud.studio { --bar-bottom: 184px; }
+  .hud.studio .studio-top { height: auto; min-height: 52px; flex-wrap: wrap; padding: 0 8px 8px 0; row-gap: 6px; }
+  .hud.studio .studio-top .mark { min-height: 52px; }
+  .hud.studio .studio-top .ld { order: 9; flex: 1 1 100%; margin: 0 0 0 8px; flex-wrap: wrap; }
+  .ld-label { display: none; }
+  .ld-line { display: block; flex: 1 1 100%; width: auto; white-space: normal; }
+  .ld-group { flex: 1 1 auto; }
+  .ld-seg { flex: 1 1 0; min-width: 44px; min-height: 44px; padding: 0 4px; }
+  .ld-resume, .ld-more { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 720px) {
+  .hud.studio .studio-top { gap: 6px; }
+  .hud.studio .studio-top .mark { flex: 1 1 auto; font-size: 20px; padding: 0 12px; }
+  .hud.studio .studio-top .studio-state, .hud.studio .studio-top [data-act="home"], .hud.studio .studio-top [data-act="look"] { display: none; }
+  .hud.studio .studio-top .new-job span { display: none; }
+  .hud.studio .studio-top .new-job, .hud.studio .studio-top .btn.icon, .hud.studio .studio-top .usage-btn { min-width: 44px; height: 44px; margin-right: 0; }
+}
+@media (max-width: 720px) {
+  .hud.studio .studio-top .mark { font-size: 18px; padding: 0 10px; }
+  .hud.studio .studio-top .ld { align-items: center; gap: 4px; }
+  .ld-group { flex: 1 1 0; min-width: 0; }
+  .ld-seg { font-size: 12px; padding: 0 2px; }
+}
+@media (max-width: 720px) {
+  .hud.studio .studio-top .ld { row-gap: 6px; }
+  .ld-group { flex: 1 1 100%; }
+  .ld-more { order: 1; }
+  .ld-line { order: 2; flex: 1 1 0; min-width: 0; width: auto; }
+  .ld-resume { order: 3; }
+  .hud.studio .studio-dock { top: calc(var(--bar-bottom) + 8px); max-height: calc(100% - var(--bar-bottom) - 120px); overflow-y: auto; }
+  .hud.studio .rail { top: calc(var(--bar-bottom) + 8px); }
+}
