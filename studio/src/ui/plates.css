@@ -883,6 +883,20 @@
 .hud.studio .studio-top .usage-btn .meters { margin: 0; }
 .hud.studio .studio-top .usage-btn .chev { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
 .hud.studio .studio-top .usage-btn[aria-expanded='true'] .chev { transform: rotate(180deg); }
+/* What runs on this PC (running.js): the chip's colour says how hard the crew works the PC now. */
+.hud.studio .studio-top .run-chip { padding: 2px 7px; border: 2px solid var(--edge); border-radius: 4px; background: var(--raise); font: 600 12px/1.3 var(--body); white-space: nowrap; }
+.hud.studio .studio-top .run-chip[data-level='busy'] { background: var(--yellow-paint, var(--amber)); color: #15181d; }
+.hud.studio .studio-top .run-chip[data-level='hot'] { background: var(--red-paint, var(--red)); color: #fff; }
+.hud.studio .running-pop .r-for { margin: 0 0 3px; }
+.hud.studio .running-pop .r-job { font-weight: 700; }
+.hud.studio .running-pop .r-sum { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+.hud.studio .running-pop .r-top { margin: 0; padding: 0; list-style: none; }
+.hud.studio .running-pop .r-top li { display: flex; gap: 8px; justify-content: space-between; padding: 2px 0; border-top: 1px dashed var(--line); font-size: 12px; }
+.hud.studio .running-pop .r-top li small { color: var(--muted); white-space: nowrap; }
+.hud.studio .running-pop .r-what { overflow-wrap: anywhere; }
+.hud.studio .running-pop .u-tag.r-heavy { background: var(--red-paint, var(--red)); color: #fff; }
+.hud.studio .running-pop .r-others header b { font-size: 15px; }
+.hud.studio .running-pop .u-tag.r-left { background: var(--yellow-paint, var(--amber)); color: #15181d; }
 /* Where the meters do not fit, the button keeps a gauge, so the list is always one click away. */
 @media (max-width: 900px) { .hud.studio .studio-top .usage-btn > svg:first-child { display: block; } .hud.studio .studio-top .usage-btn .meters { display: none; } }
 

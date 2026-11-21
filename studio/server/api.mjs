@@ -7,13 +7,15 @@ import { randomUUID } from 'node:crypto'
 import { clearWork } from './lib/manager.mjs'
 import { readFace, staleStudioView, studioView } from './lib/studio.mjs'
 import { guardFolder, readGuard, writeGuard } from './lib/guard.mjs'
-import { MAX_ATTACH_BYTES, EngineError, companyId, crewOf, acceptQuestion, addComment, addJob, addRoutine, editRoutine, agentModels, answerQuestion, attachmentFile, cancelJob, chatList, decideApproval, jobWorkspace, pauseRoutine, removeRoutine, reopenJob, resumeRoutine, routineList, runRoutine, chatThread, pauseBot, rejectQuestion, resumeBot, sendChat, settleConnectCard, stopJob, studioSummary, uploadAttachment, uploadChatPicture } from './lib/engine.mjs'
+import { MAX_ATTACH_BYTES, EngineError, call, companyId, crewOf, acceptQuestion, addComment, addJob, addRoutine, editRoutine, agentModels, answerQuestion, attachmentFile, cancelJob, chatList, decideApproval, jobWorkspace, pauseRoutine, removeRoutine, reopenJob, resumeRoutine, routineList, runRoutine, chatThread, pauseBot, rejectQuestion, resumeBot, sendChat, settleConnectCard, stopJob, studioSummary, uploadAttachment, uploadChatPicture } from './lib/engine.mjs'
 import { artifactList, documentRevisions, editJob, jobIdOf, jobList, jobPage, projectPage, saveGoal, restoreDocument, routinePage, saveDocument, saveSkillFile, setRoutineSchedule, skillFile, skillList } from './lib/work.mjs'
 import { changeDetail } from './lib/changes.mjs'
 import { readTimers } from './lib/library.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { crewFolder, readModels } from './lib/models.mjs'
+import { runningNow } from './lib/heavy.mjs'
+import { jobNames } from './lib/crew.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsDiff, moneyView, resetBotSession, restoreInstructions, rollbackBot, runDetail, runList, saveInstructions, tokenWindows } from './lib/crew.mjs'
 import { openrouterLeft, usageRows } from './lib/usage.mjs'
 import { readPlans } from './lib/plans.mjs'
@@ -105,6 +107,19 @@ async function studioRoute(req, res, url) {
     // The crew map: who tells whom, from the store (lib/flow.mjs).
     if (url.pathname === '/api/studio/flow' && read) return send(res, 200, await crewFlow({ window: url.searchParams.get('window') || '24h', needs: async () => withCardState(await needsNow()) }))
     if (url.pathname === '/api/studio/models' && read) return send(res, 200, await readModels({ folder: crewFolder(), agents: () => agentModels() }))
+    // What runs on this computer now, for whom (lib/heavy.mjs): the crew's work by run and helper, and the other heavy programs.
+    if (url.pathname === '/api/studio/running' && read) {
+      const id = await companyId().catch(() => '')
+      const [agents, names] = id ? await Promise.all([crewOf(id).catch(() => []), jobNames(id).catch(() => ({ jobs: new Map() }))]) : [[], { jobs: new Map() }]
+      const bots = new Map(agents.map((a) => [a.id, a.name]))
+      const now = await runningNow({ names: { bot: (b) => bots.get(b), job: (j) => { const x = names.jobs.get(j); return x && { identifier: x.ref, title: x.title } } } })
+      // A run that has ended but left programs running is said so: the engine stops them ten minutes after the run.
+      await Promise.all((now.work || []).filter((w) => /^[0-9a-f-]{36}$/.test(w.runId)).map(async (w) => {
+        const run = await call(`/heartbeat-runs/${w.runId}`).catch(() => null)
+        if (run && !['running', 'queued'].includes(run.status)) w.leftOver = { status: run.status, endedAt: run.finishedAt || '' }
+      }))
+      return send(res, 200, now)
+    }
     if (url.pathname === '/api/studio/usage' && read) {
       // Every part may be missing (no crew scripts, no key, the engine slow): the list then shows less.
       const [plans, windows, models, openrouter] = await Promise.all([

@@ -20,6 +20,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn as nodeSpawn } from 'node:child_process'
+import { HELPER } from './heavy.mjs'
 import { configDir, crewDir, crewScripts, home, repoRoot, runLogs, studioRoot } from './home.mjs'
 
 const TICK_MS = 5_000
@@ -337,9 +338,10 @@ export function createTimetable({ file, ownFile = '', stateFile, logDir, vars = 
       const file = findCommand(command, { ...process.env, ...env }) || command
       // On Windows a tool installed by npm is a .cmd file, which is only started through the shell.
       const viaShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(file)
+      // BOTYARD_HELPER names the helper on its processes, for what runs now (lib/heavy.mjs).
       child = spawn(viaShell ? `"${file}"` : file, viaShell ? args.map((arg) => (/[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg)) : args, {
         shell: viaShell,
-        cwd: fill(job.cwd), env: { ...process.env, ...env, ...extra }, stdio: ['ignore', out, out], detached: process.platform !== 'win32', windowsHide: true,
+        cwd: fill(job.cwd), env: { ...process.env, ...env, ...extra, [HELPER]: job.name }, stdio: ['ignore', out, out], detached: process.platform !== 'win32', windowsHide: true,
       })
     } catch (err) {
       fs.closeSync(out)
