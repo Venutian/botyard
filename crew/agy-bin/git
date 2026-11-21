@@ -62,4 +62,37 @@ def projects_folder():
 
 if command in MOVES and not os.environ.get('BOTYARD_MAIN_CHECKOUT_OK') and main_checkout(args[:i]):
     sys.exit(f'git {command}: refused in a main checkout. Work in your job\'s worktree; the main checkout stays on its branch.')
+
+# Commands that make commits. In a repository that publishes (it has tools/release-check.mjs, as public Botyard does), a
+# bot whose own first name its push check refuses commits as PUBLIC_NAME instead: one such commit holds back every push
+# after it (20 Nov 2026: a merge signed with the lead's name did, a day after four commit messages had for days).
+# Repositories that do not publish keep every bot's own name.
+MAKES_COMMITS = {'commit', 'merge', 'cherry-pick', 'revert', 'rebase', 'am', 'pull'}
+PUBLIC_NAME = 'Botyard crew'
+
+
+def publishing_top(args):
+    import subprocess
+    where = [a for k, a in zip(args, args[1:]) if k == '-C']
+    cwd = os.path.join(os.getcwd(), *where) if where else os.getcwd()
+    try:
+        top = subprocess.run([GIT, '-C', cwd, 'rev-parse', '--show-toplevel'], capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    return top if top and os.path.isfile(os.path.join(top, 'tools', 'release-check.mjs')) else ''
+
+
+def refused_name(top, name, mail):
+    import subprocess
+    try:
+        return subprocess.run(['node', os.path.join(top, 'tools', 'release-check.mjs'), '--who', name, mail],
+                              capture_output=True, timeout=20).returncode == 1
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+if command in MAKES_COMMITS and os.environ.get('GIT_AUTHOR_NAME'):
+    top = publishing_top(args[:i])
+    if top and refused_name(top, os.environ['GIT_AUTHOR_NAME'], os.environ.get('GIT_AUTHOR_EMAIL', '')):
+        os.environ['GIT_AUTHOR_NAME'] = os.environ['GIT_COMMITTER_NAME'] = PUBLIC_NAME
 os.execv(GIT, [GIT] + args)
