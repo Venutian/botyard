@@ -53,6 +53,15 @@ def main_of(repo):
     return ''
 
 
+def lands_nothing(repo, base, branch):
+    """True when merging the branch into main would leave main's tree as it is: its work reached main under other
+    commits (a re-applied fix, a squash, a later job's merge), which git cherry cannot see. A merge with conflicts is
+    never "nothing": that branch still holds work, and stays listed."""
+    done = subprocess.run(['git', '-C', repo, 'merge-tree', '--write-tree', base, branch], capture_output=True, text=True, timeout=120)
+    tree = done.stdout.split('\n', 1)[0].strip()
+    return done.returncode == 0 and bool(tree) and tree == git(repo, 'rev-parse', f'{base}^{{tree}}').strip()
+
+
 def left_behind(repo):
     """[(job code, branch, commits not in main, code files changed)] for every job-named branch of one repo."""
     base = main_of(repo)
@@ -65,6 +74,8 @@ def left_behind(repo):
             continue
         ahead = [line for line in git(repo, 'cherry', base, branch).splitlines() if line.startswith('+')]
         if not ahead:
+            continue
+        if lands_nothing(repo, base, branch):
             continue
         files = [f for f in git(repo, 'diff', '--name-only', f'{base}...{branch}').split() if is_code(f)]
         if files:

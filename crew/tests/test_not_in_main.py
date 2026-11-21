@@ -50,6 +50,22 @@ class NotInMain(unittest.TestCase):
         self.assertEqual([(c, b, n) for c, b, n, _ in found], [('LH-1', 'LH-1-left-behind', 1)])
         self.assertEqual(found[0][3], ['app.js'])
 
+    def test_a_branch_whose_work_reached_main_under_other_commits_is_not_listed(self):
+        # Four jobs of 21 Nov 2026: their fixes were re-applied on main by later jobs, so git cherry still saw their
+        # own commits as missing, but merging them would change nothing.
+        self.branch('LH-5-reapplied', {'app.js': 'five\n'})
+        self.write('app.js', 'five\n')
+        self.write('other.js', 'also\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'the same fix, applied again on main inside a bigger commit')
+        self.branch('LH-6-conflicts', {'six.js': 'six\n'})
+        self.write('six.js', 'seven\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-am', 'main moved on')
+        found = [c for c, _, _, _ in nim.left_behind(self.repo)]
+        self.assertNotIn('LH-5', found)
+        self.assertIn('LH-6', found)
+
     def test_only_done_jobs_done_long_enough_ago_are_listed(self):
         now = dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc)
         projects = [{'workspaces': [{'cwd': self.repo}]}, {'archivedAt': '2026-11-01', 'workspaces': [{'cwd': '/nowhere'}]}]
