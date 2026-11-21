@@ -470,7 +470,9 @@ def list_again(bots, run=subprocess.run, now=None):
     if isinstance(kept, dict) and now - kept.get('at', 0) < LIST_AGAIN:
         return False
     try:
-        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        extra = botyard_home.providers_config()
+        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                  env={**os.environ, **botyard_home.key_env(), **({'OPENCODE_CONFIG': extra} if extra else {})})
     except (OSError, subprocess.TimeoutExpired):
         return False
     return bots.keep_tool_models([line.strip() for line in out.stdout.splitlines() if '/' in line and ' ' not in line.strip()], now=now)
