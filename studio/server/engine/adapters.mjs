@@ -210,6 +210,10 @@ export function readOutput(adapterType, lines) {
         out.inputTokens += whole(t.input) + whole(t.cache?.write)
         out.cachedInputTokens += whole(t.cache?.read)
         out.outputTokens += whole(t.output) + whole(t.reasoning)
+        // A turn that ends cleanly after an error is a run that got past it: the free runner hands a context overflow
+        // to a model that can take it, in the same session (21 Nov 2026: nine such runs finished their job and were
+        // still booked failed). The run is booked by how it ended.
+        if (e.part?.reason === 'stop') { out.failed = false; out.why = '' }
       }
       if (e.type === 'text' && e.part?.text) out.said = String(e.part.text).trim() || out.said
       if (e.type === 'error') { out.failed = true; out.why = String(e.error?.data?.message || e.error?.message || e.error?.name || 'The tool reported an error').slice(0, 400) }

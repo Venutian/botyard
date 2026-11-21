@@ -185,6 +185,15 @@ test('a free-model bot is started the way OpenCode wants, its rules inside the p
   assert.deepEqual([read.inputTokens, read.cachedInputTokens, read.outputTokens], [43702, 39456, 227])
 })
 
+test('a free-model run that got past an error and ended its turn is not failed; one that ended on the error is', () => {
+  const overflow = '{"type":"error","sessionID":"s","error":{"name":"ContextOverflowError","data":{"message":"Requested token count exceeds the model\'s maximum context length"}}}'
+  const past = readOutput('opencode_local', ['{"type":"step_finish","sessionID":"s","part":{"reason":"tool-calls","tokens":{}}}', overflow, '{"type":"text","sessionID":"s","part":{"text":"Done."}}', '{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}'])
+  assert.deepEqual([past.failed, past.why, past.said], [false, '', 'Done.'])
+  const ended = readOutput('opencode_local', ['{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}', overflow])
+  assert.equal(ended.failed, true)
+  assert.match(ended.why, /maximum context length/)
+})
+
 test('a card is asked by a bot and answered by the owner, which wakes the bot; a document keeps its versions; a done job frees the one waiting on it', () => {
   const s = studio()
   const job = createJob(s.store, COMPANY, { title: 'Pick a map size', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
