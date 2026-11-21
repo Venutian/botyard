@@ -101,7 +101,6 @@ async function startBrowser(file) {
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist',
     '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio',
     '--disable-dev-shm-usage',
-    ...(process.env.CI || process.getuid?.() === 0 ? ['--no-sandbox'] : []),
     'about:blank',
   // Its own process group: the command is often a small launcher, and the browser it starts must go when this does.
   ], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })

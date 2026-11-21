@@ -134,7 +134,6 @@ export async function pageShot(address, { width = 1280, height = 800, scrollX = 
     '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
     '--disable-dev-shm-usage',
-    ...(process.env.CI || process.getuid?.() === 0 ? ['--no-sandbox'] : []),
     'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
   let err = ''

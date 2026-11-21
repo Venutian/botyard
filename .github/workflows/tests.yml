@@ -29,6 +29,14 @@ jobs:
           python-version: '3.12'
       - name: Nothing personal, secret or heavy in the tree
         run: node tools/release-check.mjs
+      - name: The browser the screenshot test drives
+        run: |
+          wget -q -O /tmp/google-chrome-keyring.gpg https://dl.google.com/linux/linux_signing_key.pub
+          sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg /tmp/google-chrome-keyring.gpg
+          sudo sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends google-chrome-stable
+          google-chrome --version
       - name: The service's tests
         working-directory: studio
         run: |
