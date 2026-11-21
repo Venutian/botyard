@@ -253,6 +253,46 @@ def claude_denials(env=None):
     return sorted(set(deny))
 
 
+def folder_aliases(folder=None):
+    """[(alias, target)]: the folders in the crew's own folder that are links to another folder (a link named own may point at the
+    studio's own scripts folder). OpenCode matches its rules on the path a bot names, so a rule on the target does not cover the link."""
+    folder = folder or botyard_home.places()['crew']
+    out = []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        alias = os.path.join(folder, name)
+        if os.path.islink(alias) and os.path.isdir(alias):
+            out.append((alias, os.path.realpath(alias)))
+    return out
+
+
+def with_aliases(perm, aliases):
+    """The permissions with every path rule that covers a linked folder's target said again for the link, right after it, so the
+    order (the last match wins) holds for both: an allowed folder is allowed through its link, and a refused file inside it stays refused.
+    21 Nov 2026: one bot's brief named its skills through such a link, which only the target was allowed under, and every run for a
+    day was refused them and ended without a word."""
+    if not aliases:
+        return perm
+    out = {}
+    for tool, rules in perm.items():
+        if tool == 'bash' or not isinstance(rules, dict):
+            out[tool] = rules
+            continue
+        said = {}
+        for key, value in rules.items():
+            said[key] = value
+            if not key.startswith('/'):
+                continue
+            for alias, target in aliases:
+                if key == target or key.startswith(target + '/'):
+                    said.setdefault(alias + key[len(target):], value)
+                elif key.endswith('/*') and (target + '/').startswith(key[:-1]):
+                    # A parent folder's rule covers the whole link.
+                    said.setdefault(alias, value)
+                    said.setdefault(f'{alias}/*', value)
+        out[tool] = said
+    return out
+
+
 def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
     """Writes the bot's settings file and returns the env entries that point its runs at it: the skills it sees (`want` is the bot's own
     list of names, from its settings file; with none it is asked from the files, and a bot whose file says "all" sees every skill) and what
@@ -287,9 +327,13 @@ def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
     folders = sorted({os.path.dirname(s['dir']) for s in skills if s['kind'] == 'plugin' and s['name'] in want})
     config = {'$schema': 'https://opencode.ai/config.json',
               'permission': {**({} if every else {'skill': {'*': 'deny', **{n: 'allow' for n in sorted(want)}}}),
-                             **scratch_open(read_only(merged(brain_denials(), protected_denials()), [*(reads or []), *job_skill_folder()], own))}}
+                             **with_aliases(scratch_open(read_only(merged(brain_denials(), protected_denials()), [*(reads or []), *job_skill_folder()], own)),
+                                            folder_aliases())}}
     if folders:
         config['skills'] = {'paths': folders}
+    # The free providers OpenCode does not know itself (free-providers.json), so the bot can be started on their models.
+    if botyard_home.opencode_providers():
+        config['provider'] = botyard_home.opencode_providers()
     path = f'{OUT}/{_slug(bot)}.opencode.json'
     with open(path, 'w') as f:
         json.dump(config, f, indent=1)
