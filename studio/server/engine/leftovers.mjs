@@ -12,7 +12,7 @@ import { RUN_VARS } from './names.mjs'
 
 export const GRACE_MS = 10 * 60_000
 export const EVERY_MS = 5 * 60_000
-const SHARED = /(^|\/)(adb|ngen-device-test)$/
+const SHARED = /(^|\/)adb$/
 
 /**
  * One sweep. `processes` is a Map of pid → { pid, cmd, env } (lib/heavy.mjs readAll). Returns what was stopped:
