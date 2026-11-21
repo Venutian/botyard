@@ -359,7 +359,7 @@ export class BrainField {
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3), 3))
     geo.setAttribute('along', new THREE.BufferAttribute(Float32Array.from(along), 1))
     geo.setAttribute('lane', new THREE.BufferAttribute(Float32Array.from(lane), 1))
-    geo.setAttribute('speed', new Float32Array(pts.length).fill(1), 1)
+    geo.setAttribute('speed', new THREE.BufferAttribute(new Float32Array(pts.length).fill(1), 1))
     const mat = dashed
       ? new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 5, gapSize: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
       : new THREE.ShaderMaterial({ uniforms: { time: this.time, signals: this.signals, day: this.day }, vertexShader: FIBRE_VERT, fragmentShader: FIBRE_FRAG, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
