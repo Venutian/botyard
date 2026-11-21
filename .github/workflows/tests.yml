@@ -29,6 +29,12 @@ jobs:
           python-version: '3.12'
       - name: Nothing personal, secret or heavy in the tree
         run: node tools/release-check.mjs
+      - name: Let Chrome use its sandbox
+        run: |
+          # ubuntu-24.04 runners set this to 1, so AppArmor blocks the unprivileged user
+          # namespaces Chrome's sandbox needs and sandboxed Chrome exits with "No usable
+          # sandbox". Allow them; the sandbox stays on (no --no-sandbox anywhere).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: A Chromium-family browser for the screenshot test
         id: browser
         run: |
