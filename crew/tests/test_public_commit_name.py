@@ -9,7 +9,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 WRAP = os.path.join(ROOT, 'crew', 'agy-bin', 'git')
-MAIL = 'bot@users.noreply.github.com'
+MAIL = 'bot@users.noreply.github.com'  # the release check asks for the no-reply shape
 LEAD = ''.join(reversed('ynoT'))  # a first studio's lead, refused by the push check (spelled backwards, as it does)
 
 

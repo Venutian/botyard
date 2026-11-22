@@ -28,7 +28,7 @@ function studio({ projectCwd, agentCwd } = {}) {
   git('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repo, 'README.md'), 'a game\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   const tool = path.join(dir, 'tool.sh')
   fs.writeFileSync(tool, `#!/bin/sh\n${DONE}\n`)
   fs.chmodSync(tool, 0o755)

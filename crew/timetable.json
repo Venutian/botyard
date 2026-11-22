@@ -117,6 +117,20 @@
       "on": true
     },
     {
+      "name": "identity",
+      "kind": "timer",
+      "what": "Fails when the bots' sandbox gitconfig, the runner or a worktree would sign a commit with any address but the studio's own GitHub no-reply (a test's or a stranger's no-reply included). Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/identity-check.py"
+      ],
+      "every": "10m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "2m",
+      "on": true
+    },
+    {
       "name": "main-checkout",
       "kind": "timer",
       "what": "Puts a repository's main checkout back on its main branch when a run left it elsewhere and nothing would be lost; otherwise the health check says what is there. Uses no AI.",

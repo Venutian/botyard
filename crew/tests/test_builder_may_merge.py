@@ -35,7 +35,7 @@ class BuilderMerge(unittest.TestCase):
 
     def test_a_merge_runs_in_a_scratch_repo_and_aborts(self):
         with tempfile.TemporaryDirectory() as d:
-            env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@x', 'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@x'}
+            env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@example.invalid', 'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@example.invalid'}
 
             def g(*a):
                 return subprocess.run(['git', *a], cwd=d, env=env, capture_output=True, text=True)

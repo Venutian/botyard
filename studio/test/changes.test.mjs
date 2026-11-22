@@ -8,7 +8,7 @@ import { changeCounts, changeDetail } from '../server/lib/changes.mjs'
 
 function repo() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-changes-'))
-  const git = (...args) => execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { stdio: 'pipe' })
+  const git = (...args) => execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { stdio: 'pipe' })
   git('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(cwd, 'a.txt'), 'one\ntwo\n')
   git('add', '.')
