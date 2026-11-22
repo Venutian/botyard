@@ -240,3 +240,30 @@ test('the page port: the owner sets the level, a bot\'s run, a pass or a script 
   assert.equal((await fetchFrom({ BOTYARD_RUN_ID: 'run-2' }, door, post({ level: 'stop' }, { Authorization: `Bearer ${key}` }))).status, 403)
   assert.deepEqual(f.sets().slice(-1), ['walk|owner (phone)'])
 })
+
+test('a press on Resume or the day/night arrow acts as itself, not as the level the bar already shows', async () => {
+  const { mountThrottle } = await import('../src/ui/throttle.js')
+  const listeners = {}
+  const box = { top: 0, bottom: 10, right: 10 }
+  const make = () => ({
+    dataset: {}, style: {}, innerHTML: '', offsetParent: null,
+    addEventListener(type, fn) { listeners[type] = fn }, querySelector: () => null, getBoundingClientRect: () => box,
+  })
+  const host = make(); const layer = make()
+  globalThis.document = { body: make() }
+  const calls = []
+  const call = async (url, payload) => { calls.push(payload); return { configured: true, now: 'stop', day: 'stop', night: 'stop', line: 'Stop' } }
+  const m = mountThrottle(host, { call, layer, every: 3600_000 })
+  await new Promise((r) => setTimeout(r, 5))
+  // A target whose nearest [data-act] is `act`; the bar itself carries its state, as in the page.
+  const press = (act) => ({ target: { closest: (sel) => (sel === '[data-act]' ? { dataset: { act } } : sel === '[data-level]' ? { dataset: { level: 'stop' } } : null) } })
+  try {
+    const before = calls.length
+    listeners.click(press('load-more'))
+    assert.equal(calls.length, before, 'the arrow opens the popover and sets nothing')
+    assert.match(layer.innerHTML, /id="ld-pop" role="dialog" aria-label="Day and night load">/)
+  } finally {
+    m.destroy()
+    delete globalThis.document
+  }
+})

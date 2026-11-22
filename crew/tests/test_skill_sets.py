@@ -70,9 +70,11 @@ class SkillSets(unittest.TestCase):
         self.assertTrue(os.path.exists(sets.INDEX))
 
     def test_every_name_in_a_set_is_a_skill_on_this_pc(self):
-        if not os.path.isdir(sets.USER_SKILLS):
-            self.skipTest('no ~/.claude/skills here')
-        self.assertEqual(sets.check(), {})
+        # Fixed skills and sets, so the answer never depends on the PC's skill folders or the studio's live bot files.
+        given = {'Builder': {'qa', 'botyard', 'frontend-design'}, 'Scout': {'seo-audit'}}
+        self.assertEqual(sets.check(SKILLS, given), {})
+        given['Scout'] = {'seo-audit', 'renamed-away'}
+        self.assertEqual(sets.check(SKILLS, given), {'Scout': ['renamed-away']})
 
 
 if __name__ == '__main__':

@@ -99,7 +99,9 @@ export async function startBrowser(file) {
   const child = spawn(file, [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${WIDTH},${HEIGHT}`,
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist',
-    '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio', 'about:blank',
+    '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio',
+    '--disable-dev-shm-usage',
+    'about:blank',
   // Its own process group: the command is often a small launcher, and the browser it starts must go when this does.
   ], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
   let err = ''

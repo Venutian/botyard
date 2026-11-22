@@ -99,7 +99,8 @@ def read_json(path, empty):
 
 
 # A provider's models need its key; OpenCode's own free offers need none.
-NO_KEY = ('opencode',)
+# OpenCode's own free models, and the free providers that need no key (free-providers.json, env '').
+NO_KEY = ('opencode', *(p['id'] for p in botyard_home.free_providers() if not p.get('env')))
 
 
 def reachable(model, has_key=None):

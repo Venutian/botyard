@@ -24,6 +24,7 @@ import { tickTracks } from './tracks.mjs'
 import { dailyBlockedSweep } from './signals.mjs'
 import { openStore } from './store.mjs'
 import { convertBookedRuns } from './run-usage.mjs'
+import { leftoverSweeper } from './leftovers.mjs'
 import { ensureStudio } from './studio.mjs'
 
 const TICK_MS = 5000
@@ -125,6 +126,7 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
 
   let ticking = false
   const sweepState = {}
+  const sweepLeftovers = leftoverSweeper()
   let stopped = false
   /** One turn of the engine's own work: routines whose time has come, runs that ended, wakes that may start. */
   const turn = async ({ bots = true } = {}) => {
@@ -140,6 +142,9 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
       }
       // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
       for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
+      // Programs ended runs left running (leftovers.mjs): stopped ten minutes after their run.
+      const left = runs ? sweepLeftovers(store) : []
+      if (left.length) log(`[engine] stopped ${left.length} program(s) that ended runs left running: ${[...new Set(left.map((l) => l.what))].join(', ')}`)
       const swept = dailyBlockedSweep(store, sweepState)
       if (swept) log(`[engine] blocked-jobs sweep: ${swept.closed} closed, ${swept.found - swept.closed} left for the owner or ruler`)
     } catch (err) {
