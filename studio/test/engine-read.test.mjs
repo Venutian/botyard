@@ -114,6 +114,22 @@ test('the company, its bots and its projects come back as they were given', () =
   store.close()
 })
 
+test('limit=100000 returns every job on a board of more than 1000; smaller limits still cap and page', () => {
+  const store = filled()
+  for (let n = 100; n < 1300; n++) {
+    const id = `5a${String(n).padStart(6, '0')}-5555-4555-8555-555555555555`
+    const p = page(id, n, `Bulk ${n}`, { priority: n % 2 ? 'low' : 'medium' })
+    store.put('jobs', p, { list_raw: row(p) })
+  }
+  const all = read.jobs(store, CO, { limit: '100000' })
+  assert.equal(all.length, 1203, 'the three seeded jobs and all 1200 bulk ones')
+  assert.equal(new Set(all.map((j) => j.id)).size, all.length)
+  assert.equal(read.jobs(store, CO, { limit: '5000' }).length, 1000, 'a limit below the all-limit is still capped')
+  assert.equal(read.jobs(store, CO, {}).length, 500, 'the default page is unchanged')
+  assert.equal(read.jobs(store, CO, { limit: '99999', offset: '1000' }).length, 203)
+  store.close()
+})
+
 test('the job list leaves out chats and hidden jobs, and orders by priority, then by what moved last', () => {
   const store = filled()
   const all = read.jobs(store, CO, { limit: '100000' })
