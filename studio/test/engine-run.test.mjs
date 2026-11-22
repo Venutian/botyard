@@ -28,7 +28,7 @@ function studio({ script, timeoutSec = 30, limit = 1 } = {}) {
   git('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repo, 'README.md'), 'a game\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   const tool = path.join(dir, 'tool.sh')
   fs.writeFileSync(tool, `#!/bin/sh\n${script || DONE}\n`)
   fs.chmodSync(tool, 0o755)
@@ -363,12 +363,12 @@ test('a job told a commit to start from has its branch cut there, not from the m
   git('checkout', '-q', '-b', 'LH-650-the-build')
   fs.writeFileSync(path.join(s.repo, 'built.txt'), 'the build\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'the build')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'the build')
   const built = git('rev-parse', 'HEAD')
   git('checkout', '-q', 'main')
   fs.writeFileSync(path.join(s.repo, 'later.txt'), 'main moved on\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'later on main')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'later on main')
 
   // As the pipeline sends a fix round, and as a brief may name it plainly.
   const fix = createJob(s.store, COMPANY, { title: 'Fix 1 of the build', projectId: 'p-game', assigneeAgentId: 'bot-builder', executionWorkspaceSettings: { mode: 'isolated_workspace', workspaceStrategy: { type: 'git_worktree', baseRef: built } } })
@@ -499,7 +499,7 @@ test('a job moved to another project loses its workspace, and its next run works
   gitB('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
   gitB('add', '.')
-  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  gitB('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
 
   const job = createJob(s.store, COMPANY, { title: 'Move me to the other project', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
@@ -530,7 +530,7 @@ test('a run going on a job keeps its workspace when the job moves projects', asy
   gitB('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
   gitB('add', '.')
-  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  gitB('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
 
   const job = createJob(s.store, COMPANY, { title: 'Keep working', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })

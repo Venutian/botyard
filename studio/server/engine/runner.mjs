@@ -189,6 +189,20 @@ export const MAY_NOT = ['push', 'commit', 'edit']
 export const mayNotOf = (agent) => (Array.isArray(agent?.adapterConfig?.mayNot) ? MAY_NOT.filter((word) => agent.adapterConfig.mayNot.includes(word)) : [])
 
 /**
+ * The git config a run's git reads as its global one: a copy, in the run's own scratch folder, of the bots' shared
+ * sandbox gitconfig (GIT_CONFIG_GLOBAL). A bot's own `git config --global` changes only its copy and goes with the run.
+ * On 19 Nov 2026 a free bot ran `git config --global user.email t@users.noreply.github.com` before a test and every
+ * bot's commits were credited to the GitHub account `t` until 22 Nov. With no file there, the variable is left as given.
+ */
+export function runGitConfig(scratch, shared) {
+  if (!shared || !fs.existsSync(shared) || !fs.statSync(shared).isFile()) return shared
+  const copy = path.join(scratch, 'gitconfig')
+  fs.copyFileSync(shared, copy)
+  fs.chmodSync(copy, 0o600)
+  return copy
+}
+
+/**
  * A guard in front of git for a bot that is kept from something: a small `git` that refuses `push`
  * (and `commit`, for a bot that may not commit or edit) and hands everything else to the real one,
  * and a `gh` that refuses outright, since everything it changes is on GitHub. It stands first on the
@@ -363,6 +377,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
     ...(process.versions.electron && command === process.execPath ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
   }
   if (agent.adapterType === 'opencode_local') runEnv.XDG_CONFIG_HOME = openCodeSettings(scratch, env)
+  if (runEnv.GIT_CONFIG_GLOBAL) runEnv.GIT_CONFIG_GLOBAL = runGitConfig(scratch, runEnv.GIT_CONFIG_GLOBAL)
   if (mayNot.length) {
     runEnv[MAY_NOT_VAR] = mayNot.join(',')
     runEnv.PATH = `${gitGuard(scratch, mayNot)}:${runEnv.PATH || '/usr/local/bin:/usr/bin:/bin'}`

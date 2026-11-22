@@ -9,6 +9,13 @@ import unittest
 CREW = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 NO_REPLY = '12345+example@users.noreply.github.com'
 os.environ['BOTYARD_GIT_NOREPLY'] = NO_REPLY
+# The whole suite runs with a sandbox gitconfig of its own: a bot's launcher reads GIT_CONFIG_GLOBAL, and a test that
+# ran `git config --global` would otherwise write the real one every bot commits under (how t@users.noreply.github.com,
+# a stranger's GitHub account, got into it on 19 Nov).
+SUITE_GITCONFIG = os.path.join(tempfile.mkdtemp(prefix='botyard-suite-git-'), 'gitconfig')
+with open(SUITE_GITCONFIG, 'w') as _f:
+    _f.write(f'[user]\n\tname = Botyard bot\n\temail = {NO_REPLY}\n')
+os.environ['GIT_CONFIG_GLOBAL'] = SUITE_GITCONFIG
 SAFE_MAIL = re.compile(r'@users\.noreply\.github\.com$')  # the same pattern as own/review-guard.py
 BOTS = {'ben-the-mason': 'Ben', 'cleo-the-smith': 'Cleo', 'oscar-the-wise': 'Oscar', 'ada-the-builder': 'Ada',
         'ivy-the-checker': 'Ivy', 'max-the-scout': 'Max'}
@@ -76,33 +83,50 @@ class GitIdentity(unittest.TestCase):
     def test_main_of_the_free_runner_applies_the_identity(self):
         self.assertIn("git_identity.apply()", open(os.path.join(CREW, 'free-runner.py')).read())
 
-    def test_the_address_comes_from_the_setting_then_the_global_git_email_else_nothing(self):
+    def test_the_address_comes_from_the_setting_then_the_owners_global_git_email_else_nothing(self):
         with tempfile.TemporaryDirectory() as d:
-            cfg = os.path.join(d, 'gitconfig')
-            env = {'GIT_CONFIG_GLOBAL': cfg, 'PATH': os.environ['PATH']}
-            old = {k: os.environ.get(k) for k in env}
+            home_cfg = os.path.join(d, '.gitconfig')
+            sandbox = os.path.join(d, 'sandbox-gitconfig')
+            env = {'HOME': d, 'XDG_CONFIG_HOME': os.path.join(d, '.config'), 'GIT_CONFIG_GLOBAL': sandbox}
+            old = {k: os.environ.get(k) for k in [*env, 'BOTYARD_GIT_NOREPLY']}
             os.environ.update(env)
             os.environ.pop('BOTYARD_GIT_NOREPLY', None)
             try:
-                open(cfg, 'w').close()
+                open(home_cfg, 'w').close()
                 self.assertEqual(ident.no_reply(), '')  # no address available: nothing is set
                 self.assertEqual(ident.identity_env('ben'), {})
                 target = {'BOTYARD_BOT_NAME': 'ben'}
                 ident.apply(target)
                 self.assertEqual(target, {'BOTYARD_BOT_NAME': 'ben'})
-                subprocess.run(['git', 'config', '--global', 'user.email', 'me@example.com'], check=True)
+                git_cfg = lambda path, mail: subprocess.run(['git', 'config', '-f', path, 'user.email', mail], check=True)
+                git_cfg(home_cfg, 'me@example.com')
                 self.assertEqual(ident.no_reply(), '')  # a personal global address is never used
-                subprocess.run(['git', 'config', '--global', 'user.email', NO_REPLY], check=True)
+                git_cfg(home_cfg, 't@users.noreply.github.com')
+                self.assertEqual(ident.no_reply(), '')  # only the <id>+<login> form: `t@` is the stranger `t`
+                # The sandbox gitconfig (GIT_CONFIG_GLOBAL) is never the owner's: a bot or a test can write it.
+                git_cfg(sandbox, NO_REPLY)
+                self.assertEqual(ident.no_reply(), '')
+                git_cfg(home_cfg, NO_REPLY)
+                git_cfg(sandbox, '1+test@users.noreply.github.com')
                 self.assertEqual(ident.no_reply(), NO_REPLY)
                 self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': 'me@example.com'}), '')  # a setting that is not no-reply is refused
+                self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': 't@users.noreply.github.com'}), '')
                 self.assertEqual(ident.no_reply({'BOTYARD_GIT_NOREPLY': '9+z@users.noreply.github.com'}), '9+z@users.noreply.github.com')
             finally:
-                os.environ['BOTYARD_GIT_NOREPLY'] = NO_REPLY
                 for k, v in old.items():
                     if v is None:
                         os.environ.pop(k, None)
                     else:
                         os.environ[k] = v
+
+    def test_only_the_studio_address_is_the_studio(self):
+        env = {'BOTYARD_GIT_NOREPLY': NO_REPLY}
+        self.assertTrue(ident.is_studio(NO_REPLY, env))
+        self.assertTrue(ident.is_studio(NO_REPLY.upper(), env))
+        for other in ('t@users.noreply.github.com', '1+test@users.noreply.github.com', '9+z@users.noreply.github.com',
+                      'test@example.com', 'bot@example.invalid', ''):
+            self.assertFalse(ident.is_studio(other, env), other)
+        self.assertFalse(ident.is_studio(NO_REPLY, {'BOTYARD_GIT_NOREPLY': 'nope'}))  # no studio address: nothing passes
 
     def test_the_push_check_refuses_a_local_address(self):
         self.assertFalse(SAFE_MAIL.search('fred@example.local'))

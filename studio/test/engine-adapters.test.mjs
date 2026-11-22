@@ -284,7 +284,7 @@ cd "${s.work}"
 try() { "$@" > /dev/null 2>> "${s.dir}/guard-said.txt"; echo "$* -> $?" >> "${s.dir}/guard.txt"; }
 try git init -q .
 try git -C "${s.work}" -c user.name=t status
-try git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first
+try git -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m first
 try git push origin main
 try git -C "${s.work}" push
 try gh pr create --fill
@@ -301,7 +301,7 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"done","ses
   }
   // A builder: commits, never pushes, never touches GitHub.
   const built = await run(await make('Builder', ['push']), 'Build')
-  assert.equal(built['git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first'], '0')
+  assert.equal(built['git -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m first'], '0')
   assert.equal(built[`git -C ${s.work} -c user.name=t status`], '0', 'everything else goes to the real git')
   assert.equal(built['git push origin main'], '1')
   assert.equal(built[`git -C ${s.work} push`], '1', 'the command is found behind git\'s own options')
@@ -310,12 +310,12 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"done","ses
   assert.match(s.note('guard-said.txt'), /this bot may not run git push/)
   // A reviewer: no commit either.
   const reviewed = await run(await make('Reviewer', ['edit', 'push', 'nonsense']), 'Review')
-  assert.equal(reviewed['git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first'], '1')
+  assert.equal(reviewed['git -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m first'], '1')
   assert.equal(reviewed['git push origin main'], '1')
   assert.equal(reviewed['may not'], '[push,edit]', 'only the words Botyard knows, in its own order')
   // A bot with nothing set is started as before, with no guard in front of anything.
   const free = await run(await make('As Before'), 'As before')
-  assert.equal(free['git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first'], '0')
+  assert.equal(free['git -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m first'], '0')
   assert.equal(free['may not'], '[]')
   assert.doesNotMatch(s.note('guard-said.txt'), /Botyard: this bot may not/, 'its push fails because there is nowhere to push, not because a guard refused it')
 })

@@ -39,7 +39,7 @@ function repo() {
   git('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(dir, 'README.md'), 'a game\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   return dir
 }
 

@@ -10,8 +10,8 @@ WRAP = os.path.join(HERE, '..', 'agy-bin', 'git')
 
 def git(cwd, *args, wrap=False):
     cmd = ([WRAP] if wrap else ['git']) + list(args)
-    env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@example.com', 'GIT_COMMITTER_NAME': 't',
-           'GIT_COMMITTER_EMAIL': 't@example.com'}
+    env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@example.invalid', 'GIT_COMMITTER_NAME': 't',
+           'GIT_COMMITTER_EMAIL': 't@example.invalid'}
     env.pop('BOTYARD_MAIN_CHECKOUT_OK', None)
     env.update(EXTRA)
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
@@ -48,7 +48,7 @@ class Guard(unittest.TestCase):
         self.assertIn('refused in a main checkout', done.stderr)
         open(os.path.join(self.wt, 'b'), 'w').write('b')
         subprocess.run([WRAP, 'add', 'b'], cwd=self.wt, env=env)
-        done = subprocess.run([WRAP, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'b'], cwd=self.wt,
+        done = subprocess.run([WRAP, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'b'], cwd=self.wt,
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
 

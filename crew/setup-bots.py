@@ -588,14 +588,19 @@ def gitconfig(mail=None):
     return GITCONFIG + (IDENTITY.format(name=os.environ.get('BOTYARD_GIT_NAME') or 'Botyard bot', mail=mail) if mail else '')
 
 
-def gitconfig_ok_text(text):
-    return '@users.noreply.github.com' in text
+def gitconfig_ok_text(text, mail=None):
+    """True when the text names the studio address as its user.email."""
+    mail = git_identity.no_reply() if mail is None else mail
+    return bool(mail) and re.search(r'^\s*email\s*=\s*' + re.escape(mail) + r'\s*$', text, re.M | re.I) is not None
 
 
 def gitconfig_ok(path):
-    """True when the file's own user.email is a GitHub no-reply address."""
+    """True when the file's own user.email is the studio address (BOTYARD_GIT_NOREPLY, else the owner's global
+    user.email). Another no-reply, such as a test's t@users.noreply.github.com, is not ok."""
     done = subprocess.run(['git', 'config', '-f', path, 'user.email'], capture_output=True, text=True)
-    return bool(git_identity.SAFE.search(done.stdout.strip()))
+    return git_identity.is_studio(done.stdout.strip())
+
+
 CODEX_CONFIG = """# Home for this studio's Codex bots. No connected apps or plugins: bots never reach mail, GitHub or a calendar.
 sandbox_mode = "workspace-write"
 
@@ -615,8 +620,8 @@ def safe_folder():
     safe = crew().places.safe
     os.makedirs(f'{safe}/gh-empty', exist_ok=True)
     os.chmod(safe, 0o700)
-    # Written when missing, and again when what is there would author a commit under any address but a no-reply
-    # (an old test address, say). A good file the owner has edited is left alone.
+    # Written when missing, and again when what is there would author a commit under any address but the studio's
+    # (an old test address, a stranger's no-reply). A good file the owner has edited is left alone.
     mine = gitconfig()
     if not os.path.exists(f'{safe}/gitconfig') or (not gitconfig_ok(f'{safe}/gitconfig') and gitconfig_ok_text(mine)):
         write(f'{safe}/gitconfig', mine)

@@ -580,6 +580,13 @@ def main():
     # Free bots commit as themselves with the no-reply address only (git_identity.py), whatever the model runs in git.
     git_identity.apply()
     fallback = load('fallback', 'fallback.py')
+    spec = importlib.util.spec_from_file_location('identity_check', f'{HERE}/identity-check.py')
+    check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check)
+    wrong = check.faults(sandbox_only=True)
+    if wrong and sys.argv[1:2] == ['run']:
+        # The sandbox gitconfig names an address that is not the studio's: no run until it is written again.
+        sys.exit('\n'.join(wrong))
     bots = fallback.setup()
     if not bots.OPENCODE:
         sys.exit(botyard_home.INSTALL['opencode'])
