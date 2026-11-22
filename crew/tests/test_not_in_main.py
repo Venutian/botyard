@@ -50,6 +50,43 @@ class NotInMain(unittest.TestCase):
         self.assertEqual([(c, b, n) for c, b, n, _ in found], [('LH-1', 'LH-1-left-behind', 1)])
         self.assertEqual(found[0][3], ['app.js'])
 
+    def test_a_branch_whose_work_reached_main_under_other_commits_is_not_listed(self):
+        # Four jobs of 21 Nov 2026: their fixes were re-applied on main by later jobs, so git cherry still saw their
+        # own commits as missing, but merging them would change nothing.
+        self.branch('LH-5-reapplied', {'app.js': 'five\n'})
+        self.write('app.js', 'five\n')
+        self.write('other.js', 'also\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'the same fix, applied again on main inside a bigger commit')
+        self.branch('LH-6-conflicts', {'six.js': 'six\n'})
+        self.write('six.js', 'seven\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-am', 'main moved on')
+        found = [c for c, _, _, _ in nim.left_behind(self.repo)]
+        self.assertNotIn('LH-5', found)
+        self.assertIn('LH-6', found)
+
+    def test_only_code_the_branch_itself_changes_counts(self):
+        # A ruling branch whose one commit out of main is a notes entry, cut before main's history was rewritten: the
+        # diff from its merge base shows old code, but none of it is the branch's own (two rulings of 16 Nov 2026).
+        git(self.repo, 'checkout', '-q', '-b', 'LH-7-ruling', 'main')
+        self.write('app.js', 'old history\n')
+        git(self.repo, 'commit', '-q', '-am', 'a commit main later holds under another hash')
+        self.write('docs/DECISIONS.md', 'ruled\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'ruling entry')
+        git(self.repo, 'checkout', '-q', 'main')
+        self.write('app.js', 'old history\n')
+        git(self.repo, 'commit', '-q', '-am', 'the same change under a new hash (a rewrite)')
+        self.write('more.js', 'later\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'main moves on')
+        self.assertNotIn('LH-7', [c for c, _, _, _ in nim.left_behind(self.repo)])
+        # A branch with code of its own out of main is still listed, with only that code.
+        self.branch('LH-8-own', {'eight.js': '8\n'})
+        found = {c: files for c, _, _, files in nim.left_behind(self.repo)}
+        self.assertEqual(found.get('LH-8'), ['eight.js'])
+
     def test_only_done_jobs_done_long_enough_ago_are_listed(self):
         now = dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc)
         projects = [{'workspaces': [{'cwd': self.repo}]}, {'archivedAt': '2026-11-01', 'workspaces': [{'cwd': '/nowhere'}]}]
