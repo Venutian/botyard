@@ -570,6 +570,7 @@ export class BrainField {
     e.textContent = n.excerpt || n.title
     e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
     e.hidden = false
+    e.style.maxWidth = `${Math.min(250, w - 16)}px` // never wider than the field
     // Keep the whole plate inside the field: beside the neuron when it fits, else pulled back in (or flipped above it).
     const pw = e.offsetWidth
     const ph = e.offsetHeight
