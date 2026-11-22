@@ -10,6 +10,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
+import folders  # noqa: E402
 import skill_sets  # noqa: E402
 
 spec = importlib.util.spec_from_file_location('free_runner_stop', os.path.join(HERE, '..', 'free-runner.py'))
@@ -26,7 +27,7 @@ class Reads(unittest.TestCase):
         out = got['external_directory']
         self.assertEqual(out[d], 'allow')
         self.assertEqual(out[f'{d}/*'], 'allow')
-        self.assertEqual(out['*'], 'ask')
+        self.assertEqual(out['*'], 'deny')
         keys = list(out)
         self.assertEqual(out[notes], 'deny')
         self.assertGreater(keys.index(f'{notes}/*'), keys.index(f'{d}/*'), 'the notes rule comes after, so it wins')
@@ -36,11 +37,22 @@ class Reads(unittest.TestCase):
 
     def test_the_bots_own_folder_inside_a_read_folder_stays_editable(self):
         d = tempfile.mkdtemp()
-        own = os.path.join(d, 'crew', 'hustle')
+        own = os.path.join(d, 'crew', 'helper')
         edit = skill_sets.read_only({'edit': {'*': 'allow'}}, [d], own)['edit']
         keys = list(edit)
         self.assertEqual(edit[f'{own}/*'], 'allow')
         self.assertGreater(keys.index(f'{own}/*'), keys.index(f'{d}/*'), 'its own folder comes after, so it wins')
+
+    def test_the_worktrees_of_a_projects_folder_stay_editable(self):
+        d = tempfile.mkdtemp()
+        notes = os.path.join(d, 'notes')
+        edit = skill_sets.read_only({'edit': {'*': 'allow', f'{notes}/*': 'deny'}}, [d])['edit']
+        keys = list(edit)
+        tree = f'{d}/game/.botyard/worktrees/J-1/src/a.js'
+        self.assertEqual(folders.decide(edit, tree, 'allow'), 'allow', 'a job worktree of a repo under the read folder')
+        self.assertEqual(folders.decide(edit, f'{d}/game/src/a.js', 'allow'), 'deny', 'the repo itself is still read only')
+        self.assertEqual(folders.decide(edit, f'{notes}/x.md', 'allow'), 'deny', 'and the notes stay closed')
+        self.assertGreater(keys.index(f'{notes}/*'), keys.index(f'{d}/*/.botyard/worktrees/*'))
 
     def test_no_reads_changes_nothing(self):
         perm = {'external_directory': {'*': 'ask'}}

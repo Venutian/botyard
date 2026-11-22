@@ -131,7 +131,10 @@ function FreeRow({ model, now, last }: { model: FreeModel; now: number; last: bo
       <View style={styles.freeHead}>
         <View style={[styles.dot, { backgroundColor: tone }]} />
         <View style={kit.flex}>
-          <Txt size={15} weight={600}>{model.label}</Txt>
+          <View style={styles.nameRow}>
+            <Txt size={15} weight={600}>{model.label}</Txt>
+            {model.claude ? <ClaudeChipTag claude={model.claude} /> : null}
+          </View>
           <Txt size={13} color={model.state === 'aside' ? t.warn : t.ink2}>{state}</Txt>
           <Txt size={13} color={t.ink3}>{[tier, record].filter(Boolean).join('. ')}</Txt>
         </View>
@@ -288,7 +291,24 @@ export function ModelsScreen({ connection, nav }: { connection: Connection; nav:
   );
 }
 
+const CHIP_FILL: Record<string, string> = { below: '#5d6676', haiku: '#1f62d6', sonnet: '#7a3fd1', opus: '#c99400' };
+
+/** A free model's chip against Claude: bold, its tier's colour, the meaning read out and shown on a long press. */
+function ClaudeChipTag({ claude }: { claude: NonNullable<FreeModel['claude']> }) {
+  const { t } = useLook();
+  const fill = CHIP_FILL[claude.tier];
+  const name = claude.chip.replace(/^[+-]/, '');
+  const meaning = claude.chip === 'unrated' ? 'Not rated yet: fewer than three of its jobs have been checked' : claude.chip.startsWith('-') ? `Weaker than Claude ${name}` : `About as good as Claude ${name}${claude.chip.startsWith('+') ? ', a bit better' : ''}${claude.from === 'benchmark' ? ` (${claude.benchmark} ${claude.score})` : claude.from === 'checks' ? ", from the crew's own checks" : ''}`;
+  return (
+    <View accessible accessibilityLabel={meaning} style={[styles.chip, fill ? { backgroundColor: fill } : { borderWidth: 1.5, borderColor: t.ink3 }]}>
+      <Txt size={12} weight={700} color={fill ? (claude.tier === 'opus' ? '#1d1304' : '#ffffff') : t.ink3}>{claude.chip}</Txt>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  chip: { paddingHorizontal: 7, paddingVertical: 1, borderRadius: 5 },
   page: { gap: 8, paddingHorizontal: 18 },
   spinner: { marginTop: 24 },
   card: { borderRadius: 18, gap: 4, marginTop: 14, padding: 14 },

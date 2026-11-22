@@ -317,6 +317,19 @@ const playTools = [
   },
 ]
 
+/**
+ * For a release's readiness check: how many products and subscriptions Play holds for an app, read only.
+ * Not a bot's tool; the release track's own script asks it with the owner's key.
+ */
+export async function playProductCount(creds, fetcher, packageName) {
+  const pkg = encodeURIComponent(packageName)
+  const [items, subs] = await Promise.all([
+    google(creds, fetcher, `${PLAY}/${pkg}/inappproducts?maxResults=100`).then((r) => (r.inappproduct || []).length),
+    google(creds, fetcher, `${PLAY}/${pkg}/subscriptions?pageSize=100`).then((r) => (r.subscriptions || []).length).catch(() => 0),
+  ])
+  return items + subs
+}
+
 // ── the two connectors ───────────────────────────────────────────────────────────────
 
 export const BUILTINS = {

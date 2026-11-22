@@ -70,13 +70,24 @@ const TOOLS = [
   },
 ]
 
-/** Optional keys. A key is there when it was pasted here, set where the service started, or added to OpenCode itself. */
-const KEYS = [
-  { id: 'openrouter', name: 'OpenRouter key', env: 'OPENROUTER_API_KEY', opencode: /openrouter/i, url: 'https://openrouter.ai/keys',
-    what: 'Optional. Adds OpenRouter\'s free models to the ones your free bots can use.' },
-  { id: 'nvidia', name: 'NVIDIA key', env: 'NVIDIA_API_KEY', opencode: /nvidia/i, url: 'https://build.nvidia.com',
-    what: 'Optional. Adds NVIDIA\'s free hosted models to the ones your free bots can use.' },
-]
+/**
+ * Optional keys: one for each free AI provider the free bots can use (crew/free-providers.json, which the crew's scripts read too:
+ * the variable each key is given as, and which of a provider's models cost nothing). A key is there when it was pasted here, set
+ * where the service started, or added to OpenCode itself. A provider that needs no key has no box.
+ */
+const PROVIDERS_FILE = path.join(studioRoot(), '..', 'crew', 'free-providers.json')
+export function freeProviderKeys(file = PROVIDERS_FILE) {
+  let list = []
+  try { list = JSON.parse(fs.readFileSync(file, 'utf8')).providers || [] } catch { list = [] }
+  const keyed = list.filter((p) => p && /^[a-z0-9-]+$/.test(p.id || '') && /^[A-Z][A-Z0-9_]*$/.test(p.env || '') && /^https:\/\//.test(p.signup || ''))
+  if (!keyed.length) {
+    keyed.push({ id: 'openrouter', name: 'OpenRouter', env: 'OPENROUTER_API_KEY', signup: 'https://openrouter.ai/keys', free: 'Free models ending in :free.' },
+      { id: 'nvidia', name: 'NVIDIA', env: 'NVIDIA_API_KEY', signup: 'https://build.nvidia.com', free: 'Free hosted models.' })
+  }
+  return keyed.map((p) => ({ id: p.id, name: `${p.name} key`, env: p.env, opencode: new RegExp(`\\b${p.name.replace(/\W+/g, '\\W*')}\\b`, 'i'), url: p.signup,
+    what: `Optional. Adds ${p.name}'s free models to the ones your free bots can use. ${p.free || ''}`.trim() }))
+}
+const KEYS = freeProviderKeys()
 
 const keyFile = (dir, id) => path.join(dir, `${id}.key`)
 const version = (text) => /\d+\.\d+(\.\d+)?/.exec(String(text || ''))?.[0] || ''

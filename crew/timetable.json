@@ -117,6 +117,34 @@
       "on": true
     },
     {
+      "name": "main-checkout",
+      "kind": "timer",
+      "what": "Puts a repository's main checkout back on its main branch when a run left it elsewhere and nothing would be lost; otherwise the health check says what is there. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/main-checkout.py"
+      ],
+      "every": "5m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "2m",
+      "on": true
+    },
+    {
+      "name": "folder-check",
+      "kind": "timer",
+      "what": "Checks that every bot runs in a folder that exists, with access to exactly the folders its jobs need, and that no refused call goes unseen. Reports; never changes a config. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/folder-check.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "4m",
+      "limit": "2m",
+      "on": true
+    },
+    {
       "name": "github-projects",
       "kind": "timer",
       "what": "Adds a Botyard project for each of your GitHub repos that looks like a real project (rules: github-project-rules.json). Read-only on GitHub, never clones. Uses no AI.",
@@ -142,6 +170,20 @@
       ],
       "envFile": "{config}/edge-tunnel.env",
       "restart": "10s",
+      "on": true
+    },
+    {
+      "name": "grade-new-models",
+      "kind": "timer",
+      "what": "New free models get their published coding grade (SWE-bench Verified against Claude) asked for, once: one job for the lead when any has none.",
+      "command": [
+        "{python}",
+        "{scripts}/grade-new-models.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "10m",
+      "limit": "2m",
       "on": true
     }
   ]

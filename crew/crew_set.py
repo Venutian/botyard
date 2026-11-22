@@ -346,6 +346,8 @@ class CrewSet:
         seconds = int(spec['minutes']) * 60
         path_env = {'PATH': plain(p.path)}
         guarded = {'PATH': plain(f"{p.crew}/agy-bin:{p.path}")}
+        # Claude and Codex bots keep their own git rules; the crew's git adds only that a main checkout never moves.
+        main_only = {'PATH': plain(f"{p.crew}/agy-bin:{p.path}"), 'BOTYARD_GIT_MAIN_ONLY': plain('1')}
         may_not = spec.get('mayNot') or []
         ai = spec['ai']
         if ai == 'claude':
@@ -354,13 +356,13 @@ class CrewSet:
                       'maxTurnsPerRun': spec['turns'] or 150, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslySkipPermissions': True,
                       'extraArgs': self.claude_tools(spec, may_not),
-                      'env': {**self.no_push(), **path_env}}
+                      'env': {**self.no_push(), **main_only}}
         elif ai == 'codex':
             # CODEX_HOME is the bots' own: connected apps (mail, GitHub, calendar) are off in its config.toml.
             config = {'engine': 'cli', 'cwd': cwd, 'model': spec['model'], 'modelReasoningEffort': spec['effort'],
                       'command': p.codex, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslyBypassApprovalsAndSandbox': False, 'extraArgs': CODEX_ARGS,
-                      'env': {**self.no_push(), **self.git_id(spec), **path_env, 'CODEX_HOME': plain(p.safe)}}
+                      'env': {**self.no_push(), **self.git_id(spec), **main_only, 'CODEX_HOME': plain(p.safe)}}
         elif ai == 'gemini':
             # Over ACP the prompt goes through a pipe: on the command line a long job thread is too big for Linux.
             # agy-acp.py sets the model and answers agy's permission requests within the bots' rules; agy-bin

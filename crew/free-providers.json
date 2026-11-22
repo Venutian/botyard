@@ -1,0 +1,46 @@
+{
+  "_about": "Not Groq: its free plan allows 8,000 tokens a minute, less than a coding bot's own instructions (free-scout.py, 17 Nov 2026). Free AI providers the free bots can use, read by botyard_home.py (the variable each key is given as), free-scout.py (which of a provider's models cost nothing) and the Setup page (a key box each, with where to get the key). A provider OpenCode knows (models.dev) needs only its key; one it does not know has an `opencode` block, added to every free bot's OpenCode settings. Checked 21 Nov 2026 against each provider's own free-tier page; a free tier can change, and free-limits.py learns each model's real allowance from its runs.",
+  "providers": [
+    {
+      "id": "openrouter", "name": "OpenRouter", "env": "OPENROUTER_API_KEY", "signup": "https://openrouter.ai/keys",
+      "free": "Models whose name ends in :free cost nothing; about 50 requests a day, 1,000 after a one-time $10 top-up.",
+      "models": ":free$"
+    },
+    {
+      "id": "nvidia", "name": "NVIDIA", "env": "NVIDIA_API_KEY", "signup": "https://build.nvidia.com",
+      "free": "Every hosted model is free to try, about 40 requests a minute.",
+      "models": "worth"
+    },
+    {
+      "id": "google", "name": "Google Gemini", "env": "GEMINI_API_KEY", "signup": "https://aistudio.google.com/apikey",
+      "free": "Gemini Flash models are free on an AI Studio key with no billing set up, with a daily request cap per model.",
+      "models": "gemini-[0-9.]+-flash(?!-lite)"
+    },
+    {
+      "id": "mistral", "name": "Mistral", "env": "MISTRAL_API_KEY", "signup": "https://console.mistral.ai/api-keys",
+      "free": "The free Experiment plan opens every model at a low rate (a phone number is asked at sign-up).",
+      "models": "worth"
+    },
+    {
+      "id": "sambanova", "name": "SambaNova", "env": "SAMBANOVA_API_KEY", "signup": "https://cloud.sambanova.ai/apis",
+      "free": "The free tier opens its hosted models at a low daily cap; no card.",
+      "models": "worth"
+    },
+    {
+      "id": "cohere", "name": "Cohere", "env": "COHERE_API_KEY", "signup": "https://dashboard.cohere.com/api-keys",
+      "free": "A trial key is free for testing, about 1,000 calls a month.",
+      "models": "command-a"
+    },
+    {
+      "id": "pollinations", "name": "Pollinations", "env": "", "signup": "https://pollinations.ai",
+      "free": "Free with no key and no sign-up, one request at a time; a small model, so it takes light work.",
+      "models": ".",
+      "opencode": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Pollinations",
+        "options": { "baseURL": "https://text.pollinations.ai/openai", "apiKey": "none" },
+        "models": { "openai-fast": { "name": "Pollinations openai-fast (gpt-oss-20b)", "limit": { "context": 128000, "output": 8192 } } }
+      }
+    }
+  ]
+}

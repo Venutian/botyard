@@ -196,7 +196,7 @@ function flowOf({ agents = [], issues: jobs = [], chats = [], projects = [], liv
   const runFailed = new Map()
   for (const run of runs) {
     const job = run.issueId || run.jobId
-    if (job && FAILED_RUNS.has(run.status) && inWindow(stamp(run.finishedAt || run.startedAt || run.createdAt))) runFailed.set(job, true)
+    if (job && FAILED_RUNS.has(run.status) && run.errorCode !== 'pace_hold' && inWindow(stamp(run.finishedAt || run.startedAt || run.createdAt))) runFailed.set(job, true)
   }
 
   /** The bot whose work a check job checks, when it is one of the crew. */
@@ -294,7 +294,7 @@ function flowOf({ agents = [], issues: jobs = [], chats = [], projects = [], liv
     if (stamp(run.startedAt || run.createdAt) < midnight) continue
     const row = runsToday.get(run.agentId) || { runs: 0, failed: 0 }
     row.runs += 1
-    if (FAILED_RUNS.has(run.status)) row.failed += 1
+    if (FAILED_RUNS.has(run.status) && run.errorCode !== 'pace_hold') row.failed += 1
     runsToday.set(run.agentId, row)
   }
   const tokens = (row) => Number(row.inputTokens || 0) + Number(row.outputTokens || 0) + Number(row.cachedInputTokens || 0)

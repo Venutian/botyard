@@ -100,6 +100,20 @@ A built-in track, `release-app`, per product and version:
 Web products and Botyard's own GitHub releases use a short form: build, tests, preview or draft, the owner's
 gate, publish, check the live version.
 
+## Starting a release
+
+**Prepare release** on a product's row (page and phone) starts one trip on `release-app` for that product, with its
+package and bundle id from the plan. The plan's `release.inputs` name the studio's own bots: `builder`, `writer`
+(the listing), `artist` (the store images) and `reviewer` (who scores them). One release runs at a time per product;
+the board follows it to its trip and says when it waits for the owner.
+
+The checks before any upload (`studio/server/lib/release-checks.mjs`): every listing field present and within each
+store's limits, no placeholder text; Play icon 512 x 512, feature graphic 1024 x 500, 2 to 8 phone screenshots; at
+least 3 App Store iPhone screenshots at a size Apple takes; privacy and support pages answering; the bundle built and
+its version code above what Play holds; for an app that takes payments through a store, products in that store. What
+only the owner can do (a test purchase with a tester account, the content rating, data safety and privacy forms) is
+listed as theirs, never failed.
+
 ## Where the files are
 
 - The plan: `launch-plan.json` in Botyard's data folder (`~/.botyard/`), one entry per product; a studio may

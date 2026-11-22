@@ -186,12 +186,22 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(card.issueId, request.jobId)
   assert.match(card.summary, /FAIL a third time/)
   assert.throws(() => answerGate(store, tripId, { action: 'approve' }, { actor: { agent: 'b1' } }), /Only the owner/)
+  // The checks failed, so the gate never offers to land it: its yes sends the work back to the build with the findings.
+  assert.equal(card.payload.acceptLabel, 'Send it back to build')
+  assert.match(card.payload.prompt, /The work did not pass, so going on to land is not offered here/)
   answerGate(store, tripId, { action: 'approve' }, { now: T0 + 9000, actor: OWNER })
   await tick(10)
-  // Landed by the script, but not in main yet: not finished.
+  const build5 = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build'))
+  assert.match(build5.description, /FAIL a third time/)
+  assert.equal(io.ran.filter((r) => r.line === 'land it').length, 0, 'nothing landed on the yes')
+  botDoes(store, build5.id, { commit: 'eee5555' }, T0)
+  await tick(11)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'PASS' }, T0)
+  await tick(12)
+  // Landed by the script once a check passed, but not in main yet: not finished.
   view = tripView(store, tripId)
   assert.equal(view.status, 'not-in-main')
-  assert.equal(view.commit, 'ddd4444-merged')
+  assert.equal(view.commit, 'eee5555-merged')
   assert.equal(getRequest(store, request.id).status, 'not-in-main')
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'in_progress')
   landed = true
@@ -202,8 +212,8 @@ test('a request moves along its track: a failed check goes back with its finding
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'done')
   // The build rounds the landed one replaced are closed as superseded; the round that landed stays done.
   const builds = store.objects("SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = 'build' ORDER BY created_at", tripId)
-  assert.deepEqual(builds.map((b) => store.object('SELECT raw FROM jobs WHERE id = ?', b.jobId).status), ['cancelled', 'cancelled', 'cancelled', 'done'])
-  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ?', builds[0].jobId).at(-1).body, /^Superseded: a later round of this request landed in main \(ddd4444-merg/)
+  assert.deepEqual(builds.map((b) => store.object('SELECT raw FROM jobs WHERE id = ?', b.jobId).status), ['cancelled', 'cancelled', 'cancelled', 'cancelled', 'done'])
+  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ?', builds[0].jobId).at(-1).body, /^Superseded: a later round of this request landed in main \(eee5555-merg/)
   // Cost is added up across every step and round of the request.
   assert.equal(shown.cost.usd, 1.75)
   assert.equal(shown.cost.inputTokens, 100)
@@ -358,6 +368,8 @@ test('whether work is public is decided from its project and the paths it change
   assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_projects: 'harbour' } })).current, 'review')
   assert.equal((await run({ files: ['src/x.mjs'], defaults: { public_mark: 'SCORED BAR' }, brief: 'SCORED BAR: page bar' })).current, 'review')
   assert.equal((await run({ files: null })).current, 'review')
+  // A commit already in main shows no changed files: that is not "nothing public", it is scored.
+  assert.equal((await run({ files: [] })).current, 'review')
   // A brief that leaves the mark out does not skip it when the files are public.
   assert.equal((await run({ files: ['site/about.html'], defaults: { public_mark: 'SCORED BAR' }, brief: 'nothing said' })).current, 'review')
 })
@@ -367,9 +379,100 @@ test('the built-in crew track scores public work before landing, and its ruling 
   assert.deepEqual(lines.filter((l) => l.to === 'land').map((l) => l.from).sort(), ['owner', 'review'])
   assert.ok(lines.some((l) => l.from === 'rule' && l.to === 'review' && l.on === 'pass'))
   assert.ok(lines.some((l) => l.from === 'check' && l.to === 'review' && l.on === 'pass'))
-  assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'owner' })
+  assert.deepEqual(lines.find((l) => l.from === 'review' && l.on === 'fail'), { from: 'review', to: 'build', on: 'fail', rounds: 2, then: 'rule' })
+  // Only the ruler's ASK OWNER reaches the owner's gate on this track.
+  assert.deepEqual(lines.filter((l) => l.to === 'owner').map((l) => `${l.from}:${l.on}`), ['rule:ask'])
   assert.equal(BUILD_TRACK.steps.find((s) => s.id === 'review').onlyFor, 'public')
+  // The ruling is the ruler's (a bot other than the checker, when the studio names one), else the lead's.
+  const rule = BUILD_TRACK.steps.find((s) => s.id === 'rule')
+  assert.deepEqual([rule.bot, rule.orBot], ['$ruler', '$lead'])
   assert.equal(checkTrack(BUILD_TRACK, { selfKey: 'build-check-land' }).optional.includes('reviewer'), true)
+})
+
+/** A crew track with the ruler deciding every failure past its rounds; only his ASK OWNER reaches the owner. */
+const RULED = {
+  key: 'ruled', inputs: ['brief'],
+  steps: [
+    { id: 'build', kind: 'bot', bot: 'Builder', needs: ['brief'], leaves: ['commit'] },
+    { id: 'check', kind: 'bot', bot: 'Checker', needs: ['commit'], leaves: ['verdict'] },
+    { id: 'rule', kind: 'bot', bot: 'Judge', ruling: true, leaves: ['verdict'] },
+    { id: 'decide', kind: 'gate' },
+    { id: 'land', kind: 'script', command: 'land it', needs: ['commit'], leaves: ['commit'] },
+  ],
+  lines: [
+    { from: 'build', to: 'check', on: 'pass' }, { from: 'build', to: 'rule', on: 'fail' },
+    { from: 'check', to: 'land', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'rule', to: 'land', on: 'pass' }, { from: 'rule', to: 'build', on: 'fail', rounds: 1, then: 'rule' }, { from: 'rule', to: 'decide', on: 'ask' },
+    { from: 'decide', to: 'land', on: 'pass' }, { from: 'land', to: 'rule', on: 'fail' },
+  ],
+}
+
+test('a failure past its rounds goes to the ruler, who passes it, sends it back with his plan, stops it, or asks the owner', async () => {
+  const run = async (said) => {
+    const { store, dataDir } = yard()
+    saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+    const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+    const request = startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+    const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+    await tick(1)
+    const tripId = store.row('SELECT id FROM trips').id
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+    await tick(2)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL: row 2 wrong' }, T0)
+    await tick(3)
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: 'bbb2222' }, T0)
+    await tick(4)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL: row 2 still wrong' }, T0)
+    await tick(5)
+    // The check's round is used: the ruler is asked, the owner is not.
+    assert.equal(tripView(store, tripId).current, 'rule')
+    assert.equal(store.rows("SELECT id FROM cards WHERE status = 'pending'").length, 0, 'no card to the owner')
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: said }, T0)
+    await tick(6)
+    return { store, tripId, request, io }
+  }
+  // PASS: it lands, with no card to the owner.
+  const pass = await run('PASS: good enough as it is')
+  assert.equal(tripView(pass.store, pass.tripId).status, 'done')
+  assert.equal(pass.store.rows('SELECT id FROM cards').length, 0)
+  // FAIL with a plan: back to the build, the plan as its note.
+  const fail = await run('FAIL. Plan: start from bbb2222, redo row 2 with the town in frame, prove it with a capture.')
+  assert.equal(tripView(fail.store, fail.tripId).current, 'build')
+  assert.match(fail.store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(fail.store, fail.tripId, 'build')).description, /redo row 2 with the town in frame/)
+  assert.equal(fail.store.rows('SELECT id FROM cards').length, 0)
+  // STOP: the request ends, with his reason, and nothing is asked of the owner.
+  const stop = await run('STOP: the kit is not worth a sixth round')
+  assert.equal(tripView(stop.store, stop.tripId).status, 'stopped')
+  assert.match(tripView(stop.store, stop.tripId).reason, /not worth a sixth round/)
+  assert.equal(stop.store.object('SELECT raw FROM requests WHERE id = ?', stop.request.id).status, 'stopped')
+  assert.equal(stop.store.rows('SELECT id FROM cards').length, 0)
+  // ASK OWNER: only now does the owner get a card, with his options.
+  const ask = await run('ASK OWNER: redesign with the artist (my pick) or a sixth fix round')
+  assert.equal(tripView(ask.store, ask.tripId).current, 'decide')
+  assert.match(ask.store.object("SELECT raw FROM cards WHERE status = 'pending'").summary, /redesign with the artist \(my pick\)/)
+})
+
+test('a ruler who sends the same work back past his own rounds stops it instead of being asked again', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+  startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  const fails = async (n) => {
+    botDoes(store, workingJob(store, tripId, 'build'), { commit: `c${n}c${n}c${n}c` }, T0); await tick(n * 10 + 1)
+    botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL' }, T0); await tick(n * 10 + 2)
+    if (workingJob(store, tripId, 'build')) { botDoes(store, workingJob(store, tripId, 'build'), { commit: `d${n}d${n}d${n}d` }, T0); await tick(n * 10 + 3); botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'FAIL' }, T0); await tick(n * 10 + 4) }
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: 'FAIL. Try again from the last commit.' }, T0); await tick(n * 10 + 5)
+  }
+  await fails(1)
+  assert.equal(tripView(store, tripId).current, 'build')
+  await fails(2)
+  const view = tripView(store, tripId)
+  assert.equal(view.status, 'stopped')
+  assert.match(view.reason, /sent it back 1 time and it still failed/)
+  assert.equal(store.rows('SELECT id FROM cards').length, 0)
 })
 
 test('a track that delivers a change and leaves no commit is stuck, never done', async () => {
@@ -532,4 +635,90 @@ test('tracks, requests and trips through the engine\'s API', async () => {
   } finally {
     await engine.stop()
   }
+})
+// ── fix rounds start from the work ───────────────────────────────────────────────
+
+test('a fix round after a build that said NOT MET still starts from that build\'s commit, not from main', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', {
+    key: 'rounds', inputs: ['brief'],
+    steps: [
+      { id: 'build', kind: 'bot', bot: 'Builder', needs: ['brief'], leaves: ['commit'] },
+      { id: 'decide', kind: 'gate' },
+    ],
+    lines: [{ from: 'build', to: 'build', on: 'fail', rounds: 2, then: 'decide' }, { from: 'build', to: 'decide', on: 'pass' }],
+  }, { now: T0, actor: OWNER })
+  const io = fakeIo({})
+  startRequest(store, 'co', { track: 'rounds', title: 'Site', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  let n = 0
+  const tick = () => tickTracks(store, { dataDir, io, now: T0 + ++n * 1000 })
+  await tick()
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'ddd4444', outcome: 'NOT MET: not deployed yet' }, T0)
+  await tick()
+  const round2 = store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build'))
+  assert.equal(round2.startFrom, 'ddd4444')
+  // The round after that goes on from the newest commit, too.
+  botDoes(store, round2.id, { commit: 'eee5555', outcome: 'NOT MET' }, T0)
+  await tick()
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'eee5555')
+})
+
+test('the land step refuses work whose last check failed unless the trip is run again from it with a written reason', async () => {
+  const { landRefusal } = await import('../server/engine/tracks.mjs')
+  const { store } = yard()
+  const version = { steps: [{ id: 'check' }, { id: 'rule' }, { id: 'land' }] }
+  const step = { id: 'land', command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"' }
+  const put = (id, stepId, status, at) => store.put('trip_steps', { id, tripId: 't1', requestId: 'r1', stepId, kind: 'bot', title: stepId === 'check' ? 'Check' : 'Ruling', try: 1, status, snapshot: { verdict: status === 'passed' ? 'pass' : 'fail', findings: 'row 2 wrong' }, createdAt: at, finishedAt: at })
+  put('a', 'check', 'failed', '2026-11-20T10:00:00Z')
+  assert.match(landRefusal(store, { id: 't1' }, version, step, {}), /^Not landed: the last check failed/)
+  // A written reason on a rerun from the land step lets it through.
+  assert.equal(landRefusal(store, { id: 't1' }, version, step, { inputs: { note: 'Land it: the row is fixed by hand' } }), '')
+  // A ruler's later PASS is the last word.
+  put('b', 'rule', 'passed', '2026-11-20T11:00:00Z')
+  assert.equal(landRefusal(store, { id: 't1' }, version, step, {}), '')
+  // Only the land script is guarded.
+  assert.equal(landRefusal(store, { id: 't1' }, version, { id: 'x', command: 'echo' }, {}), '')
+})
+
+test('every scored review is kept in the reviews table with its piece kind and verdict; a skipped one is not', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', SCORED, { now: T0, actor: OWNER })
+  const io = { ...fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) }), changedFiles: async () => ['marketing/steam/capsule.png'] }
+  startRequest(store, 'co', { track: 'scored', title: 'Steam kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+  await tick(2)
+  botDoes(store, workingJob(store, tripId, 'check'), { verdict: 'PASS' }, T0)
+  await tick(3)
+  botDoes(store, workingJob(store, tripId, 'review'), { verdict: 'VERDICT: FAIL. The capsule is blurry.' }, T0)
+  await tick(4)
+  const kept = store.objects('SELECT raw FROM reviews')
+  assert.equal(kept.length, 1)
+  assert.deepEqual([kept[0].piece.kind, kept[0].verdict, kept[0].source], ['kit', 'fail', 'track'])
+  assert.match(kept[0].text, /capsule is blurry/)
+})
+
+test('a request has one open card at a time: a new question updates it and says how often it was asked', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', RULED, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'land it': () => ({ out: { leaves: { commit: 'aaa1111' } } }) })
+  startRequest(store, 'co', { track: 'ruled', title: 'Kit', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  // The build fails straight to the ruler, who asks the owner; the owner sends it back; it fails again and is asked again.
+  for (let round = 0; round < 2; round++) {
+    const b = workingJob(store, tripId, 'build')
+    store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', b), status: 'cancelled' })
+    await tick(round * 10 + 2)
+    botDoes(store, workingJob(store, tripId, 'rule'), { verdict: 'ASK OWNER: redesign or stop' }, T0)
+    await tick(round * 10 + 3)
+    if (round === 0) { answerGate(store, tripId, { action: 'back', to: 'build', note: 'one more try' }, { now: T0 + 4000, actor: OWNER }); await tick(round * 10 + 5) }
+  }
+  const pending = store.objects("SELECT raw FROM cards WHERE status = 'pending'")
+  assert.equal(pending.length, 1, 'one open card')
+  assert.match(pending[0].title, /\(asked 2 times\)$/)
 })

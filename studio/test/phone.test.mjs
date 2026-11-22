@@ -428,7 +428,7 @@ test('the models screen reads every bot\'s model and the free list, and leaves c
     const { status, body } = await ask('/v1/models')
     assert.equal(status, 200)
     assert.deepEqual(body.bots.map((b) => [b.name, b.label, b.where, b.status]), [['Critic', 'GPT 6.1 Sol', 'Codex', 'idle'], ['Lead', 'Sonnet 5.5', 'Claude', 'idle'], ['Scout', 'GPT 6 Luna', 'Codex', 'idle']])
-    assert.deepEqual(body.free.map((m) => [m.label, m.state]), [['DeepSeek V4.1 Flash, free (about Claude Haiku)', 'unchecked'], ['Beam, free (below Claude Haiku)', 'aside']])
+    assert.deepEqual(body.free.map((m) => [m.label, m.state]), [['DeepSeek V4.1 Flash, free', 'unchecked'], ['Beam, free', 'aside']])
     assert.equal(body.subscriptions.claude.week, 0.4)
     assert.equal(body.switches[0].text, 'Freelancer moved from DeepSeek V4.1 Flash, free to Beam, free')
     assert.equal(body.health.tone, 'warn')

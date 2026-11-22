@@ -99,7 +99,8 @@ def read_json(path, empty):
 
 
 # A provider's models need its key; OpenCode's own free offers need none.
-NO_KEY = ('opencode',)
+# OpenCode's own free models, and the free providers that need no key (free-providers.json, env '').
+NO_KEY = ('opencode', *(p['id'] for p in botyard_home.free_providers() if not p.get('env')))
 
 
 def reachable(model, has_key=None):
@@ -155,6 +156,28 @@ def credit_only_providers(limits=None):
     return found
 
 
+GRADES_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'studio', 'server', 'lib', 'model-grades.json')
+# Best first: the published benchmark grade against Claude (studio/server/lib/model-grades.json). A model no
+# benchmark covers sits between Haiku and -Haiku until one does.
+GRADE_RANK = {'Opus': 6, '+Sonnet': 5, 'Sonnet': 4, '+Haiku': 3, 'Haiku': 2, '-Haiku': 0}
+UNGRADED = 1
+
+
+def _slug(text):
+    return re.sub(r'[^a-z0-9]+', '', str(text).lower())
+
+
+def grade_rank(model, table=None):
+    """How a free model ranks by its published coding benchmark, the same match the page uses for its chip."""
+    if table is None:
+        table = read_json(GRADES_FILE, {})
+    name = _slug(re.sub(r'(:free|-free)$', '', model.split('/')[-1]))
+    for row in table.get('models', []):
+        if row.get('grade') in GRADE_RANK and any(_slug(m) in name for m in row.get('match', [])):
+            return GRADE_RANK[row['grade']]
+    return UNGRADED
+
+
 def free_list(has_key=None, listed=None, credit_only=None):
     """Every free model this computer can ask, with its family and tier now: the list above, then what
     free-scout.py found, less any the tool itself no longer lists (a name that left the offer would only
@@ -174,7 +197,9 @@ def free_list(has_key=None, listed=None, credit_only=None):
         score = scores.get(model, {})
         checked = score.get('pass', 0) + score.get('fail', 0)
         rows.append((model, family, 'light' if checked >= 3 and score.get('pass', 0) / checked < 0.5 else tier))
-    return rows
+    # Best first, by the benchmark grade; the list's own order breaks ties (sorted() keeps it).
+    table = read_json(GRADES_FILE, {})
+    return sorted(rows, key=lambda row: -grade_rank(row[0], table))
 
 
 def free_model(tier='strong', not_family=None):
@@ -383,12 +408,11 @@ def pc_skills():
 
 
 def skills_env(bot):
-    """Only this bot's skills of the PC's, when its file lists them; "all" hides none."""
+    """The bot's settings file for its AI: only its skills of the PC's when its file lists them ("all" hides none), and what no bot
+    may touch closed to every bot."""
     want = bot['spec'].get('skills', 'all')
-    if not isinstance(want, list):
-        return {}
-    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want), reads=bot['spec'].get('reads'),
-                                 own=(bot.get('config') or {}).get('cwd'))
+    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills() if isinstance(want, list) else [], want=set(want) if isinstance(want, list) else None,
+                                reads=bot['spec'].get('reads'), own=(bot.get('config') or {}).get('cwd'))
 
 
 def body_for(bot, path, existing, boss, dry=False):

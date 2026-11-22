@@ -44,7 +44,7 @@ function modelLine(m, now) {
   if (m.state === 'aside') says = m.back ? (m.back * 1000 < now ? 'Out, being tried again' : `Out, usually back about ${at(m.back, now)}`) : 'Out, back time not known yet'
   else if (m.usualSeconds) says = `${m.leftSeconds != null ? `about ${span(m.leftSeconds)} left` : 'answering'} of the ${span(m.usualSeconds)} it usually gives`
   else if (m.state === 'answering') says = 'Answering; its limit is not known yet'
-  return `<li class="${esc(m.state)}" ${m.why ? `title="${esc(m.why)}"` : ''}><i aria-hidden="true"></i><span class="u-model">${esc(m.label)}</span><small>${esc(says)}${m.limit ? `. Its own limit: ${esc(m.limit)}` : ''}</small></li>`
+  return `<li class="${esc(m.state)}" ${m.why ? `title="${esc(m.why)}"` : ''}><i aria-hidden="true"></i><span class="u-model">${esc(m.label)} ${claudeChip(m.claude)}</span><small>${esc(says)}${m.limit ? `. Its own limit: ${esc(m.limit)}` : ''}</small></li>`
 }
 
 /** One provider's block. */
@@ -73,4 +73,14 @@ export function usageHtml(data, now = Date.now()) {
   return `<div class="u-head"><strong>Usage of each AI</strong><small>Read at ${esc(new Date(data.at || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}. Free limits are learned from each model's own history: typical, not promised.</small></div>
     ${providers.map((p) => rowHtml(p, now)).join('')}
     <p class="u-foot"><button type="button" class="link" data-act="usage-more">Models, limits and money</button></p>`
+}
+
+/** A free model's chip against Claude (server/lib/models.mjs CLAUDE_SCALE): bold, in its tier's colour, the meaning on hover. */
+export function claudeChip(claude) {
+  if (!claude?.chip) return ''
+  const c = claude.chip
+  const name = String(c).replace(/^[+-]/, '')
+  const meaning = c === 'unrated' ? 'Not rated yet: fewer than three of its jobs have been checked' : c.startsWith('-') ? `Weaker than Claude ${name}` : `About as good as Claude ${name}${c.startsWith('+') ? ', a bit better' : ''}`
+  const basis = claude.from === 'benchmark' ? ` (${claude.benchmark} ${claude.score})` : claude.from === 'checks' ? ' (from the crew\'s own checks; no published benchmark)' : ''
+  return `<b class="claude-chip c-${esc(claude.tier)}" title="${esc(meaning + basis)}">${esc(c)}</b>`
 }

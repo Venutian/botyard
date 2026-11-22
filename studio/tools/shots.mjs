@@ -79,7 +79,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const freePort = () => new Promise((resolve) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)) }) })
 
 /** Start the demo and wait for its address. */
-async function startDemo(log) {
+export async function startDemo(log) {
   const port = await freePort()
   const child = spawn(process.execPath, [path.join(studio, 'server', 'studio.mjs'), '--demo'], { cwd: studio, env: { ...process.env, PORT: String(port), BOTYARD_SETUP: 'sample' }, stdio: ['ignore', 'pipe', 'pipe'] })
   let out = ''
@@ -94,7 +94,7 @@ async function startDemo(log) {
 }
 
 /** Start a headless browser and talk to it. */
-async function startBrowser(file) {
+export async function startBrowser(file) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'botyard-shots-'))
   const child = spawn(file, [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${WIDTH},${HEIGHT}`,
@@ -137,7 +137,7 @@ async function startBrowser(file) {
 }
 
 /** One page of the browser, at the picture's size. */
-async function openPage(browser, { plates, phone, size }) {
+export async function openPage(browser, { plates, phone, size, motion = false }) {
   const [width, height] = size || (phone ? [390, 844] : [WIDTH, HEIGHT])
   const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true })
@@ -145,7 +145,7 @@ async function openPage(browser, { plates, phone, size }) {
   await cdp('Page.enable')
   await cdp('Runtime.enable')
   await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: phone ? 2 : 1, mobile: Boolean(phone) })
-  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: plates === 'night' ? 'dark' : 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }] })
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: plates === 'night' ? 'dark' : 'light' }, { name: 'prefers-reduced-motion', value: motion ? 'no-preference' : 'reduce' }] })
   // Before the page's own code runs: the help sheet has been seen, and day or night is chosen.
   await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('botyard.seen-help', '1'); localStorage.setItem('botyard.plates', ${JSON.stringify(plates || 'day')}) } catch {}` })
   const evaluate = async (expression) => {
@@ -167,7 +167,7 @@ const LOOK = `(() => {
 })()`
 
 /** Wait until the page has stopped changing; gives what it looks like then. */
-async function settled(page, { until = () => true, ms = VIEW_WAIT_MS, why = 'the page' } = {}) {
+export async function settled(page, { until = () => true, ms = VIEW_WAIT_MS, why = 'the page' } = {}) {
   const end = Date.now() + ms
   let last = null
   let same = 0

@@ -60,7 +60,7 @@ class OwnerGuard(unittest.TestCase):
             self.assertIsNotNone(guard.check({'tool_name': tool, 'tool_input': given}), tool)
         # A script's own source names the folder; a builder's edit of it is an edit like any other.
         self.assertIsNone(guard.check({'tool_name': 'Edit', 'tool_input': {
-            'file_path': 'own/mail.py', 'old_string': 'x', 'new_string': "KEY_DIR = '~/.config/mail-keys'"}}))
+            'file_path': '/tmp/t/yard/own/mail.py', 'old_string': 'x', 'new_string': "KEY_DIR = '~/.config/mail-keys'"}}))
         # Sending around the script is still refused, as before.
         self.assertIsNotNone(bash('curl -X POST https://api.resend.com/emails -d @mail.json'))
 

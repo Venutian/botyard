@@ -7,9 +7,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import * as THREE from 'three'
 import { DEMO_BRAIN, brainFolder, brainNote, brainRoute, frontmatter, looksSecret, newNote, readBrain, saveNote, setBrainFolder } from '../server/lib/brain.mjs'
 import { matches } from '../src/ui/brain-map.js'
 import { RADIUS, SHAPE, brainDust, fieldLayout } from '../src/ui/brain-layout.js'
+import { clampBox, edgePoint, layoutTitles, nearestNote, placeExcerpt, zoomFactor } from '../src/ui/brain-field.js'
 
 const demo = DEMO_BRAIN()
 
@@ -119,6 +121,93 @@ test('the field: every note inside the brain, near its own lobe, the same every 
   for (let i = 0; i < Math.round(3000 * 0.8) * 3; i += 3) assert.ok(Math.abs(dust[i]) > 0.04 * RADIUS * 0.8 || dust[i + 1] < -0.2 * RADIUS, 'the fissure between the halves stays empty')
   assert.deepEqual([...matches(b.notes, 'release green')], ['2026-10-14-release-when-green'])
   assert.equal(matches(b.notes, '  '), null)
+})
+
+test('the zoom helpers: which neurons get labels as the camera comes closer', () => {
+  const at = new Map([
+    ['one', new THREE.Vector3(0, 0, 0)],
+    ['two', new THREE.Vector3(20, 0, 0)],
+    ['three', new THREE.Vector3(90, 0, 0)],
+  ])
+  const order = ['one', 'two', 'three']
+  const cam = new THREE.Vector3(0, 0, 0)
+  const light = new Map([['one', 1], ['two', 1], ['three', 1]])
+  assert.equal(nearestNote(at, order, cam, light), 'one')
+  const dim = new Map([['one', 0.1], ['two', 1], ['three', 1]])
+  assert.equal(nearestNote(at, order, cam, dim), 'two')
+  assert.equal(nearestNote(at, order, new THREE.Vector3(1000, 0, 0), light), 'three')
+  assert.equal(nearestNote(at, order, cam, new Map()), 'one', 'no light map dims nothing')
+  assert.equal(zoomFactor(500), 0, 'no labels far away')
+  assert.equal(zoomFactor(360), 0, 'labels only begin inside about 360')
+  assert.equal(zoomFactor(140), 1, 'full zoom right inside the brain')
+  assert.ok(zoomFactor(300) > 0 && zoomFactor(300) < 1, 'labels begin under about 300')
+  assert.ok(zoomFactor(310) > zoomFactor(340), 'closer means more zoom')
+})
+
+test('the nearest note prefers one on the stage, and falls back to the nearest of all', () => {
+  const at = new Map([['near', new THREE.Vector3(5, 0, 0)], ['seen', new THREE.Vector3(40, 0, 0)]])
+  const cam = new THREE.Vector3(0, 0, 0)
+  assert.equal(nearestNote(at, ['near', 'seen'], cam, null, (id) => id === 'seen'), 'seen')
+  assert.equal(nearestNote(at, ['near', 'seen'], cam, null, () => false), 'near', 'none in view: the nearest of all')
+})
+
+/** Two boxes overlap. */
+const overlap = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+const insideOf = (w, h) => (b) => b.left >= 0 && b.top >= 0 && b.right <= w && b.bottom <= h
+
+test('a neuron off the stage is pinned to its edge, the way it lies', () => {
+  const e = edgePoint(500, 0, 400, 300, 10)
+  assert.deepEqual([Math.round(e.x), Math.round(e.y)], [390, 150], 'far right: on the right edge, level')
+  const up = edgePoint(0, -9000, 400, 300, 10)
+  assert.deepEqual([Math.round(up.x), Math.round(up.y)], [200, 10])
+  const corner = edgePoint(-1000, 1000, 400, 300, 10)
+  assert.ok(corner.y === 290 && corner.x > 0 && corner.x < 200, 'down left: on the bottom edge, left of the middle')
+  const b = clampBox(398, -20, 120, 23, 400, 300)
+  assert.ok(insideOf(400, 300)(b), 'a plate centred off the stage is moved inside it')
+  assert.equal(b.right - b.left, 120)
+})
+
+test('the titles: in-frame ones nearest first, edge ones only to make up six, all inside, none overlapping', () => {
+  const w = 375
+  const h = 560
+  const plate = (id, x, y, d, inFrame = true) => ({ id, x, y, d, inFrame, w: 150, h: 23 })
+  // Twelve neurons crowded on one spot, two off the stage: the crowd spreads out, the edge ones are not needed.
+  const crowd = Array.from({ length: 12 }, (_, i) => plate(`n${i}`, 180, 280, 100 + i))
+  const shown = layoutTitles([...crowd, plate('off', 360, 10, 1, false)], { w, h, max: 12, least: 6 })
+  assert.equal(shown.length, 12)
+  assert.ok(!shown.some((s) => s.id === 'off'), 'twelve in view: no edge plate, even for the nearest neuron')
+  assert.deepEqual(shown.slice(0, 3).map((s) => s.id), ['n0', 'n1', 'n2'], 'nearest first')
+  for (const s of shown) assert.ok(insideOf(w, h)(s.box), `${s.id} inside the stage`)
+  for (let i = 0; i < shown.length; i += 1) for (let j = i + 1; j < shown.length; j += 1) assert.ok(!overlap(shown[i].box, shown[j].box), `${shown[i].id} and ${shown[j].id} apart`)
+  // Two in view: four of the nearest out of view make up six, on the edge, and the excerpt is kept clear.
+  const excerpt = { left: 100, top: 300, right: 300, bottom: 360 }
+  const few = [plate('a', 200, 320, 50), plate('b', 210, 330, 60), ...['e1', 'e2', 'e3', 'e4', 'e5'].map((id, i) => plate(id, 12, 200 + i, 70 + i, false))]
+  const six = layoutTitles(few, { w, h, max: 12, least: 6, avoid: [excerpt] })
+  assert.equal(six.length, 6)
+  assert.deepEqual(six.map((s) => s.id), ['a', 'b', 'e1', 'e2', 'e3', 'e4'], 'in view first, then the nearest out of view')
+  for (const s of six) assert.ok(insideOf(w, h)(s.box) && !overlap(s.box, excerpt), `${s.id} inside and off the excerpt`)
+  assert.deepEqual(layoutTitles([], { w, h }), [], 'nothing to show, nothing drawn')
+})
+
+test('the excerpt plate flips and clamps so it stays fully on the stage', () => {
+  const w = 375
+  const h = 560
+  const right = placeExcerpt(360, 100, 250, 80, w, h)
+  assert.ok(right.right <= w - 6 && right.left >= 6, 'near the right edge it flips left')
+  assert.equal(right.right, 360 - 16, 'beside the neuron, on its left')
+  const low = placeExcerpt(40, 550, 250, 80, w, h)
+  assert.ok(low.bottom <= h - 6 && low.top === 550 - 14 - 80, 'near the bottom it goes above')
+  const huge = placeExcerpt(-500, 9000, 363, 600, w, h)
+  assert.ok(huge.left >= 6 && huge.top >= 6, 'even a plate as big as the stage starts inside it')
+})
+
+test('a pooled plate that is hidden is not painted: the hidden rule beats the plates\' own display', () => {
+  const css = fs.readFileSync(new URL('../src/ui/brain-map.css', import.meta.url), 'utf8')
+  assert.match(css, /\.bf-node-label\[hidden\][^{]*\{\s*display:\s*none/, '.bf-node-label[hidden] is display none')
+  assert.match(css, /\.bf-excerpt\[hidden\]/, 'and the excerpt plate too')
+  const label = css.slice(css.indexOf('.brainmap .bf-node-label {'))
+  assert.ok(css.indexOf('.bf-node-label[hidden]') > css.indexOf('.brainmap .bf-node-label {'), 'it comes after the rule that sets display: inline-flex')
+  assert.match(label, /display: inline-flex/)
 })
 
 test('the owner edits a note: saved whole, refused when it changed meanwhile or holds a secret; a new note goes to inbox/', () => {
