@@ -114,6 +114,20 @@ test('the company, its bots and its projects come back as they were given', () =
   store.close()
 })
 
+test('a limit above the page max returns every job; the default still pages', () => {
+  const store = filled()
+  for (let n = 100; n < 1300; n++) {
+    const p = page(`5a${String(n).padStart(6, '0')}-5555-4555-8555-555555555555`, n, `Bulk ${n}`)
+    store.put('jobs', p, { list_raw: row(p) })
+  }
+  const total = read.jobs(store, CO, { limit: '100000' }).length
+  assert.equal(total, 1203, 'every job, past the 1000 page max')
+  assert.equal(read.jobs(store, CO, { limit: '5000' }).length, total)
+  assert.equal(read.jobs(store, CO, {}).length, 500, 'the default page size is unchanged')
+  assert.equal(read.jobs(store, CO, { limit: '1000' }).length, 1000)
+  store.close()
+})
+
 test('the job list leaves out chats and hidden jobs, and orders by priority, then by what moved last', () => {
   const store = filled()
   const all = read.jobs(store, CO, { limit: '100000' })

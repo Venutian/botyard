@@ -325,7 +325,7 @@ export function jobs(store, companyId, query = {}) {
   if (rawLimit !== undefined && (parsedLimit === null || parsedLimit <= 0)) throw new Refused(400, `limit must be a positive integer up to ${JOB_LIST_MAX}`)
   const parsedOffset = rawOffset !== undefined && /^\d+$/.test(rawOffset) ? Number.parseInt(rawOffset, 10) : null
   if (rawOffset !== undefined && parsedOffset === null) throw new Refused(400, 'offset must be a non-negative integer')
-  const limit = parsedLimit === null ? JOB_LIST_DEFAULT : Math.min(parsedLimit, JOB_LIST_MAX)
+  const limit = parsedLimit === null ? JOB_LIST_DEFAULT : parsedLimit > JOB_LIST_MAX ? Number.MAX_SAFE_INTEGER : parsedLimit // above the page max means "all" (crew scripts ask limit=100000)
   const offset = parsedOffset ?? 0
 
   let assignee
