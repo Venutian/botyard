@@ -569,8 +569,18 @@ export class BrainField {
     const h = this.host.clientHeight
     e.textContent = n.excerpt || n.title
     e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
-    e.style.transform = `translate(${(v.x + 1) / 2 * w + 16}px, ${(1 - v.y) / 2 * h + 14}px)`
     e.hidden = false
+    // Keep the whole plate inside the field: beside the neuron when it fits, else pulled back in (or flipped above it).
+    const pw = e.offsetWidth
+    const ph = e.offsetHeight
+    const nx = (v.x + 1) / 2 * w
+    const ny = (1 - v.y) / 2 * h
+    let x = nx + 16
+    let y = ny + 14
+    if (y + ph > h - 8) y = ny - 14 - ph
+    x = Math.max(8, Math.min(x, w - pw - 8))
+    y = Math.max(8, Math.min(y, h - ph - 8))
+    e.style.transform = `translate(${x}px, ${y}px)`
   }
 
   /** Pooled title labels for the nearest neurons: at most LABEL_MAX, nearest first, none overlapping. */
