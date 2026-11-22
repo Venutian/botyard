@@ -216,7 +216,7 @@ export async function createStudio({ env = process.env, demo = false, engine = t
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'botyard-demo-'))
     closers.push(async () => fs.rmSync(home, { recursive: true, force: true }))
     Object.assign(env, { BOTYARD_DEMO: '1', BOTYARD_HOME: home, BOTYARD_ENGINE_RUNS: 'off' })
-    for (const own of ['BOTYARD_DATA', 'BOTYARD_API_URL', 'BOTYARD_CREW_FOLDER', 'BOTYARD_KEYS', 'BOTYARD_GUARD_DIR', 'BOTYARD_DEVICES_FILE', 'BOTYARD_EDGE_FILE', 'BOTYARD_AWAY_FILE', 'BOTYARD_PREVIEW_ROOT']) delete env[own]
+    for (const own of ['BOTYARD_DATA', 'BOTYARD_API_URL', 'BOTYARD_BRAIN_DIR', 'BOTYARD_CREW_FOLDER', 'BOTYARD_KEYS', 'BOTYARD_GUARD_DIR', 'BOTYARD_DEVICES_FILE', 'BOTYARD_EDGE_FILE', 'BOTYARD_AWAY_FILE', 'BOTYARD_PREVIEW_ROOT']) delete env[own]
     // Its engine takes any free port, so the demo runs beside a Botyard that is already going.
     env.BOTYARD_ENGINE_PORT ||= String(await freePort())
     phone = false

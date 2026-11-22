@@ -28,8 +28,10 @@ const WHITE = new THREE.Color('#ffffff')
 /** How close the camera is: 0 far off, 1 right inside the brain. */
 export function zoomFactor(dist) { return Math.max(0, Math.min(1, (ZOOM_START - dist) / (ZOOM_START - ZOOM_FULL))) }
 
-/** The nearest note to the camera, skipping notes dimmed by search or area. */
-export function nearestNote(at, order, cam, light) {
+/** The nearest note to the camera, skipping notes dimmed by search or area; when `seen` is given, the nearest one it
+ * says is on the stage, and the nearest of all only when none is. */
+export function nearestNote(at, order, cam, light, seen) {
+  if (seen) { const on = nearestNote(at, order.filter(seen), cam, light); if (on) return on }
   let best = ''
   let bestD = Infinity
   for (const id of order) {
@@ -42,6 +44,72 @@ export function nearestNote(at, order, cam, light) {
   return best
 }
 
+/** Where a title plate's anchor goes when its neuron is off the stage: on the stage's edge, `m` in from it, along
+ * the line from the middle of the stage towards the neuron (dx, dy in pixels from the middle). */
+export function edgePoint(dx, dy, w, h, m = 8) {
+  const hw = Math.max(1, w / 2 - m)
+  const hh = Math.max(1, h / 2 - m)
+  if (!dx && !dy) return { x: w / 2, y: h - m }
+  const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity)
+  return { x: w / 2 + dx * t, y: h / 2 + dy * t }
+}
+
+/** A box of size bw x bh centred on (x, y), moved the least it takes to sit fully inside w x h with `pad` to spare. */
+export function clampBox(x, y, bw, bh, w, h, pad = 6) {
+  const left = Math.min(Math.max(pad, x - bw / 2), Math.max(pad, w - pad - bw))
+  const top = Math.min(Math.max(pad, y - bh / 2), Math.max(pad, h - pad - bh))
+  return { left, top, right: left + bw, bottom: top + bh }
+}
+
+const hits = (a, b, gap = 0) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top
+
+/**
+ * Which neuron titles to draw and where, all inside the w x h stage and none over another or over `avoid`.
+ * `cands` are { id, x, y, d, inFrame, w, h }: the plate's anchor in stage pixels (already on the edge for a neuron
+ * off the stage), its distance from the camera and its plate size. Neurons in frame come first, nearest first, up
+ * to `max`; neurons off the stage, nearest first, only make up the count to `least`, pinned to the edge.
+ * A plate that would cover another steps down, then up, a row at a time; one with no room left is skipped.
+ */
+export function layoutTitles(cands, { w, h, max = 12, least = 6, pad = 6, avoid = [] }) {
+  const inFrame = cands.filter((c) => c.inFrame).sort((a, b) => a.d - b.d)
+  const off = cands.filter((c) => !c.inFrame).sort((a, b) => a.d - b.d)
+  const taken = [...avoid]
+  const shown = []
+  const put = (c) => {
+    // Rows down and up first, as far as the stage goes; then the same rows half a plate to either side.
+    const rows = 2 * Math.ceil(h / (c.h + 4)) + 1
+    for (const dx of [0, -0.6 * c.w, 0.6 * c.w]) for (let k = 0; k < rows; k += 1) {
+      const step = Math.ceil(k / 2) * (k % 2 ? 1 : -1) * (c.h + 4)
+      const box = clampBox(c.x + dx, c.y + step, c.w, c.h, w, h, pad)
+      if (!taken.some((t) => hits(t, box, 2))) { taken.push(box); shown.push({ ...c, box }); return }
+    }
+  }
+  for (const c of inFrame) { if (shown.length >= max) break; put(c) }
+  for (const c of off) { if (shown.length >= Math.min(max, least)) break; put(c) }
+  return shown
+}
+
+/**
+ * Which neuron titles are drawn with the camera `dist` from the orbit target: none until the zoom begins (zoomFactor),
+ * then layoutTitles over the neurons still lit (`light` above half: search and area dimming drop the rest), so the
+ * nearest ones, at most `max`, none overlapping. The live frame calls this; the tests call it with plain numbers.
+ */
+export function titlesAt(dist, cands, opts) {
+  if (zoomFactor(dist) <= 0) return []
+  return layoutTitles(cands.filter((c) => (c.light ?? 1) > 0.5), opts)
+}
+
+/** The excerpt plate beside its neuron: below right, flipped left or up where the stage runs out, then kept inside. */
+export function placeExcerpt(x, y, bw, bh, w, h, pad = 6) {
+  let left = x + 16
+  let top = y + 14
+  if (left + bw > w - pad) left = x - 16 - bw
+  if (top + bh > h - pad) top = y - 14 - bh
+  left = Math.min(Math.max(pad, left), Math.max(pad, w - pad - bw))
+  top = Math.min(Math.max(pad, top), Math.max(pad, h - pad - bh))
+  return { left, top, right: left + bw, bottom: top + bh }
+}
+
 /** Under this camera distance the brain turns immersive: labels, depth and eased aim. */
 const ZOOM_IN = 300
 /** Labels begin to fade in at this distance, full at ZOOM_FULL. */
@@ -49,6 +117,13 @@ const ZOOM_START = 360
 const ZOOM_FULL = 140
 /** At most this many neuron labels are drawn at once, nearest first. */
 const LABEL_MAX = 12
+/** At least this many titles while zoomed in: neurons off the stage make up the count, pinned to its edge. */
+const LABEL_LEAST = 6
+/** A title plate's size: its text, plus the bar, the gap, padding and border (brain-map.css), and the arrow on the edge. */
+const PLATE_EXTRA = 28
+const PLATE_EDGE = 13
+const PLATE_H = 23
+const PLATE_MAX = 220
 /** How much faster the nearest note's signals run, and how much brighter its links. */
 const NEAR_SPEED = 2.2
 const NEAR_BRIGHT = 1.5
@@ -154,6 +229,8 @@ export class BrainField {
   constructor(host, acts) {
     this.host = host
     this.acts = acts
+    // The stage knows its field, so a headless check can read the camera and the labels it placed.
+    host.brainField = this
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' })
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
     // Given in linear light: the composer passes the clear colour through as it is, and sRGB #020309 would show as #161c35.
@@ -161,9 +238,6 @@ export class BrainField {
     this.renderer.domElement.className = 'bf-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
     host.prepend(this.renderer.domElement)
-    this.labels = document.createElement('div')
-    this.labels.className = 'bf-labels'
-    host.append(this.labels)
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#020309')
     this.scene.fog = new THREE.FogExp2('#020309', 0.0009)
@@ -206,6 +280,7 @@ export class BrainField {
     for (let i = 0; i < LABEL_MAX; i += 1) {
       const el = document.createElement('div')
       el.className = 'bf-node-label'
+      el.append(document.createElement('span'))
       el.hidden = true
       this.overlays.append(el)
       this.labelPool.push(el)
@@ -374,7 +449,7 @@ export class BrainField {
    * chosen area; `chosen` and `near` light one note and its neighbours. `zoom` and `nearNote` come from the
    * frame loop while the camera is close; they are merged in so a repaint from the map never clears them.
    */
-  paint(state = {}) {
+  paint(state = this.state) {
     this.state = { ...this.state, ...state }
     if (!this.brain) return
     const notes = this.brain.notes
@@ -394,19 +469,19 @@ export class BrainField {
       const base = (n.kind === 'decision' ? 21 : n.kind === 'preference' ? 16 : 12) + (n.pinned ? 6 : 0) + Math.min(6, n.links.length * 1.5) + (fresh ? 6 : 0)
       let g = old ? 0.5 : n.kind === 'decision' ? 1.1 : 0.9
       if (fresh) g = 1.45
-      const out = state.dim(n.id) || (state.near && !state.near.has(n.id))
+      const out = this.state.dim(n.id) || (this.state.near && !this.state.near.has(n.id))
       if (out) g *= 0.12
-      if (n.id === state.chosen) g = Math.max(g, 1.8)
+      if (n.id === this.state.chosen) g = Math.max(g, 1.8)
       this.light.set(n.id, out ? 0.12 : 1)
       col.setXYZ(i, c.r, c.g, c.b)
-      size.setX(i, (n.id === state.chosen ? base * 1.6 : base) * (old ? 0.75 : 1))
+      size.setX(i, (n.id === this.state.chosen ? base * 1.6 : base) * (old ? 0.75 : 1))
       glow.setX(i, g)
       ring.setX(i, n.imported ? 1 : 0)
     })
     col.needsUpdate = size.needsUpdate = glow.needsUpdate = ring.needsUpdate = true
     this._paintLines(this.linkLines, this.links, 0.7)
     this._paintLines(this.replacedLines, this.replaced, 0.75, true)
-    for (const el of this.labels.children) el.classList.toggle('dim', Boolean(state.area) && el.dataset.area !== state.area)
+    for (const el of this.labels.children) el.classList.toggle('dim', Boolean(this.state.area) && el.dataset.area !== this.state.area)
     this.request()
   }
 
@@ -479,7 +554,14 @@ export class BrainField {
 
   _zoom(dist) { return zoomFactor(dist) }
 
-  _nearestNote() { if (!this.at || !this.order) return ''; return nearestNote(this.at, this.order, this.camera.position, this.light) }
+  /** The nearest note, preferring one in view: its excerpt is shown and its links brighten. */
+  _nearestNote() {
+    if (!this.at || !this.order) return ''
+    this.camera.updateMatrixWorld()
+    this._frustum ||= new THREE.Frustum()
+    this._frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse))
+    return nearestNote(this.at, this.order, this.camera.position, this.light, (id) => this._frustum.containsPoint(this.at.get(id)))
+  }
 
   /** While the camera is close and idle, ease the orbit target into the nearest lobe with an exponential ease-out. */
   _easeTarget(now) {
@@ -508,6 +590,7 @@ export class BrainField {
       if (live) this.time.value = now / 1000
       const damping = this.controls.update()
       const dist = this.camera.position.distanceTo(this.controls.target)
+      this.dist = dist
       this.zoom = this._zoom(dist)
       const nearNote = this._nearestNote()
       if (nearNote !== this.nearNote) this.nearNote = nearNote
@@ -532,21 +615,28 @@ export class BrainField {
     const h = this.host.clientHeight
     const v = new THREE.Vector3()
     const placed = []
+    this._areaBoxes = []
     for (const el of this.labels.children) {
       const c = this.centres.get(el.dataset.area)
       if (!c) continue
       v.set(c.x, c.y + 46, c.z).project(this.camera)
       const behind = v.z > 1
       // A label that would cover another steps down below it.
-      const x = ((v.x + 1) / 2) * w
-      let y = ((1 - v.y) / 2) * h
       const half = (el.offsetWidth || 80) / 2
+      const hh = (el.offsetHeight || 28) / 2
+      // Kept inside the stage, as the neuron titles are: a name cut off at the edge reads as a fault.
+      const x = Math.min(Math.max(half + 6, ((v.x + 1) / 2) * w), Math.max(half + 6, w - half - 6))
+      let y = Math.min(Math.max(hh + 6, ((1 - v.y) / 2) * h), Math.max(hh + 6, h - hh - 6))
       for (let tries = 0; tries < 6; tries += 1) {
         const hit = placed.find((p) => Math.abs(p.x - x) < p.half + half + 4 && Math.abs(p.y - y) < 24)
         if (!hit) break
         y = hit.y + 26
       }
-      if (!behind) placed.push({ x, y, half })
+      if (!behind) {
+        placed.push({ x, y, half })
+        // The neuron titles keep clear of the area names.
+        this._areaBoxes.push({ left: x - half, right: x + half, top: y - hh, bottom: y + hh })
+      }
       el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
       el.style.opacity = behind ? '0' : '1'
     }
@@ -558,76 +648,94 @@ export class BrainField {
     this.excerptPlate.hidden = true
   }
 
-  /** The nearest neuron's excerpt, shown beside it in a small plate. */
-  _placeExcerpt() {
-    const e = this.excerptPlate
-    const near = this.nearNote
-    if (!near || this.zoom <= 0) { e.hidden = true; return }
-    const n = this.byId.get(near)
-    const p = this.at?.get(near)
-    if (!n || !p) { e.hidden = true; return }
-    const v = new THREE.Vector3().set(p.x, p.y, p.z).project(this.camera)
-    if (v.z > 1) { e.hidden = true; return }
-    const w = this.host.clientWidth
-    const h = this.host.clientHeight
-    e.textContent = n.excerpt || n.title
-    e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
-    e.style.transform = `translate(${(v.x + 1) / 2 * w + 16}px, ${(1 - v.y) / 2 * h + 14}px)`
-    e.hidden = false
+  /** Where a neuron is on the stage: its pixel, whether that is on the stage, and if not, its place on the edge. */
+  _onStage(p, w, h) {
+    const cam = this.camera
+    const v = this._v.copy(p).applyMatrix4(cam.matrixWorldInverse)
+    const P = cam.projectionMatrix.elements
+    if (v.z < -cam.near) {
+      const x = ((P[0] * v.x) / -v.z + 1) / 2 * w
+      const y = (1 - (P[5] * v.y) / -v.z) / 2 * h
+      if (x >= 0 && x <= w && y >= 0 && y <= h) return { x, y, inFrame: true, turn: 0 }
+    }
+    // Off the stage, or behind the camera: the way to it from the middle of the stage.
+    const dx = P[0] * v.x * w / 2
+    const dy = -P[5] * v.y * h / 2
+    const e = edgePoint(dx, dy, w, h, 12)
+    return { x: e.x, y: e.y, inFrame: false, turn: Math.round(Math.atan2(dy, dx) * 180 / Math.PI) }
   }
 
-  /** Pooled title labels for the nearest neurons: at most LABEL_MAX, nearest first, none overlapping. */
+  /** How wide a title's text is, in the plate's own font. */
+  _textWidth(text) {
+    this._widths ||= new Map()
+    let wd = this._widths.get(text)
+    if (wd === undefined) {
+      this._ctx ||= document.createElement('canvas').getContext('2d')
+      const cs = getComputedStyle(this.labelPool[0])
+      this._ctx.font = cs.font || '700 11px sans-serif'
+      this._ctx.letterSpacing = cs.letterSpacing || '0px'
+      wd = Math.ceil(this._ctx.measureText(text).width)
+      this._widths.set(text, wd)
+    }
+    return wd
+  }
+
+  /** The nearest neuron's excerpt in a small plate beside it, kept inside the stage. Gives the plate's box. */
+  _placeExcerpt(w, h) {
+    const e = this.excerptPlate
+    const near = this.nearNote
+    const n = near && this.byId.get(near)
+    const p = near && this.at?.get(near)
+    if (!n || !p) { e.hidden = true; return null }
+    if (e.dataset.note !== near) { e.textContent = n.excerpt || n.title; e.dataset.note = near }
+    e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
+    e.hidden = false
+    const at = this._onStage(p, w, h)
+    const box = placeExcerpt(at.x, at.y, e.offsetWidth, e.offsetHeight, w, h)
+    e.style.transform = `translate(${Math.round(box.left)}px, ${Math.round(box.top)}px)`
+    return box
+  }
+
+  /**
+   * Pooled title plates for the nearest neurons on the stage, nearest first, at most LABEL_MAX, none overlapping and
+   * all inside the stage; when fewer than LABEL_LEAST neurons are in view, the nearest ones out of it make up the
+   * count on the stage's edge, with an arrow the way they lie.
+   */
   _placeNodes() {
-    const zoom = this.zoom
     const w = this.host.clientWidth
     const h = this.host.clientHeight
-    if (!w || !h || zoom <= 0 || !this.order) { this._dropLabels(); return }
-    const cam = this.camera.position
-    const v = new THREE.Vector3()
-    const list = []
+    if (!w || !h || this.zoom <= 0 || !this.order) { this._dropLabels(); return }
+    this.camera.updateMatrixWorld()
+    this._v ||= new THREE.Vector3()
+    const avoid = [...(this._areaBoxes || [])]
+    const excerpt = this._placeExcerpt(w, h)
+    if (excerpt) avoid.push(excerpt)
+    const cands = []
     for (const id of this.order) {
-      if ((this.light?.get(id) ?? 1) <= 0.5) continue
+      const light = this.light?.get(id) ?? 1
+      if (light <= 0.5) continue
       const p = this.at.get(id)
-      if (!p) continue
-      v.set(p.x, p.y, p.z).project(this.camera)
-      if (v.z > 1) continue
-      list.push({ id, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, d: p.distanceTo(cam) })
+      const n = this.byId.get(id)
+      if (!p || !n) continue
+      const at = this._onStage(p, w, h)
+      const pw = Math.min(PLATE_MAX, w - 12, this._textWidth(n.title) + PLATE_EXTRA + (at.inFrame ? 0 : PLATE_EDGE))
+      cands.push({ id, ...at, light, d: p.distanceTo(this.camera.position), w: pw, h: PLATE_H })
     }
-    list.sort((a, b) => a.d - b.d)
-    const shown = []
-    const placed = []
-    const slot = this.slot
-    const inks = this.inks
-    for (const item of list) {
-      if (shown.length >= LABEL_MAX) break
-      const n = this.byId.get(item.id)
-      if (!n) continue
-      const half = Math.min(200, Math.max(44, n.title.length * 6.5 + 20))
-      let x = item.x
-      let y = item.y
-      let ok = true
-      for (let t = 0; t < 6; t += 1) {
-        const hit = placed.find((p) => Math.abs(p.x - x) < p.half + half + 6 && Math.abs(p.y - y) < 26)
-        if (!hit) break
-        y += 28
-        if (y > h - 14) { ok = false; break }
-      }
-      if (!ok) continue
-      shown.push({ ...item, half, x, y, ink: inks[(slot?.get(n.area) ?? 0) % inks.length] })
-      placed.push({ x, y, half })
-    }
+    const shown = titlesAt(this.dist ?? Infinity, cands, { w, h, max: LABEL_MAX, least: LABEL_LEAST, avoid })
+    if (!shown.length) { this._dropLabels(); return }
     for (let i = 0; i < LABEL_MAX; i += 1) {
       const el = this.labelPool[i]
-      if (i < shown.length) {
-        const s = shown[i]
-        const n = this.byId.get(s.id)
-        el.textContent = n.title
-        el.style.setProperty('--ink', s.ink)
-        el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%)`
-        el.hidden = false
-      } else el.hidden = true
+      const s = shown[i]
+      if (!s) { el.hidden = true; continue }
+      const n = this.byId.get(s.id)
+      if (el.dataset.note !== s.id) { el.firstChild.textContent = n.title; el.dataset.note = s.id }
+      el.classList.toggle('edge', !s.inFrame)
+      el.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
+      el.style.setProperty('--turn', `${s.turn}deg`)
+      el.style.width = `${s.w}px`
+      el.style.transform = `translate(${Math.round(s.box.left)}px, ${Math.round(s.box.top)}px)`
+      el.hidden = false
     }
-    this._placeExcerpt()
   }
 
   /** Which note is under the pointer, if any. */

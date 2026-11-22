@@ -78,6 +78,9 @@
   left: 0;
   top: 0;
   display: inline-flex;
+  box-sizing: border-box;
+  height: 23px;
+  max-width: calc(100% - 12px);
   align-items: center;
   gap: 6px;
   padding: 3px 8px 3px 6px;
@@ -91,7 +94,16 @@
   pointer-events: none;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
-.brainmap .bf-node-label::before { content: ''; width: 3px; height: 11px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
+.brainmap .bf-node-label::before { content: ''; flex: none; width: 3px; height: 11px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
+/* The field sets each plate's width and keeps it inside the stage; a long title ends in an ellipsis. */
+.brainmap .bf-node-label span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A neuron off the stage: its plate waits on the edge, an arrow pointing the way it lies. */
+.brainmap .bf-node-label.edge { border-style: dashed; }
+.brainmap .bf-node-label.edge::after { content: ''; flex: none; width: 0; height: 0; border: 4px solid transparent; border-left: 6px solid var(--ink); transform: rotate(var(--turn, 0deg)); }
+/* `hidden` must win over the plates' own display, or an unused pooled plate stays painted. */
+.brainmap .bf-node-label[hidden], .brainmap .bf-excerpt[hidden] { display: none; }
+/* The plates move every frame: no transition, not even the page's tiny reduced-motion one, which leaves them a frame behind. */
+.brainmap .bf-node-label, .brainmap .bf-excerpt { transition: none; }
 .brainmap .bf-excerpt {
   position: absolute;
   left: 0;
@@ -103,7 +115,10 @@
   background: var(--panel);
   color: var(--text);
   font: 600 12px/1.45 var(--body);
-  max-width: 250px;
+  box-sizing: border-box;
+  max-width: min(250px, calc(100% - 12px));
+  max-height: 45%;
+  overflow: hidden;
   white-space: pre-wrap;
   pointer-events: none;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);

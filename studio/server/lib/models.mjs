@@ -176,17 +176,57 @@ export function freeForecast(state, now) {
 }
 
 /**
- * Which Claude a free model is about as good as, from what the crew measured of it: its tier, and the share of
- * its work that passed a check (free-scores.json). Strong and passing at least 70% of 5 or more checks is about
- * Sonnet; strong with less proof, or 40-70%, about Haiku; light, or under 40%, below Haiku. No free model has
- * been measured near Opus. It is the crew's own yardstick, not a published benchmark.
+ * Where a free model stands against Claude, as one short chip: -Haiku, Haiku, +Haiku, Sonnet, +Sonnet, Opus, or
+ * unrated. The one scale, used on the page and the phone, and for every model the list gains later. It reads the
+ * crew's own record of the model (free-scores.json: how much of its work passed the checker) and nothing else, so
+ * the same record always gives the same chip. Fewer than three checks is unrated, never a guess.
  */
-export function claudeLike({ tier, pass = 0, fail = 0 }) {
+export const CLAUDE_SCALE = [
+  // [chip, colour family, the least share passed, the fewest checks, what it means]
+  ['Opus', 'opus', 0.95, 15, 'about as good as Claude Opus'],
+  ['+Sonnet', 'sonnet', 0.85, 8, 'about as good as Claude Sonnet, a bit better'],
+  ['Sonnet', 'sonnet', 0.7, 5, 'about as good as Claude Sonnet'],
+  ['+Haiku', 'haiku', 0.55, 3, 'about as good as Claude Haiku, a bit better'],
+  ['Haiku', 'haiku', 0.4, 3, 'about as good as Claude Haiku'],
+  ['-Haiku', 'below', 0, 3, 'weaker than Claude Haiku'],
+]
+
+const TIER_OF = { '-Haiku': 'below', Haiku: 'haiku', '+Haiku': 'haiku', Sonnet: 'sonnet', '+Sonnet': 'sonnet', Opus: 'opus' }
+
+/**
+ * Published coding benchmarks first (model-grades.json: one row per model, matched by its name in the id, any
+ * provider, each with its score, the benchmark and the source); the crew's own record only for a model no
+ * benchmark covers. `from` says which, so the page can say it.
+ */
+let GRADES = null
+function grades() {
+  if (GRADES) return GRADES
+  try { GRADES = JSON.parse(fs.readFileSync(new URL('./model-grades.json', import.meta.url), 'utf8')) } catch { GRADES = { models: [] } }
+  return GRADES
+}
+const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '')
+export function benchmarkGrade(model, table = grades()) {
+  const id = slug(String(model).split('/').pop().replace(/:free$|-free$/, ''))
+  return (table.models || []).find((row) => row.grade && row.grade !== 'unrated' && (row.match || []).some((m) => id.includes(slug(m)))) || null
+}
+
+export function claudeLike({ pass = 0, fail = 0, model = '' }) {
+  const bench = model ? benchmarkGrade(model) : null
+  if (bench) return { chip: bench.grade, tier: TIER_OF[bench.grade] || 'below', from: 'benchmark', score: bench.score, benchmark: bench.benchmark }
   const checked = pass + fail
-  const share = checked ? pass / checked : null
-  if (tier === 'light' || (checked >= 3 && share < 0.4)) return 'below Claude Haiku'
-  if (checked >= 5 && share >= 0.7) return 'about Claude Sonnet'
-  return 'about Claude Haiku'
+  if (checked < 3) return { chip: 'unrated', tier: 'unrated' }
+  const share = pass / checked
+  const [chip, tier] = CLAUDE_SCALE.find(([, , least, fewest]) => share >= least && checked >= fewest) || CLAUDE_SCALE.at(-1)
+  // Only the chip travels (the phone's answer is kept small); each page says what it means (chipMeaning).
+  return { chip, tier, from: 'checks' }
+}
+
+/** What a chip means, in words: the same sentence on the page and the phone. */
+export function chipMeaning(chip) {
+  if (chip === 'unrated') return 'Not rated yet: fewer than three of its jobs have been checked'
+  const name = String(chip).replace(/^[+-]/, '')
+  if (chip.startsWith('-')) return `Weaker than Claude ${name}`
+  return `About as good as Claude ${name}${chip.startsWith('+') ? ', a bit better' : ''}`
 }
 
 function freeModels({ folder, now, listed, detail = false }) {
@@ -209,11 +249,10 @@ function freeModels({ folder, now, listed, detail = false }) {
     const demoted = checked >= 3 && pass / checked < 0.5
     const aside = out[row.model] && typeof out[row.model] === 'object' && Number(out[row.model].until) > now ? out[row.model] : null
     const checkedAt = Number(ok[row.model]) > 0 ? Math.floor(Number(ok[row.model])) : null
-    const like = claudeLike({ tier: demoted ? 'light' : row.tier, pass, fail })
     return {
-      // The Claude it compares with goes in brackets after the name, wherever the name is shown.
-      label: `${modelLabel(row.model)} (${like})`,
-      claudeLike: like,
+      label: modelLabel(row.model),
+      // Where it stands against Claude, shown as a chip beside the name (CLAUDE_SCALE).
+      claude: claudeLike({ pass, fail, model: row.model }),
       family: row.family,
       tier: demoted ? 'light' : row.tier,
       ...(demoted ? { demoted: true } : {}),
