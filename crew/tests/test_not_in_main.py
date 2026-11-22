@@ -66,6 +66,27 @@ class NotInMain(unittest.TestCase):
         self.assertNotIn('LH-5', found)
         self.assertIn('LH-6', found)
 
+    def test_only_code_the_branch_itself_changes_counts(self):
+        # A ruling branch whose one commit out of main is a notes entry, cut before main's history was rewritten: the
+        # diff from its merge base shows old code, but none of it is the branch's own (two rulings of 16 Nov 2026).
+        git(self.repo, 'checkout', '-q', '-b', 'LH-7-ruling', 'main')
+        self.write('app.js', 'old history\n')
+        git(self.repo, 'commit', '-q', '-am', 'a commit main later holds under another hash')
+        self.write('docs/DECISIONS.md', 'ruled\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'ruling entry')
+        git(self.repo, 'checkout', '-q', 'main')
+        self.write('app.js', 'old history\n')
+        git(self.repo, 'commit', '-q', '-am', 'the same change under a new hash (a rewrite)')
+        self.write('more.js', 'later\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'main moves on')
+        self.assertNotIn('LH-7', [c for c, _, _, _ in nim.left_behind(self.repo)])
+        # A branch with code of its own out of main is still listed, with only that code.
+        self.branch('LH-8-own', {'eight.js': '8\n'})
+        found = {c: files for c, _, _, files in nim.left_behind(self.repo)}
+        self.assertEqual(found.get('LH-8'), ['eight.js'])
+
     def test_only_done_jobs_done_long_enough_ago_are_listed(self):
         now = dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc)
         projects = [{'workspaces': [{'cwd': self.repo}]}, {'archivedAt': '2026-11-01', 'workspaces': [{'cwd': '/nowhere'}]}]
