@@ -1,6 +1,6 @@
 {
  "benchmark": "SWE-bench Verified",
- "checked": "2026-11-18",
+ "checked": "2026-11-21",
  "how": "Each model's SWE-bench Verified score set against Claude's on the same benchmark: -Haiku well below Haiku; Haiku within a few points of it; +Haiku between Haiku and Sonnet; Sonnet within a few points of Sonnet; +Sonnet between Sonnet and Opus; Opus at or above Opus. Independent runs (Vals.ai) are preferred; a maker's own claim is marked. A model with no published score is left out and graded by the crew's own checks instead.",
  "baselines": {
   "haiku": {
@@ -43,6 +43,18 @@
    "grade": "+Sonnet",
    "source": "https://www.vals.ai/models/kimi_kimi-k3",
    "note": "Vals run"
+  },
+  {
+   "name": "Qwen 3.8 27B",
+   "match": [
+    "qwen3.8-27b"
+   ],
+   "score": 86.0,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "+Sonnet",
+   "source": "https://www.vals.ai/models/alibaba_qwen3.8-27b",
+   "note": "Vals run (Mini-SWE-agent, +-1.55); Alibaba published no Verified score, its card shows SWE-bench Pro 61.7"
   },
   {
    "name": "Inkling 2 Small",
