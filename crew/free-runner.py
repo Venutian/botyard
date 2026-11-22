@@ -181,6 +181,9 @@ PER_DAY = ('free-models-per-day', 'per day', 'daily limit', 'daily')
 # STANDARDS.md rule 22: "quota" alone may be one model's; with one of these it speaks for the whole provider.
 WIDE = ('every model', 'all models', 'all free models', 'provider', 'account', 'free tier', 'free-tier')
 BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
+# A prompt that outgrew the model's context window: the model cannot take the work, so the run hands
+# over to a model that can (same session), instead of failing the run.
+CONTEXT = ('context length', 'context window', 'context limit', 'maximum context length', 'prompt is too long', 'token count exceeds', 'exceeds the context', 'too many tokens')
 
 
 # Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
@@ -288,12 +291,65 @@ def error_of(event):
     return str((data or {}).get('message') or (err.get('name') if isinstance(err, dict) else err) or 'error')[:300]
 
 
+def context_error(text):
+    """True when an error says the prompt outgrew the model's context window: the model cannot take the work, so
+    the run goes on in the same session on a model that can, instead of failing the run."""
+    text = (text or '').lower()
+    return any(w in text for w in CONTEXT)
+
+
 def alive(pid):
     try:
         os.kill(int(pid), 0)
         return True
     except (OSError, ValueError):
         return False
+
+
+def stop_child(child, wait=30):
+    """Waits for a stopped OpenCode to exit, and kills it if it has not after `wait` seconds: a slow exit crashed the
+    whole run with TimeoutExpired (18 Nov, four scout runs failed that way)."""
+    try:
+        child.wait(timeout=wait)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        child.wait()
+
+
+PACE_WAIT, PACE_MOST = 300, 45 * 60
+
+
+def pace_kind(env=None):
+    env = env or os.environ
+    return 'check' if env.get('BOTYARD_CHECKER') else 'scout' if env.get('BOTYARD_FREE_TIER') == 'light' else 'build'
+
+
+def paced(env=None, run=subprocess.run, sleep=time.sleep, clock=time.time):
+    """Asks the studio's pace gate (BOTYARD_FREE_PACE, a command that exits 0 to go and 3 to hold) before the run's
+    first model call, so no starter can drain a daily free allowance at once. Waits while it holds, up to PACE_MOST;
+    '' when the run may go, else why it was held. No gate named: the run goes."""
+    env = env or os.environ
+    gate = env.get('BOTYARD_FREE_PACE', '').strip()
+    if not gate or not os.path.isfile(gate):
+        return ''
+    begun, told, why = clock(), False, ''
+    while True:
+        try:
+            done = run([sys.executable, gate, '--kind', pace_kind(env), '--grant'], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return ''
+        if done.returncode != 3:
+            return ''
+        why = (done.stdout or '').strip()[:200]
+        if clock() - begun >= PACE_MOST:
+            return why
+        if not told:
+            note(f"A free run waits for the day's pace: {why}")
+            told = True
+        sleep(PACE_WAIT)
 
 
 def provider_of(model):
@@ -414,7 +470,9 @@ def list_again(bots, run=subprocess.run, now=None):
     if isinstance(kept, dict) and now - kept.get('at', 0) < LIST_AGAIN:
         return False
     try:
-        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        extra = botyard_home.providers_config()
+        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                  env={**os.environ, **botyard_home.key_env(), **({'OPENCODE_CONFIG': extra} if extra else {})})
     except (OSError, subprocess.TimeoutExpired):
         return False
     return bots.keep_tool_models([line.strip() for line in out.stdout.splitlines() if '/' in line and ' ' not in line.strip()], now=now)
@@ -486,7 +544,7 @@ def with_connectors(env, folder=None):
     if not own or env.get('BOTYARD_CONNECTORS') == 'off':
         return own
     folder = folder or env.get('BOTYARD_BOT_CONNECTORS') or botyard_home.state('connectors')
-    given = os.path.join(folder, os.path.basename(own))
+    given = os.path.join(folder, re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own)))
     try:
         with open(given) as f:
             mcp = json.load(f).get('mcp') or {}
@@ -494,7 +552,10 @@ def with_connectors(env, folder=None):
             return own
         with open(own) as f:
             config = json.load(f)
-        merged = os.path.join(folder, os.path.basename(own).replace('.opencode.json', '.with-connectors.opencode.json'))
+        # One merged file per bot, whatever it is started from: a run started with the merged file already in
+        # OPENCODE_CONFIG stacked ".with-connectors" on each start (19 Nov: eight files, six suffixes deep).
+        base = re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own))
+        merged = os.path.join(folder, base.replace('.opencode.json', '.with-connectors.opencode.json'))
         text = json.dumps({**config, 'mcp': {**(config.get('mcp') or {}), **mcp}}, indent=1)
         try:
             with open(merged) as f:
@@ -527,7 +588,16 @@ def main():
         # The engine also lists models and checks the version through this command: those go straight through.
         os.execv(bots.OPENCODE, [bots.OPENCODE, *args])
     list_again(bots)
+    held = paced()
+    if held:
+        sys.stderr.write(f'Held by the free pace for {PACE_MOST // 60} minutes ({held}); the job is woken again later.\n')
+        return 1
     prompt = sys.stdin.read() if not sys.stdin.isatty() else ''
+    scratch = os.environ.get('TMPDIR') or ''
+    if prompt and 'botyard-run-' in scratch:
+        # 19 Nov: runs wrote /tmp/report.md, outside every folder they may use, and ended on the refusal.
+        prompt += (f"\n\nScratch files go in {scratch} (also in $TMPDIR), never in /tmp itself. Folders outside your job's "
+                   "folders are closed to you: a refused path is closed, so do not try it again; use this folder instead.")
     model = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ('--model', '-m')), None)
     session = None
     child = None
@@ -600,7 +670,7 @@ def main():
                     loops.prompt = guards.killed(shown, int(long[1]))
                     circling = (f'bash `{shown}`', f'ran {int(long[1])} seconds in the foreground')
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
             if line:
                 heard = time.time()
@@ -619,11 +689,11 @@ def main():
                     # once per start, so the run is stopped at a step's end and goes on in the same session with the notice.
                     told = noticed = True
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 if circling:
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 continue
             if time.time() - heard < QUIET:
@@ -636,7 +706,7 @@ def main():
                 continue
             ran_out = True
             os.killpg(child.pid, signal.SIGTERM)
-            child.wait(timeout=30)
+            stop_child(child)
             break
         code = child.wait()
         if told:
@@ -710,7 +780,7 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
-        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS)):
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
             return code

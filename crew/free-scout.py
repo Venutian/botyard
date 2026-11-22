@@ -67,8 +67,10 @@ def family(model):
 
 
 def listed(bots):
+    # With the free providers OpenCode does not know (free-providers.json), so their models are listed too.
+    extra = botyard_home.providers_config()
     out = subprocess.run([bots.OPENCODE, 'models', '--refresh'], capture_output=True, text=True, timeout=180,
-                         stdin=subprocess.DEVNULL)
+                         stdin=subprocess.DEVNULL, env={**os.environ, **botyard_home.key_env(), **({'OPENCODE_CONFIG': extra} if extra else {})})
     return [line.strip() for line in out.stdout.splitlines() if '/' in line and ' ' not in line.strip()]
 
 
@@ -97,6 +99,11 @@ def is_free(model):
     if model.startswith('cloudflare-workers-ai/'):
         # GLM-5.3 and DeepSeek V4 are listed too but refused on the Workers Free plan (17 November 2026).
         return bool(re.search(r'glm-4\.7-flash|gpt-oss-120b|qwen2\.5-coder-32b|qwen3[.-]?8', model))
+    # The free providers' own rules (free-providers.json): "worth" is the strong-model list above, anything else a pattern on the name.
+    provider, name = model.split('/', 1)
+    rule = next((p.get('models') for p in botyard_home.free_providers() if p['id'] == provider), None)
+    if rule:
+        return bool(WORTH.search(model)) if rule == 'worth' else bool(re.search(rule, name, re.I))
     return model.startswith(FREE_PROVIDERS) and bool(WORTH.search(model))
 
 

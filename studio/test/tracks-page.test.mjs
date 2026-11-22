@@ -42,7 +42,7 @@ test('the owner sees a trip waiting at a gate, sends it back with a note, adds c
   startRequest(store, 'co', { track: 'write', title: 'A page' }, { actor: OWNER })
   await tick()
   const page = await tracksPage({ fetcher })
-  assert.deepEqual(page.tracks.map((t) => t.key).sort(), ['build-check-land', 'sample-check', 'write'])
+  assert.deepEqual(page.tracks.map((t) => t.key).sort(), ['build-check-land', 'release-app', 'sample-check', 'write'])
   const row = page.requests[0]
   assert.equal(row.waitsForOwner, true)
   assert.equal(row.cost, '$0')

@@ -4,6 +4,7 @@
  * one question at the top and keeps the rest to one table.
  */
 import { botStyle } from './crew-colours.js'
+import { busyWords, copyTag } from './copies-view.js'
 import { markdown } from './markdown.js'
 import { feedFrameHtml } from './run-feed.js'
 
@@ -48,9 +49,10 @@ export function botsScreen(list, live, face) {
   const flags = flagged.map((b) => `<p class="flag bad opt"><i></i><span><b>${esc(b.name)}</b>: ${pct(b.waste.share)} of its runs in the last day bought nothing (${b.waste.wasted} of ${b.waste.runs}, ${tokens(b.waste.wastedTokens)} tokens). ${esc(b.waste.causes.map((c) => `${c.text} ${c.count}×`).join('; '))}.</span></p>`).join('')
   const rows = list.bots.map((b) => {
     const now = live.get(b.id)
-    const doing = now?.job ? (/[A-Z]+-\d+/.test(now.job.stage) ? esc(now.job.stage) : `${esc(now.job.stage)} <b>${esc(now.job.ref)}</b>`) : esc(b.state)
+    const many = busyWords(now?.jobs) || (b.running > 1 ? `${b.running} jobs` : '')
+    const doing = many ? esc(many) : now?.job ? (/[A-Z]+-\d+/.test(now.job.stage) ? esc(now.job.stage) : `${esc(now.job.stage)} <b>${esc(now.job.ref)}</b>`) : esc(b.state)
     return `<tr class="go-row bot-row" style="${botStyle(b.name)}" data-act="open-bot" data-id="${esc(b.id)}" tabindex="0">
-      <td class="who">${face(b)}<span><b>${esc(b.name)}</b><small>${esc(b.title)}</small></span></td>
+      <td class="who">${face(b)}<span><b>${esc(b.name)}${copyTag(b)}</b><small>${esc(b.title)}</small></span></td>
       <td><span class="state ${stateClass(b)}">${doing}</span></td>
       <td class="opt"><span>${esc(b.engine)}${b.model ? ` · ${esc(b.model)}` : ''}</span><small>${esc(b.why)}</small></td>
       <td class="n">${b.claudeShare === null || b.claudeShare === undefined ? '<span class="dim">Not on Claude</span>' : `<b>${pct(b.claudeShare)}</b>`}</td>

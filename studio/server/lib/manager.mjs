@@ -15,6 +15,7 @@ import path from 'node:path'
 import { git } from './changes.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks, roleOf } from './looks.mjs'
+import { copyGroups, foldKeys, runningCopy } from './copies.mjs'
 import { readRested } from './crew.mjs'
 import { pilesOf, startOfToday } from './piles.mjs'
 import { EngineError, call, cancelJob, companyId, crewRecords, jobComments, orElse, plainTitle, refOf, stopJob, withRefs } from './engine.mjs'
@@ -312,7 +313,7 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
 }
 
 /** What each bot is doing this minute. A job marked running with no live run is said to be waiting. */
-function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), now }) {
+function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), fold = copyGroups([]), now }) {
   const models = new Map(agents.map((a) => [a.id, a.adapterConfig?.model || '']))
   // A run going on a job puts its bot in that job's bay, even before the job is marked in progress.
   return issues.filter((i) => (i.status === 'in_progress' || (liveJobs.has(i.id) && i.status !== 'done' && i.status !== 'cancelled')) && i.assigneeAgentId).map((issue) => {
@@ -322,7 +323,9 @@ function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs 
       id: issue.id,
       ref: refOf(issue, projectNames),
       title: short(withRefs(what.kind === 'check' ? issue.title.replace(CHECK, '') : workName(issue.title).replace(RULING, ''))),
-      botId: issue.assigneeAgentId,
+      // A copy's job is its bot's: the card shows the bot, with the AI the copy runs on.
+      botId: fold.idOf(issue.assigneeAgentId),
+      copyId: issue.assigneeAgentId,
       bot: names.get(issue.assigneeAgentId) || 'A bot',
       project: projectNames.get(issue.projectId) || '',
       projectId: issue.projectId || '',
@@ -388,24 +391,33 @@ export function alsoIn({ issues, botId, projectNames, home, now }) {
   return [...latest].sort((a, b) => b[1] - a[1]).map(([id]) => projectNames.get(id)).filter(Boolean)
 }
 
-function botRows({ agents, issues, projectNames, liveAgents, working, files, now }) {
+function botRows({ agents, issues, projectNames, liveAgents, working, files, fold = copyGroups([]), now }) {
   const newest = [...issues].sort((a, b) => lastTouched(b) - lastTouched(a))
   const looks = crewLooks(agents)
   return inHierarchy(agents.map((agent) => {
-    const job = working.find((w) => w.botId === agent.id) || null
+    // One card per bot: its copies on other AIs count as it (their jobs are already put under its id).
+    const mine = working.filter((w) => w.botId === agent.id)
+    const job = mine[0] || null
     const last = job ? null : newest.find((i) => i.assigneeAgentId === agent.id)
     const today = issues.filter((i) => i.assigneeAgentId === agent.id && i.status === 'done' && now - stamp(i.completedAt) < DAY_MS).length
+    const family = fold.family(agent)
+    const on = runningCopy(agent, fold, { liveIds: liveAgents, heldIds: new Set(mine.map((w) => w.copyId)) })
+    const copies = family.length > 1 ? family.map((a) => ({ id: a.id, name: a.name, model: modelLabel(a.adapterConfig?.model), where: WHERE[a.adapterType] || 'Other', running: a.id === on.id })) : null
     return {
       id: agent.id,
       name: agent.name,
       title: agent.title || '',
       ...looks.get(agent.id),
-      status: liveAgents.has(agent.id) || job ? 'running' : agent.status,
-      model: modelLabel(agent.adapterConfig?.model),
-      where: WHERE[agent.adapterType] || 'Other',
+      status: family.some((a) => liveAgents.has(a.id)) || job ? 'running' : agent.status,
+      model: modelLabel(on.adapterConfig?.model),
+      where: WHERE[on.adapterType] || 'Other',
+      // Set only for a bot with copies: the AI the running copy is on, for the tag on its card.
+      ...(copies ? { copies, on: WHERE[on.adapterType] || 'Other' } : {}),
       why: pauseWhy(agent, files, now),
       ...(agent.status === 'paused' && files.rested?.[agent.id]?.until > now ? { resting: true } : {}),
       job: job && { id: job.id, ref: job.ref, title: job.title, stage: job.stage, minutes: job.minutes },
+      // Every job it holds now, for "checking 3".
+      jobs: mine.map((w) => ({ id: w.id, ref: w.ref, title: w.title, stage: w.stage, minutes: w.minutes })),
       last: last ? { id: last.id, ref: refOf(last, projectNames), title: short(withRefs(last.title)), at: lastTouched(last) } : null,
       projectId: job?.projectId || last?.projectId || '',
       alsoIn: alsoIn({ issues, botId: agent.id, projectNames, home: job?.projectId || '', now }),
@@ -530,7 +542,9 @@ function stateLine({ working, trouble, lines }) {
 
 /** The whole view from records already in hand. Pure, so the tests can feed it a studio. */
 export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
-  const names = new Map(agents.map((a) => [a.id, a.name]))
+  // A copy of a bot on another AI is that bot to every list: its jobs, its name, one card.
+  const fold = copyGroups(agents)
+  const names = new Map(agents.map((a) => [a.id, (fold.parentOf.get(a.id) || a).name]))
   const projectNames = new Map(projects.map((p) => [p.id, p.name]))
   const byRef = new Map(issues.map((i) => [i.identifier, i]))
   for (const issue of issues) refOf(issue, projectNames)
@@ -541,9 +555,10 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     if (match) mergedAt.set(match[1], line.at)
   }
   const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
-  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, now })
-  const lines = workLines({ issues, names, roles: new Map(agents.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
-  const bots = botRows({ agents, issues, projectNames, liveAgents, working, files, now })
+  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, fold, now })
+  const jobs = foldKeys(issues, ['assigneeAgentId'], fold)
+  const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
+  const bots = botRows({ agents: fold.top, issues: jobs, projectNames, liveAgents, working, files, fold, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
   return {
     state: stateLine({ working, trouble, lines }),

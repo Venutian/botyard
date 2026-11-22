@@ -1,0 +1,6 @@
+#!/bin/sh
+# Before a commit is made: its message and who it is made as pass the same check the push makes, so a commit the push
+# would refuse is never made (it would hold back every push after it). Turn it on with: git config core.hooksPath tools/hooks
+root=$(git rev-parse --show-toplevel)
+[ -f "$root/tools/release-check.mjs" ] || exit 0
+exec node "$root/tools/release-check.mjs" --message "$1"

@@ -55,6 +55,16 @@ function cellHtml(c, channel, now) {
   return `<td class="${k === 'none' ? 'unread' : k === 'bad' ? 'bad' : ''}" data-ch="${esc(channel)}"><span class="st">${G[k]}<span>${esc(c.state)}</span></span>${noteOf(c, now)}</td>`
 }
 
+/** A product's release: the button that starts one, or where the one on its way stands. */
+export function releaseHtml(r) {
+  if (!r.canRelease) return ''
+  const x = r.release
+  if (x && !['done', 'stopped'].includes(x.status)) {
+    return `<button class="link release ${x.waits ? 'waits' : ''}" type="button" data-act="open-trip" data-id="${esc(x.tripId)}">Release ${esc(x.job)}: ${esc(x.waits ? `waits for you (${x.step})` : x.tripStatus === 'stuck' ? 'stuck, open it' : x.step || 'starting')}</button>`
+  }
+  return `<button class="btn release" type="button" data-act="launch-release" data-name="${esc(r.name)}" title="The crew builds it, writes the listing, makes and scores the store images; the checks run and it goes to the stores' testing lanes. Nothing is sent for review before your yes.">Prepare release</button>${x ? `<small>Last release ${esc(x.job)} ${esc(x.status === 'done' ? 'finished' : 'stopped')}</small>` : ''}`
+}
+
 const plural = (n) => `${n} ${n === 1 ? 'step waits' : 'steps wait'} for you`
 
 export function launchScreen(data, { now = Date.now() } = {}) {
@@ -80,7 +90,7 @@ export function launchScreen(data, { now = Date.now() } = {}) {
     const other = cells.find((c) => c.next && c.waits && c.waits !== 'owner')
     const who = other ? { crew: 'the crew', store: 'the store' }[other.waits] || other.waits : ''
     return `<tr class="go-row" data-act="launch-product" data-name="${esc(r.name)}" tabindex="0">
-      <th scope="row"><b>${esc(r.name)}</b>${r.kind ? `<small>${esc(r.kind)}</small>` : ''}${n ? `<span class="yours-n">${G.yours}${plural(n)}</span>` : ''}${other ? `<p class="crew"><em>Waits for ${esc(who)}:</em> ${esc(other.next)}</p>` : ''}</th>
+      <th scope="row"><b>${esc(r.name)}</b>${r.kind ? `<small>${esc(r.kind)}</small>` : ''}${n ? `<span class="yours-n">${G.yours}${plural(n)}</span>` : ''}${other ? `<p class="crew"><em>Waits for ${esc(who)}:</em> ${esc(other.next)}</p>` : ''}${releaseHtml(r)}</th>
       ${data.channels.map((c) => cellHtml(r.cells[c.id], c.name, now)).join('')}</tr>`
   }).join('')
   return `${head}${lead}<div class="board-head"><h3>Every product</h3><p class="blank">A blank cell: the product is not on that channel.</p>${key}</div>
@@ -108,6 +118,7 @@ export function productScreen(data, name) {
     : '<p class="none">Nothing has changed since the first check.</p>'
   return `${r.note ? `<p class="hint">${esc(r.note)}</p>` : ''}
     <p>${nextHtml(r.next)}</p>
+    ${r.canRelease ? `<h3>Release</h3><div class="acts">${releaseHtml(r)}</div><p class="hint">The crew builds it, writes the store listing, makes and scores the store images; the checks run (listing limits, image sizes, privacy page, version code, store products for payments) and it goes to the stores' testing lanes. Nothing is sent for review before your yes.</p>` : ''}
     <h3>Channels</h3><ul class="launch-cells">${cells || '<li class="none">No channels in its plan yet.</li>'}</ul>
     <h3>Ready for its next release</h3>${ready}
     <h3>History</h3>${history}`
@@ -148,6 +159,18 @@ export function launchMethods({ call }) {
       }
     },
 
+    async _launchRelease(name) {
+      try {
+        this._launch = await call('/api/studio/launch', { action: 'release', product: name })
+        const col = this._colOf('launch')
+        if (col) col.el.querySelector('.sheet-body').innerHTML = launchScreen(this._launch)
+        if (this._colOf('launch-product')) this.openLaunchProduct(name)
+        this.actions.toast(`Release of ${name} started. Nothing is sent for review before your yes.`)
+      } catch (err) {
+        this.actions.toast(err.message, 'err')
+      }
+    },
+
     /** @returns {boolean} whether the click was one of these screens' own */
     _launchAct(el) {
       const { act } = el.dataset
@@ -161,6 +184,7 @@ export function launchMethods({ call }) {
         return true
       }
       if (act === 'launch-tell') { this._launchTell(el.closest('form')); return true }
+      if (act === 'launch-release') { this._launchRelease(el.dataset.name); return true }
       return false
     },
   }

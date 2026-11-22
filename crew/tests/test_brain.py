@@ -106,10 +106,11 @@ class OpenCodeRules(unittest.TestCase):
                 self.assertEqual(rules[tool][f'*brain/{folder}/*'], 'deny', (tool, folder))
                 self.assertEqual(rules[tool][f'{DEMO}/{folder}/*'], 'deny')
         self.assertEqual(rules['edit']['*brain/*'], 'deny', 'no bot writes a note')
-        self.assertEqual(rules['bash']['*life/*'], 'deny')
+        self.assertEqual(rules['bash']['*brain/life*'], 'deny')
+        self.assertNotIn('*life/*', rules['bash'], 'a folder merely called life/ elsewhere is not the vault')
         self.assertEqual(rules['bash'][f'*{DEMO}*'], 'deny', 'no shell command names the vault')
         self.assertEqual(rules['external_directory'][f'{DEMO}/*'], 'deny', 'a search cannot reach into the vault')
-        self.assertEqual(rules['external_directory']['*'], 'ask', 'the rest of the outside stays as OpenCode has it')
+        self.assertEqual(rules['external_directory']['*'], 'deny', 'a headless run has nobody to ask: the rest of the outside is refused')
 
     def test_the_rules_go_into_each_free_bots_config(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -114,3 +114,14 @@ test('the job counts say how many jobs each state holds and how many settled sin
   assert.deepEqual(today.map((j) => j.id), ['j3'])
   assert.equal(get('/api/companies/co/issues?settledSince=yesterday').status, 400)
 })
+
+test('a card still waiting on a job marked done is shown under Needs you; a cancelled job\'s card is not', () => {
+  const { store, get } = studio()
+  store.put('cards', { id: 'c-done', companyId: 'co', issueId: 'j3', kind: 'ask_user_questions', status: 'pending', title: 'Idea fell: stop or continue?', createdAt: ago(5) }, { position: 1 })
+  store.put('jobs', { id: 'j9', companyId: 'co', identifier: 'LH-9', title: 'Dropped', status: 'cancelled', projectId: 'p1', createdAt: ago(60), updatedAt: ago(5) })
+  store.put('cards', { id: 'c-cancelled', companyId: 'co', issueId: 'j9', kind: 'ask_user_questions', status: 'pending', title: 'Moot', createdAt: ago(5) }, { position: 0 })
+  const items = get('/api/companies/co/attention').body.items || get('/api/companies/co/attention').body
+  const ids = (Array.isArray(items) ? items : []).map((i) => i.subject?.id)
+  assert.ok(ids.includes('c-done'), 'the done job\'s waiting card is shown')
+  assert.ok(!ids.includes('c-cancelled'), 'the cancelled job\'s card is not')
+})
