@@ -18,7 +18,8 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
-import { addComment } from './write.mjs'
+import { lastPrinted, ownShare } from './run-usage.mjs'
+import { addComment, patchJob } from './write.mjs'
 import { fileOf } from './files.mjs'
 import { instructionsOf, wakePrompt } from './prompt.mjs'
 import { MAY_NOT_VAR, PASS_PREFIX, PROVIDER_KEYS, isHidden, keysDir, runLogsDir, runVars, runsDir, worktreeDir } from './names.mjs'
@@ -92,6 +93,15 @@ const dropToken = (store, runId) => {
 }
 
 // ── where a job is worked ───────────────────────────────────────────────────────────
+
+/**
+ * The run this one tries again: a job whose newest earlier run ended failed or timed out is being run again
+ * (whoever woke it), so the link is kept and retries can be counted. Null for a first run or a run after a good one.
+ */
+export function retryOf(store, jobId, now) {
+  const last = store.row('SELECT id, status FROM runs WHERE job_id = ? AND started_at <= ? ORDER BY started_at DESC, created_at DESC LIMIT 1', jobId, new Date(now + 1000).toISOString())
+  return last && ['failed', 'timed_out'].includes(last.status) ? last.id : null
+}
 
 /**
  * The folder a job is worked in: its own git worktree on its own branch, cut from the project's
@@ -244,6 +254,26 @@ const limitOf = (agent) => Math.min(50, Math.max(1, Number(agent.runtimeConfig?.
 const liveRuns = (store, where, ...params) => store.objects(`SELECT raw FROM runs WHERE status IN ('running', 'queued') AND ${where}`, ...params)
 
 /** Why this wake cannot start now, or '' when it can. `skip` means it never will. */
+/** How many runs in a row may end well and leave nothing before the job is stopped (18 Nov: 20 such runs on one job). */
+export const MOST_EMPTY_RUNS = 4
+
+/**
+ * True when the job's last runs all "succeeded" and left nothing: no comment, no document, no card,
+ * and nobody has written to the job since. Waking it again only spends a run. (A person's new
+ * comment ends the streak, and so does anything a run leaves.)
+ */
+export function spinning(store, job) {
+  if (job.conversationAgentId || ['done', 'cancelled', 'blocked'].includes(job.status)) return false
+  const runs = store.objects('SELECT raw FROM runs WHERE job_id = ? AND finished_at IS NOT NULL ORDER BY started_at DESC LIMIT ?', job.id, MOST_EMPTY_RUNS)
+  if (runs.length < MOST_EMPTY_RUNS || runs.some((r) => r.status !== 'succeeded')) return false
+  const first = runs.at(-1).startedAt
+  if (store.row('SELECT COUNT(*) AS n FROM comments WHERE job_id = ? AND created_at >= ? AND deleted_at IS NULL', job.id, first).n) return false
+  if (store.row('SELECT COUNT(*) AS n FROM document_versions WHERE job_id = ? AND created_at >= ?', job.id, first).n) return false
+  if (store.row('SELECT COUNT(*) AS n FROM cards WHERE job_id = ? AND created_at >= ?', job.id, first).n) return false
+  // A status poked back to todo by a script is a re-wake, not news: only words, documents and cards count.
+  return true
+}
+
 function hold(store, wake, agent, job) {
   if (!agent) return { skip: 'That bot no longer exists' }
   if (agent.status === 'terminated') return { skip: 'That bot was removed' }
@@ -251,6 +281,7 @@ function hold(store, wake, agent, job) {
   if (!job) return { skip: 'A wake needs a job' }
   // A chat with a bot is never closed, so a word in it always reaches the bot.
   if (!job.conversationAgentId && ['done', 'cancelled'].includes(job.status)) return { skip: 'The job is closed' }
+  if (spinning(store, job)) return { spin: `The last ${MOST_EMPTY_RUNS} runs on this job left nothing` }
   if (agent.status === 'paused') return { wait: 'The bot is paused' }
   if ((job.blockedBy || []).length) return { wait: 'The job waits on another job' }
   if (liveRuns(store, 'job_id = ?', job.id).length) return { wait: 'A run is already going on this job' }
@@ -258,20 +289,41 @@ function hold(store, wake, agent, job) {
   return {}
 }
 
+/** A run that cannot start because the folder it needs is not there. */
+export class FolderGone extends Error {}
+
+/** The folder a job's project names when it is not on disk (so the job would be worked in another folder), else ''. */
+function projectFolderMissing(store, job) {
+  if (!job.projectId) return ''
+  const project = store.object('SELECT raw FROM projects WHERE id = ?', job.projectId)
+  const root = (project?.primaryWorkspace || project?.workspaces?.[0])?.cwd
+    || store.row('SELECT cwd FROM project_workspaces WHERE project_id = ? ORDER BY is_primary DESC LIMIT 1', job.projectId)?.cwd
+  return root && !fs.existsSync(root) ? root : ''
+}
+
 /** Everything a run needs on disk, and its row in the store. @returns the run */
 export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now = Date.now(), env = process.env } = {}) {
   const agent = store.object('SELECT raw FROM agents WHERE id = ?', wake.agentId)
   const job = store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '')
   const company = store.object('SELECT raw FROM company LIMIT 1') || {}
+  // The session this bot left this job in is looked at before the folder is made: a folder that was removed and is cut again
+  // is a new checkout, and the conversation about the old one would talk of files that are not there.
+  const kept = store.objects('SELECT raw FROM sessions WHERE agent_id = ? AND task_key = ?', agent.id, job.id).at(-1)
+  const keptFolder = kept?.sessionParamsJson?.sessionId ? kept.sessionParamsJson.cwd || '' : ''
+  const sessionFolderGone = Boolean(keptFolder) && !fs.existsSync(keptFolder)
   const workspace = await workspaceFor(store, job, { io, now })
   const cwd = workspace?.cwd || agent.adapterConfig?.cwd || os.homedir()
+  const wrongBase = workspace ? '' : projectFolderMissing(store, job)
+  if (wrongBase) throw new FolderGone(`The project's folder does not exist: ${wrongBase}. The run did not start, so the bot is not left to work in another folder.`)
+  if (!fs.existsSync(cwd)) throw new FolderGone(`The folder this run would start in does not exist: ${cwd}.`)
   const config = agent.adapterConfig || {}
   const override = store.object('SELECT raw FROM jobs WHERE id = ?', job.id).assigneeAdapterOverrides || {}
   const model = override.model || config.model || ''
 
-  // The session this bot left this job in, unless a fresh one was asked for or the folder moved.
-  const kept = store.objects('SELECT raw FROM sessions WHERE agent_id = ? AND task_key = ?', agent.id, job.id).at(-1)
-  const session = !wake.payload?.forceFreshSession && kept?.sessionParamsJson?.sessionId && kept.sessionParamsJson.cwd === cwd && kept.adapterType === agent.adapterType ? kept.sessionParamsJson.sessionId : ''
+  // It is carried on unless a fresh one was asked for, the folder moved, or the folder it was in is gone: then the run starts a
+  // fresh session in the current folder and is told so.
+  const session = !wake.payload?.forceFreshSession && keptFolder && !sessionFolderGone && keptFolder === cwd && kept.adapterType === agent.adapterType ? kept.sessionParamsJson.sessionId : ''
+  const freshBecauseGone = sessionFolderGone && !wake.payload?.forceFreshSession ? keptFolder : ''
 
   const runId = randomUUID()
   const runDir = path.join(runsDir(dataDir), runId)
@@ -288,7 +340,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
   const names = new Map(store.rows('SELECT id, name FROM agents').map((a) => [a.id, a.name]))
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `botyard-run-${job.identifier.toLowerCase()}-`))
   const files = filesForRun(store, job, agent, comments, since, path.join(scratch, 'files'), { dataDir })
-  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, files, resumed: Boolean(session), inline: inlinesInstructions(agent), names })
+  const prompt = wakePrompt({ agent, company, job, wake, branch: workspace?.branchName || '', startFrom: workspace?.startFrom || '', startMissing: workspace?.startFromMissing || '', comments, cards, files, resumed: Boolean(session), sessionFolderGone: freshBecauseGone, inline: inlinesInstructions(agent), names })
   const promptFile = path.join(runDir, 'prompt.txt')
   fs.writeFileSync(promptFile, prompt)
   const mcpConfig = path.join(runDir, 'mcp.json')
@@ -330,7 +382,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
     invocationSource: wake.source, triggerDetail: wake.reason, wakeupRequestId: wake.id, status: 'running',
     startedAt: iso(now), finishedAt: null, error: null, errorCode: null, exitCode: null, signal: null, usageJson: null, resultJson: null,
     sessionIdBefore: session || null, sessionIdAfter: null, logStore: 'local_file', logRef, logBytes: 0, stdoutExcerpt: '', stderrExcerpt: '',
-    retryOfRunId: wake.payload?.failedRunId || null, contextSnapshot: { issueId: job.id, wakeReason: wake.reason, wakeSource: wake.source, model, cwd, command, args: args.map((a) => (a.length > 300 ? `${a.slice(0, 300)}…` : a)) },
+    retryOfRunId: wake.payload?.failedRunId || retryOf(store, job.id, now), contextSnapshot: { issueId: job.id, wakeReason: wake.reason, wakeSource: wake.source, model, cwd, command, args: args.map((a) => (a.length > 300 ? `${a.slice(0, 300)}…` : a)) },
     createdAt: iso(now), updatedAt: iso(now),
   }
   store.tx(() => {
@@ -374,15 +426,18 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
   const log = readLog(path.join(runLogsDir(dataDir), made.logRef || ''))
   const read = readOutput(agent.adapterType, log.lines)
   const status = result.cancelled ? 'cancelled' : result.timedOut ? 'timed_out' : result.exitCode === 0 && !read.failed ? 'succeeded' : 'failed'
+  const held = /Held by the free pace/i.test(log.stderr)
   const why = status === 'succeeded' ? null
     : result.cancelled ? 'Cancelled'
       : result.timedOut ? 'It was stopped at its time limit'
         : read.why || result.error || (log.stderr.trim().split('\n').at(-1) || '').slice(0, 400) || (result.lost ? 'Its keeper stopped without leaving a result' : `The tool ended with code ${result.exitCode}`)
   // `partial` says the tool never added its tokens up (the run was cut): the counts are what its messages reported, at least.
-  const usage = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
+  const reported = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
+  // A resumed session's tool may print the session's running total: the run is booked with its own share (run-usage.mjs).
+  const usage = ownShare(agent.adapterType, reported, made.sessionIdBefore ? lastPrinted(store, made.agentId, made.sessionIdBefore, made.createdAt) : null)
   const done = {
     ...made, status, finishedAt: result.finishedAt || iso(now), exitCode: result.exitCode ?? null, signal: result.signal || null,
-    error: why, errorCode: status === 'timed_out' ? 'timeout' : status === 'failed' ? 'adapter_failed' : null,
+    error: why, errorCode: status === 'timed_out' ? 'timeout' : status === 'failed' ? (held ? 'pace_hold' : 'adapter_failed') : null,
     usageJson: usage, resultJson: { summary: read.said.slice(0, 2000) }, sessionIdAfter: read.session || made.sessionIdBefore || null,
     logBytes: result.logBytes || 0, stdoutExcerpt: log.stdout, stderrExcerpt: log.stderr, updatedAt: iso(now),
   }
@@ -457,11 +512,23 @@ export async function tick(store, { dataDir, apiUrl, io = realIo, now = Date.now
     }
     report.finished.push(finishRun(store, made, result, { dataDir, now }))
   }
-  for (const wake of store.objects("SELECT raw FROM wakes WHERE status = 'queued' ORDER BY requested_at")) {
+  // The owner's conversation with a bot goes first: a message from the owner is not left behind the bot's queued
+  // jobs (18 Nov: a question waited eleven minutes behind four crew jobs). Otherwise, oldest first.
+  const queued = store.objects("SELECT raw FROM wakes WHERE status = 'queued' ORDER BY requested_at")
+    .map((wake) => ({ wake, job: store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '') }))
+    .sort((a, b) => Number(Boolean(b.job?.conversationAgentId)) - Number(Boolean(a.job?.conversationAgentId)))
+  for (const { wake, job } of queued) {
     const agent = store.object('SELECT raw FROM agents WHERE id = ?', wake.agentId)
-    const job = store.object('SELECT raw FROM jobs WHERE id = ?', wake.payload?.issueId || '')
     const held = hold(store, wake, agent, job)
     if (held.skip) { store.put('wakes', { ...wake, status: 'skipped', error: held.skip, finishedAt: iso(now), updatedAt: iso(now) }); report.skipped.push({ id: wake.id, why: held.skip }); continue }
+    if (held.spin) {
+      // The job is stopped, with the reason where its step (or its owner) reads it, instead of running a fifth time.
+      store.put('wakes', { ...wake, status: 'skipped', error: held.spin, finishedAt: iso(now), updatedAt: iso(now) })
+      addComment(store, job.id, { body: `${held.spin}: no comment, no document, no card. Blocked so that it is not run again for nothing. Say what is missing (or what to do differently), then set it to todo.` }, { now, actor: { user: 'engine:runs' }, quiet: true })
+      patchJob(store, job.id, { status: 'blocked' }, { now, actor: { user: 'engine:runs' } })
+      report.skipped.push({ id: wake.id, why: held.spin })
+      continue
+    }
     if (held.wait) continue
     try {
       report.started.push(await startRun(store, wake, { dataDir, apiUrl, io, now, env }))

@@ -127,11 +127,45 @@ test('a store that refuses the key for one app says which step fixes it, and wai
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-'))
   const plan = { found: true, products: [{ name: 'Lamp', kind: 'app', channels: { play: { package: 'com.example.lamp' } } }] }
   const fetcher = async (url) => (String(url).includes('oauth2') ? json({ access_token: 't', expires_in: 3600 }) : json({ error: { message: 'The caller does not have permission' } }, 403))
-  const key = { secret: { account: { client_email: 'bot@example.iam', private_key: (await import('node:crypto')).generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }) }, packageName: '' } }
+  const key = { secret: { account: { client_email: 'release-bot', private_key: (await import('node:crypto')).generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }) }, packageName: '' } }
   const state = await checkAll({ fetcher, useGh: false, now: NOW, plan, file: path.join(dir, 's.json'), keys: { play: key } })
   const c = state.cells['Lamp|play']
   assert.equal(c.state, 'Not known: the key may not see this app')
   assert.equal(c.waits, 'owner')
   assert.match(c.next, /give the key's service account access to com\.example\.lamp/)
   assert.match(c.detail, /403/)
+})
+
+test('Prepare release starts one release on the release track per product, with its store ids, and refuses a second', async () => {
+  const { startRelease } = await import('../server/lib/launch.mjs')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-rel-'))
+  const file = path.join(dir, 's.json')
+  const plan = { found: true, release: { track: 'release-app', inputs: { builder: 'Builder', writer: 'Writer', artist: 'Artist' } }, products: [
+    { name: 'Lamp', project: 'Harbour', kind: 'app', channels: { play: { package: 'com.example.lamp' }, appstore: { bundle: 'com.example.lamp' } } },
+    { name: 'Site', kind: 'web', channels: { web: { url: 'https://example.test/' } } },
+  ] }
+  const asked = []
+  let status = 'working'
+  const fetcher = async (url, init = {}) => {
+    const p = new URL(url).pathname.replace('/api', '')
+    if (init.method === 'POST') asked.push({ p, body: JSON.parse(init.body) })
+    if (p === '/companies') return json([{ id: 'co', status: 'active' }])
+    if (p === '/companies/co/projects') return json([{ id: 'p1', name: 'Harbour' }])
+    if (p === '/companies/co/requests') return json({ id: 'r1', jobCode: 'LH-9' }, 201)
+    if (p === '/requests/r1') return json({ id: 'r1', jobCode: 'LH-9', status })
+    return json({}, 404)
+  }
+  await assert.rejects(startRelease('Nope', { plan, file, fetcher }), /not in the launch plan/)
+  await assert.rejects(startRelease('Site', { plan, file, fetcher }), /Google Play or the App Store/)
+  const made = await startRelease('Lamp', { plan, file, fetcher, now: NOW })
+  assert.equal(made.jobCode, 'LH-9')
+  assert.equal(asked[0].body.track, 'release-app')
+  assert.equal(asked[0].body.projectId, 'p1')
+  assert.deepEqual(asked[0].body.inputs, { builder: 'Builder', writer: 'Writer', artist: 'Artist', package: 'com.example.lamp', bundle: 'com.example.lamp' })
+  assert.equal(readState(file).releases.Lamp.requestId, 'r1')
+  // One release at a time: while it is on its way, another is refused; once it is done, a new one may start.
+  await assert.rejects(startRelease('Lamp', { plan, file, fetcher }), /already on its way \(LH-9\)/)
+  status = 'done'
+  await startRelease('Lamp', { plan, file, fetcher })
+  assert.equal(asked.length, 2)
 })

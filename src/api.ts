@@ -55,7 +55,10 @@ export type Plans = {
 } | null;
 /** What the Models screen shows: every bot's model, the free models' health, the subscriptions and the last switches. */
 export type ModelBot = Looked & { id: string; name: string; status: string; label: string; where: string; free: boolean };
+/** Where a free model stands against Claude (the service's CLAUDE_SCALE). */
+export type ClaudeChip = { chip: string; tier: 'below' | 'haiku' | 'sonnet' | 'opus' | 'unrated'; from?: 'benchmark' | 'checks'; score?: number; benchmark?: string };
 export type FreeModel = {
+  claude?: ClaudeChip;
   label: string;
   family: string;
   tier: 'strong' | 'light';
@@ -123,7 +126,10 @@ export type StepState = 'now' | 'failed' | 'queued' | 'done' | 'wait' | 'skipped
 /** One piece of work and how far it is: build, check, the lead's ruling, merged, pushed. */
 export type WorkLine = { id: string; ref: string; title: string; project: string; projectId: string; bot: string; stage: string; note: string; steps: StepState[]; fixes: number; since: number; late: boolean; open: boolean; at: number };
 export type JobRef = { id: string; ref: string; title: string };
-export type ManagerBot = Looked & { id: string; name: string; title: string; status: string; model: string; where: string; why: string; job: (JobRef & { stage: string }) | null; last: (JobRef & { at: number }) | null; projectId: string; doneToday: number };
+/** One copy of a bot on an AI, when a bot has copies: the engine keeps each as an agent, the lists show one bot. */
+export type BotCopy = { id: string; name: string; model: string; where?: string; engine?: string; running: boolean };
+export type HeldJob = JobRef & { stage: string; minutes?: number };
+export type ManagerBot = Looked & { id: string; name: string; title: string; status: string; model: string; where: string; why: string; job: (JobRef & { stage: string }) | null; jobs?: HeldJob[]; copies?: BotCopy[]; on?: string; last: (JobRef & { at: number }) | null; projectId: string; doneToday: number };
 export type ManagerProject = { id: string; name: string; running: number; queued: number; blocked: number; doneToday: number; unpushed: number; bots: string[]; at: number };
 export type FeedItem = { at: number; kind: string; id: string; text: string };
 /** The manager's view: who is on what, where each piece of work stands, what happened, what is wrong. */
@@ -305,6 +311,10 @@ export type FlowBot = {
   look: { colour: string; build: string; gear: string[]; hat: string; face: string };
   reportsTo: string | null; under: string; model: string; engine: string; status: FlowStatus; why: string;
   job: null | { id: string; ref: string; title: string; stage: string; project: string; projectId: string };
+  /** Every job it holds now (an older door sends none). */
+  jobs?: { id: string; ref: string; title: string; stage: string; project: string; projectId: string }[];
+  /** Its copies on other AIs, and the AI the running one is on (set only for a bot with copies). */
+  copies?: BotCopy[]; on?: string;
   runsToday: number; failedToday: number; week: { tokens: number; share: number | null }; met: number; notMet: number;
 };
 export type FlowScript = { id: string; kind: 'script'; name: string; role: 'script'; roleName: string; notices: number; last: number };
@@ -335,6 +345,7 @@ export const getModels = (c: Connection) => call<Models>(c, '/models');
 // ── launch: every product on every channel, read from the channels (docs/launch.md) ──
 export type LaunchCell = { state: string; tone: 'ok' | 'go' | 'look' | 'bad' | 'wait'; how: 'read' | 'told' | 'none'; version: string; detail: string; waits: string; next: string; checkedAt?: number; by?: string };
 export type LaunchRow = {
+  canRelease?: boolean; release?: { job: string; status: string; tripId: string; step: string; waits: boolean; tripStatus: string; cost: number } | null;
   name: string; project: string; kind: string; note: string; first: boolean; cells: Record<string, LaunchCell | null>;
   next: { channel: string; text: string; waits: string } | null;
   readiness: { group: string; text: string; state: 'pass' | 'fail' | 'unknown' | 'yours'; detail: string }[];
@@ -342,7 +353,7 @@ export type LaunchRow = {
 };
 export type LaunchBoard = { channels: { id: string; name: string }[]; rows: LaunchRow[]; checkedAt: number; stale: boolean; planFound: boolean; planFile: string };
 export const getLaunch = (c: Connection) => call<LaunchBoard>(c, '/launch');
-export const launchAction = (c: Connection, body: { action: 'check' } | { action: 'tell'; product: string; channel: string; state: string }) => call<LaunchBoard>(c, '/launch', 'POST', body);
+export const launchAction = (c: Connection, body: { action: 'check' } | { action: 'tell'; product: string; channel: string; state: string } | { action: 'release'; product: string }) => call<LaunchBoard>(c, '/launch', 'POST', body);
 
 // ── tracks: how each request moves, and the owner's hand on a trip (docs/tracks.md) ──
 export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
@@ -475,7 +486,7 @@ export type JobLink = { id: string; ref: string; title: string };
 /** One run as a row: who, which job, how it ended and why in plain words, how long, and what it used. */
 export type RunRow = { id: string; bot: string; botId: string; status: string; state: string; failed: boolean; job: JobLink | null; at: number | null; seconds: number | null; tokens: number; cached: number; usd: number; why: string };
 export type Waste = { runs: number; wasted: number; share: number; flagged: boolean; causes: { text: string; count: number }[] };
-export type CrewBot = Looked & { id: string; name: string; title: string; status: string; state: string; resting: boolean; engine: string; model: string; why: string; tokensToday: number; tokensWeek: number; waste: Waste | null };
+export type CrewBot = Looked & { id: string; name: string; title: string; status: string; state: string; resting: boolean; engine: string; model: string; why: string; tokensToday: number; tokensWeek: number; waste: Waste | null; running?: number; copies?: BotCopy[]; on?: string };
 export type CrewList = { bots: CrewBot[]; wasteAt: number | null; wasteStale: boolean; at: number };
 type Spend = { tokens: number; cached: number; cents: number; runs: number };
 export type BotPage = Omit<CrewBot, 'tokensToday' | 'tokensWeek'> & {

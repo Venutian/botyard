@@ -346,7 +346,9 @@ test('only pages on this computer are opened; the relay adds the pointer to HTML
     assert.equal(await (await fetch(`${look.relay}app.js`)).text(), 'window.ok = 1')
     assert.match(await (await fetch(`${look.relay}__botyard-look.js`)).text(), /botyard-look-pick/)
     // The screenshot, where this computer has a browser for it: the size asked for, a real PNG.
-    if (findBrowser()) {
+    const browser = findBrowser()
+    assert.ok(browser || !process.env.CI, 'The screenshot assertion requires a Chromium-family browser in CI: install one (or set BOTYARD_BROWSER) so it cannot silently skip')
+    if (browser) {
       const shot = await pageShot(address, { width: 400, height: 300, waitMs: 200 })
       assert.equal(shot.readUInt32BE(16), 400)
       assert.equal(shot.readUInt32BE(20), 300)

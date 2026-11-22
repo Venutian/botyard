@@ -34,7 +34,7 @@ export function LaunchScreen({ connection, nav, product }: { connection: Connect
     }
   };
 
-  if (product) return <ProductScreen board={shown} name={product} nav={nav} busy={busy} onTell={(channel, state) => act({ action: 'tell', product, channel, state })} onRefresh={load} error={error} />;
+  if (product) return <ProductScreen board={shown} name={product} nav={nav} busy={busy} onTell={(channel, state) => act({ action: 'tell', product, channel, state })} onRelease={() => act({ action: 'release', product })} onRefresh={load} error={error} />;
 
   return (
     <Page title="Launch" note="Every product on every store and channel" onBack={nav.back} onRefresh={load} error={error} loading={!shown}>
@@ -65,8 +65,8 @@ export function LaunchScreen({ connection, nav, product }: { connection: Connect
   );
 }
 
-function ProductScreen({ board, name, nav, busy, onTell, onRefresh, error }: {
-  board: LaunchBoard | null | undefined; name: string; nav: Nav; busy: boolean; onTell: (channel: string, state: string) => void; onRefresh: () => Promise<void>; error: string;
+function ProductScreen({ board, name, nav, busy, onTell, onRelease, onRefresh, error }: {
+  board: LaunchBoard | null | undefined; name: string; nav: Nav; busy: boolean; onTell: (channel: string, state: string) => void; onRelease: () => void; onRefresh: () => Promise<void>; error: string;
 }) {
   const { t } = useLook();
   const [said, setSaid] = useState<Record<string, string>>({});
@@ -78,6 +78,19 @@ function ProductScreen({ board, name, nav, busy, onTell, onRefresh, error }: {
         <>
           {r.note ? <Txt size={14} color={t.ink2}>{r.note}</Txt> : null}
           <Txt size={14} color={r.next?.waits === 'you' ? t.warn : t.ink2}>{r.next ? `Next: ${r.next.text}. Waits for ${r.next.waits}.` : 'Nothing waits'}</Txt>
+          {r.canRelease ? (
+            <>
+              <Label>Release</Label>
+              {r.release && !['done', 'stopped'].includes(r.release.status) ? (
+                <Button label={`Release ${r.release.job}: ${r.release.waits ? `waits for you (${r.release.step})` : r.release.step || 'starting'}`} kind={r.release.waits ? 'primary' : 'quiet'} onPress={() => nav.push({ name: 'trip', id: r.release!.tripId })} />
+              ) : (
+                <>
+                  <Txt size={13} color={t.ink2}>The crew builds it, writes the store listing, makes and scores the store images; the checks run and it goes to the stores' testing lanes. Nothing is sent for review before your yes.</Txt>
+                  <Button label="Prepare release" busy={busy} disabled={busy} onPress={onRelease} />
+                </>
+              )}
+            </>
+          ) : null}
           <Label>Channels</Label>
           {board?.channels.filter((c) => r.cells[c.id]).map((c) => {
             const cell = r.cells[c.id] as LaunchCell;

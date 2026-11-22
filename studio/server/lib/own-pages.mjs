@@ -167,6 +167,36 @@ async function handlerOf(page) {
  * Answer a call under /api/studio/own. The caller is already known to be this computer's own page
  * (api.mjs checks before it hands on). `runHelper(name)` starts one of the timetable's helpers now.
  */
+/**
+ * A provider's return to a page of the owner's own (an OAuth-style callback), reached from outside without a device key.
+ * Only a page whose page.json names a `callback` route gets one, only GET, only the usual return fields, and the answer is
+ * the page's own `ok`, never its text: the caller shows a fixed page. The page itself must check the state it started.
+ */
+const CALLBACK_FIELDS = { code: /^[\w.~+/=-]{1,1024}$/, state: /^[\w.~-]{1,256}$/, error: /^[\w.~ -]{1,128}$/, error_description: /^[^<>\u0000-\u001f]{1,300}$/ }
+
+export async function ownCallback(name, params, { env = process.env } = {}) {
+  const { pages } = ownPages(env)
+  const page = pages.find((p) => p.name === name)
+  if (!page || !page.server) return { found: false }
+  let route = ''
+  try { route = String(JSON.parse(fs.readFileSync(path.join(page.folder, 'page.json'), 'utf8')).callback || '') } catch { route = '' }
+  if (!/^\/[a-z0-9/-]{1,64}$/.test(route)) return { found: false }
+  const query = {}
+  for (const [key, value] of params) {
+    const rule = CALLBACK_FIELDS[key]
+    if (!rule || !rule.test(value) || key in query) return { found: true, ok: false }
+    query[key] = value
+  }
+  if (!query.state || !(query.code || query.error)) return { found: true, ok: false }
+  try {
+    const out = await (await handlerOf(page))({ method: 'GET', path: route, query, body: {}, home: places(env).home, folder: page.folder })
+    return { found: true, ok: out?.ok === true }
+  } catch (err) {
+    console.log(`[own page ${page.name} callback] ${err?.message || err}`)
+    return { found: true, ok: false }
+  }
+}
+
 export async function ownPagesRequest(req, res, url, { env = process.env, demo = false, runHelper = async () => false } = {}) {
   const rest = url.pathname.slice(OWN_PATH.length).split('/').filter(Boolean)
   // The sample yard is somebody's first look: it shows Botyard, and none of this computer's own pages.

@@ -59,7 +59,7 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
     const shown = state?.configured === true
     host.hidden = !shown; layer.hidden = !shown
     if (!shown) { host.innerHTML = ''; layer.innerHTML = ''; return }
-    host.innerHTML = throttleHtml(state, ui); host.dataset.level = state?.now || ''
+    host.innerHTML = throttleHtml(state, ui); host.dataset.now = state?.now || ''
     layer.innerHTML = throttleLayerHtml(state, ui)
     const at = host.getBoundingClientRect(); const home = (layer.offsetParent || document.body).getBoundingClientRect()
     layer.style.top = `${Math.round(at.bottom - home.top + 10)}px`
@@ -78,7 +78,7 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
     host.querySelector('.ld-seg.on')?.focus()
   }
   const onClick = (e) => {
-    const level = e.target.closest('[data-level]')?.dataset.level
+    const level = e.target.closest('.ld-seg[data-level]')?.dataset.level
     if (level) return level === 'stop' && state?.now !== 'stop' ? (ui.confirming = true, draw()) : set(level)
     const act = e.target.closest('[data-act]')?.dataset.act
     if (act === 'load-full-yes') return set('stop')
@@ -91,7 +91,7 @@ export function mountThrottle(host, { call, layer = host, every = 30_000 } = {})
   layer.addEventListener('change', (e) => { if (e.target.name === 'ld-scope') ui.scope = e.target.value })
   const onKey = (e) => {
     if (e.key === 'Escape' && (ui.more || ui.confirming)) { ui.more = ui.confirming = false; draw(); return }
-    const i = LEVELS.indexOf(e.target.closest?.('[data-level]')?.dataset.level)
+    const i = LEVELS.indexOf(e.target.closest?.('.ld-seg[data-level]')?.dataset.level)
     if (i < 0 || !['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) return
     e.preventDefault()
     const next = LEVELS[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : LEVELS.length - 1)) % LEVELS.length]

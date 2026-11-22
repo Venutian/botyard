@@ -28,7 +28,7 @@ import { decideImprovement, leadOf } from './lib/improvement-actions.mjs'
 import { activityPage, botList, botPage, improvementsView, instructionsOf, moneyView, restoreInstructions, runDetail, runList, saveInstructions } from './lib/crew.mjs'
 import { throttleAct, throttleState } from './lib/throttle.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
-import { launchView, tellState } from './lib/launch.mjs'
+import { launchView, startRelease, tellState } from './lib/launch.mjs'
 import { botBehind } from './engine/caller.mjs'
 import { addBot, addProject, addStarterCrew, archiveProject, botSettings, firstRun, firstRunMark, helperAct, helperTimetable, moveProject, nameStudio, newBotChoices, removeBot, removeVariable, renameProject, saveBot, setVariable, setupAct, setupState } from './lib/shape.mjs'
 import { readTimers } from './lib/library.mjs'
@@ -358,6 +358,19 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
     // phone's own address, which the Worker passes on.
     const viaEdge = cameThroughEdge(req)
     const ip = viaEdge ? `edge:${String(req.headers['x-botyard-client'] || '')}` : req.socket?.remoteAddress || ''
+    // A provider sending the owner back to a page of their own (a bank's sign-in): no device key on that request, so the
+    // page answers only its own started state, and the browser gets a fixed page with nothing of the studio in it.
+    const back = /^\/v1\/callback\/([a-z0-9][a-z0-9-]{0,31})(?:\?|$)/.exec(req.url || '')
+    if (back) {
+      if (req.method !== 'GET') return send(res, 405, { error: 'Use GET' })
+      const { ownCallback } = await import('./lib/own-pages.mjs')
+      const got = await ownCallback(back[1], new URL(req.url, 'http://phone').searchParams)
+      if (!got.found) return send(res, 404, { error: 'Not found' })
+      const words = got.ok ? ['Connected', 'You can close this.'] : ['Not connected', 'That did not work. Open the page in Botyard and try again.']
+      const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${words[0]}</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:30rem;margin:15vh auto;padding:0 20px}</style><h1>${words[0]}</h1><p>${words[1]}</p>`
+      res.writeHead(got.ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' })
+      return res.end(html)
+    }
     if (req.headers.origin) return send(res, 403, { error: 'The phone door does not answer web pages' })
     if (lockedOut(ip)) return send(res, 429, { error: 'Too many wrong tokens. Try again later' })
     const key = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1]
@@ -531,6 +544,7 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       if (pathname === '/v1/launch' && req.method === 'GET') return send(res, 200, await launchView())
       if (pathname === '/v1/launch' && req.method === 'POST') {
         const b = await readBody(req)
+        if (b.action === 'release') await startRelease(String(b.product || ''), options)
         if (b.action === 'tell') tellState({ product: String(b.product || ''), channel: String(b.channel || ''), state: String(b.state || ''), tone: String(b.tone || ''), next: String(b.next || '') })
         return send(res, 200, await launchView({ force: b.action === 'check' }))
       }

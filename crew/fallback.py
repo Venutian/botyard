@@ -286,6 +286,204 @@ def checker_model(bots, job):
     return bots.free_model('strong', not_family=family) or bots.free_model('strong')
 
 
+# ── a check goes to the AI that answers now ─────────────────────────────────────────
+# A checker whose file lists lanes ("fallbacks" marked "for": "checks") never lets a check wait on busy free models:
+# free ones first, then each lane in the order the file gives, and the lane on Claude only when every other is out.
+# The pick is made when the check is opened (check_engine) and again by route_checks for a check that waits.
+CHECK_WAIT = int(os.environ.get('BOTYARD_CHECK_WAIT') or 4 * 60)
+CHECK_REST = botyard_home.state('check-rest.json')
+CHECK_REST_FOR = 30 * 60
+READY_FOR = 5 * 60
+READY_CACHE = botyard_home.state('check-ready.json')
+ENGINE_FAMILY = {'codex': 'openai', 'gemini': 'google', 'claude': 'anthropic'}
+MARK_ENGINES = re.compile(r'check-engines: ([a-z,]+)')
+MARK_BUILT_BY = re.compile(r'built-by: ([a-z]+)')
+
+
+def runner():
+    spec = importlib.util.spec_from_file_location('free_runner', f'{HERE}/free-runner.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def pick_engine(order, ready, builder_family=None, waited=0, budget=CHECK_WAIT, never=(), free_family=None):
+    """Which AI takes a check, from `order` (the checker's own AI first, then its lanes) and `ready` (the AIs that
+    answer now: the free model to use for 'free', True for the others). Returns {'ai', 'model', 'sameFamily', 'why'},
+    or None when nothing answers.
+    - A free model that is not answering, or a check that has waited `budget` seconds for one, moves down the order.
+    - A family other than the builder's is taken where one answers (a Codex build's check goes to Gemini).
+    - Claude takes a check only when no other AI answers at all: it is the last resort.
+    - Never an AI in `never` (a project that may not use Claude, say)."""
+    family = lambda ai: (free_family(ready[ai]) if ai == 'free' and free_family and ready.get(ai) else ENGINE_FAMILY.get(ai, ai))
+    chain = [ai for ai in order if ai not in never and ready.get(ai)]
+    patient = [ai for ai in chain if not (ai == 'free' and waited >= budget)]
+    pool = [ai for ai in patient if ai != 'claude'] or [ai for ai in patient if ai == 'claude']
+    why = ''
+    if not pool and chain:   # nothing else answers: a free model that was passed over is still better than none
+        pool, why = chain, 'nothing else answers'
+    if not pool:
+        return None
+    other = [ai for ai in pool if builder_family is None or family(ai) != builder_family]
+    ai = (other or pool)[0]
+    if not why and ai != order[0]:
+        why = ('the free models are busy or resting' if not ready.get(order[0]) or waited >= budget else 'a different family than the build')
+    return {'ai': ai, 'model': ready[ai] if ai == 'free' else None, 'sameFamily': builder_family is not None and family(ai) == builder_family,
+            'why': why}
+
+
+def _read(path):
+    try:
+        with open(path) as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def engines_resting(now=None):
+    now = now or time.time()
+    return {ai: t for ai, t in _read(CHECK_REST).items() if isinstance(t, (int, float)) and t > now}
+
+
+def rest_engine(ai, seconds=CHECK_REST_FOR, now=None):
+    """A lane whose check was refused for its limit rests, and checks go to the next one meanwhile."""
+    now = now or time.time()
+    got = engines_resting(now)
+    got[ai] = now + seconds
+    with open(CHECK_REST, 'w') as f:
+        json.dump(got, f)
+
+
+def _cached(key, fn, now=None, ttl=READY_FOR):
+    now = now or time.time()
+    kept = _read(READY_CACHE)
+    row = kept.get(key)
+    if isinstance(row, dict) and now - row.get('at', 0) < ttl:
+        return bool(row.get('ok'))
+    ok = bool(fn())
+    kept[key] = {'at': now, 'ok': ok}
+    try:
+        with open(READY_CACHE, 'w') as f:
+            json.dump(kept, f)
+    except OSError:
+        pass
+    return ok
+
+
+def engines_ready(bots, build_family=None, have=None, now=None):
+    """{ai: model or True} for the AIs that answer now. `have` are the AIs whose lane agent exists. Free: the best
+    strong model of another family than the build's whose provider is not resting after a 429 and that is not set
+    aside; Codex: it has not moved the thinkers off itself and is signed in; Gemini: signed in and with room;
+    Claude: signed in. Each lane also rests after a refusal (rest_engine)."""
+    now = now or time.time()
+    out = {}
+    rested = runner().resting(now)
+    aside = bots.free_aside()
+    rows = [(m, f) for m, f, t in bots.free_list() if t == 'strong' and m not in aside and m.split('/')[0] not in rested]
+    pick = next((m for m, f in rows if f != build_family), None) or next((m for m, _ in rows), None)
+    if pick:
+        out['free'] = pick
+    off = engines_resting(now)
+    for ai in ('codex', 'gemini', 'claude'):
+        if have is not None and ai not in have or ai in off or not bots.signed_in(ai):
+            continue
+        if ai == 'codex' and _read(THINKER).get('on', 'codex') != 'codex':
+            continue
+        if ai == 'gemini' and not _cached('gemini', lambda: gemini_ready() and antigravity_has_room(), now):
+            continue
+        out[ai] = True
+    return out
+
+
+def check_engine(bots, order, build_family=None, builder_ai=None, waited=0, never=(), have=None):
+    """The AI for a check right now: pick_engine over what answers. The builder's own AI counts as its family."""
+    ready = engines_ready(bots, build_family, have)
+    family = build_family or (ENGINE_FAMILY.get(builder_ai) if builder_ai and builder_ai != 'free' else None)
+    return pick_engine(order, ready, family, waited, never=never, free_family=bots.free_family)
+
+
+def checker_never(spec, project):
+    """The AIs a project's checks may not use: a project in the checker's "freeOnly" list takes free models alone."""
+    return () if project not in (spec.get('freeOnly') or []) else tuple(ai for ai in ('codex', 'gemini', 'claude'))
+
+
+def lanes_of(agents, spec_name, lanes):
+    """{ai: agent} for the checker's lane agents that exist."""
+    import crew_set
+    by_name = {a['name']: a for a in agents}
+    return {ai: by_name[crew_set.lane_name(spec_name, ai)] for ai in lanes if crew_set.lane_name(spec_name, ai) in by_name}
+
+
+def route_checks(call=call, now=None):
+    """Checks that wait for the checker are moved down the order: a check on a free model that is busy or resting, or one
+    that has waited CHECK_WAIT, goes to the first lane that answers, and a check that is waiting on a lane that is out
+    moves on. Only a check with no live run is touched. Returns the moves, as text."""
+    now = now or time.time()
+    bots = setup()
+    files = bots.crew()
+    slug = next(iter(files.with_role('checker')), None)
+    if not slug:
+        return []
+    spec = files.spec(slug)
+    lanes = files.check_lanes(slug)
+    if not lanes:
+        return []
+    agents = call('GET', f'/companies/{COMPANY}/agents')
+    main_agent = next((a for a in agents if a['name'] == spec['name']), None)
+    found = lanes_of(agents, spec['name'], lanes)
+    if not main_agent:
+        return []
+    ours = {main_agent['id']: 'free', **{a['id']: ai for ai, a in found.items()}}
+    for ai, agent in found.items():
+        newest = call('GET', f"/companies/{COMPANY}/heartbeat-runs?agentId={agent['id']}&limit=1")
+        run = newest[0] if newest else None
+        error = (run.get('error') or '').lower() if run else ''
+        if run and run.get('status') == 'failed' and (run.get('errorCode') == 'provider_quota' or re.search(r'quota|usage limit|rate limit|429', error)):
+            started = datetime.fromisoformat(run['createdAt'].replace('Z', '+00:00')).timestamp()
+            if now - started < CHECK_REST_FOR:
+                rest_engine(ai, now=now)
+    rows = call('GET', f'/companies/{COMPANY}/projects')
+    project_names = {p['id']: p['name'] for p in rows if isinstance(p, dict)} if isinstance(rows, list) else {}
+    moves = []
+    for agent_id, now_on in ours.items():
+        for job in call('GET', f"/companies/{COMPANY}/issues?assigneeAgentId={agent_id}&status=todo"):
+            if job.get('executionRunId') or not (job.get('title') or '').startswith('Check '):
+                continue
+            made = datetime.fromisoformat((job.get('updatedAt') or job['createdAt']).replace('Z', '+00:00')).timestamp()
+            waited = now - made
+            text = job.get('description') or ''
+            built_by = (MARK_BUILT_BY.findall(text) or [None])[0]
+            built_on = (re.findall(r'built-on: (\S+) -->', text) or [None])[0]
+            family = bots.free_family(built_on) if built_on and built_on != 'None' else None
+            allowed = (MARK_ENGINES.findall(text) or [''])[0].split(',')
+            never = {ai for ai in ('codex', 'gemini', 'claude') if allowed != [''] and ai not in allowed}
+            never = tuple(never | set(checker_never(spec, project_names.get(job.get('projectId')))))
+            pick = check_engine(bots, files.check_order(slug), family, built_by, waited, never, have=set(found))
+            order = files.check_order(slug)
+            # Only down the order, so a check never flips back and forth; up again only when its lane is resting.
+            if not pick or pick['ai'] == now_on or (order.index(pick['ai']) < order.index(now_on) and now_on not in engines_resting(now)):
+                continue
+            target = main_agent if pick['ai'] == 'free' else found[pick['ai']]
+            body = {'assigneeAgentId': target['id']}
+            if pick['ai'] == 'free':
+                body['assigneeAdapterOverrides'] = {'adapterConfig': {'model': pick['model']}}
+            call('PATCH', f"/issues/{job['id']}", body)
+            call('POST', f"/issues/{job['id']}/comments", {'body': f"CHECK ENGINE: {pick['ai']}" + (f", {pick['why']}" if pick['why'] else '')
+                                                           + (' (the same family as the build: no other answers now)' if pick['sameFamily'] else '')
+                                                           + '\n\n<!-- botyard-script: fallback -->', 'wake': False})
+            try:
+                call('POST', f"/agents/{target['id']}/wakeup", {'reason': 'issue_assigned', 'payload': {'issueId': job['id']}})
+            except urllib.error.HTTPError as err:
+                print(f"could not wake {target['name']} for {job.get('identifier')}: {err.read()[:200].decode()}")
+            line = f"the check {job.get('identifier')} moved from {now_on} to {pick['ai']} after {int(waited)} s{(': ' + pick['why']) if pick['why'] else ''}"
+            with open(SWITCHES, 'a') as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M')} {line}\n")
+            moves.append(line)
+            print(line)
+    return moves
+
+
 def keep_checker_going():
     """Each of the checker's live checks runs on the model its job names. One whose model stopped answering
     moves to the next strong model of another family than the build's, and runs again."""
@@ -435,6 +633,10 @@ def main():
         openrouter_day_limit()
         keep_free_builder_going()
         keep_checker_going()
+        try:
+            route_checks()
+        except (urllib.error.URLError, ValueError, TypeError, OSError) as err:
+            print('Could not route the checker\'s checks:', err)
         pick_up_stranded()
         count_free_work()
         try_resting()

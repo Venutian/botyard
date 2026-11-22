@@ -99,7 +99,8 @@ def read_json(path, empty):
 
 
 # A provider's models need its key; OpenCode's own free offers need none.
-NO_KEY = ('opencode',)
+# OpenCode's own free models, and the free providers that need no key (free-providers.json, env '').
+NO_KEY = ('opencode', *(p['id'] for p in botyard_home.free_providers() if not p.get('env')))
 
 
 def reachable(model, has_key=None):
@@ -155,6 +156,28 @@ def credit_only_providers(limits=None):
     return found
 
 
+GRADES_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'studio', 'server', 'lib', 'model-grades.json')
+# Best first: the published benchmark grade against Claude (studio/server/lib/model-grades.json). A model no
+# benchmark covers sits between Haiku and -Haiku until one does.
+GRADE_RANK = {'Opus': 6, '+Sonnet': 5, 'Sonnet': 4, '+Haiku': 3, 'Haiku': 2, '-Haiku': 0}
+UNGRADED = 1
+
+
+def _slug(text):
+    return re.sub(r'[^a-z0-9]+', '', str(text).lower())
+
+
+def grade_rank(model, table=None):
+    """How a free model ranks by its published coding benchmark, the same match the page uses for its chip."""
+    if table is None:
+        table = read_json(GRADES_FILE, {})
+    name = _slug(re.sub(r'(:free|-free)$', '', model.split('/')[-1]))
+    for row in table.get('models', []):
+        if row.get('grade') in GRADE_RANK and any(_slug(m) in name for m in row.get('match', [])):
+            return GRADE_RANK[row['grade']]
+    return UNGRADED
+
+
 def free_list(has_key=None, listed=None, credit_only=None):
     """Every free model this computer can ask, with its family and tier now: the list above, then what
     free-scout.py found, less any the tool itself no longer lists (a name that left the offer would only
@@ -174,7 +197,9 @@ def free_list(has_key=None, listed=None, credit_only=None):
         score = scores.get(model, {})
         checked = score.get('pass', 0) + score.get('fail', 0)
         rows.append((model, family, 'light' if checked >= 3 and score.get('pass', 0) / checked < 0.5 else tier))
-    return rows
+    # Best first, by the benchmark grade; the list's own order breaks ties (sorted() keeps it).
+    table = read_json(GRADES_FILE, {})
+    return sorted(rows, key=lambda row: -grade_rank(row[0], table))
 
 
 def free_model(tier='strong', not_family=None):
@@ -383,11 +408,11 @@ def pc_skills():
 
 
 def skills_env(bot):
-    """Only this bot's skills of the PC's, when its file lists them; "all" hides none."""
+    """The bot's settings file for its AI: only its skills of the PC's when its file lists them ("all" hides none), and what no bot
+    may touch closed to every bot."""
     want = bot['spec'].get('skills', 'all')
-    if not isinstance(want, list):
-        return {}
-    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want))
+    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills() if isinstance(want, list) else [], want=set(want) if isinstance(want, list) else None,
+                                reads=bot['spec'].get('reads'), own=(bot.get('config') or {}).get('cwd'))
 
 
 def body_for(bot, path, existing, boss, dry=False):
@@ -395,7 +420,9 @@ def body_for(bot, path, existing, boss, dry=False):
     body = {'name': bot['name'], 'role': bot['role'], 'title': bot['title'], 'capabilities': bot['caps'],
             'adapterType': bot['adapter'],
             # The role and look its settings file gives it: the map draws the bot from these, never from its name.
-            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {}},
+            # A lane copy says whose it is and on which AI, so every list shows it under its bot, not as one more.
+            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {},
+                         **({'laneOf': bot['laneOf'], 'lane': bot['lane']} if bot.get('lane') else {})},
             'runtimeConfig': {'heartbeat': bot['heartbeat']},
             'adapterConfig': {**bot['config'], 'instructionsFilePath': path,
                               'env': {**bot['config'].get('env', {}), **({} if dry else skills_env(bot))}},
@@ -615,6 +642,38 @@ def safe_folder():
         os.symlink(f'{skills}/botyard', f'{mine}/botyard')
 
 
+def put_lane(bot, existing, boss, dry=False):
+    """A free checker's lane on a paid AI: an agent of its own (fallback.py hands it checks the free models cannot take
+    in time). It is made from the checker's file and follows it on every seed; nothing the owner changes in Botyard is
+    read back, because the file is the one place its order and models are set."""
+    files = crew()
+    path = f"{files.places.crew}/{bot['rulesFile']}.md"
+    text = files.render(bot['slug'], bot['lane'], crew_ids(bot, existing))
+    agent = existing.get(bot['name'])
+    if dry:
+        print(f"{bot['name']:15} {'would be updated' if agent else 'would be made'} ({bot['adapter']} {bot['config'].get('model')})")
+        return None
+    write(path, text)
+    body = body_for(bot, path, existing, boss)
+    answer = call('PATCH', f"/agents/{agent['id']}", body) if agent else call('POST', f'/companies/{botyard_home.studio_id()}/agents', body)
+    state = seeded()
+    state[f"{bot['slug']}@{bot['lane']}"] = {'id': answer.get('id'), 'text': sha(text), 'at': int(time.time())}
+    write(seeded_file(), json.dumps(state, indent=1, sort_keys=True) + '\n')
+    print(f"{bot['name']:15} {answer.get('status')} {bot['adapter']} {bot['config']['model']}  (lane)")
+    return answer
+
+
+def seed_lanes(existing, boss, dry=False):
+    """Every lane the crew's files list, after the bots themselves: a checker with "fallbacks" marked "for": "checks"."""
+    files = crew()
+    for slug in files.slugs():
+        for ai in files.check_lanes(slug):
+            bot = files.build(slug, ai, free_start, lane=True)
+            answer = put_lane(bot, existing, boss, dry)
+            if answer:
+                existing[bot['name']] = {**existing.get(bot['name'], {}), **answer}
+
+
 def move_thinkers(to, back=None, on_claude_now=()):
     """Moves the Codex bots to Antigravity or back, and those named to cheap Claude when every
     Antigravity model is out too. The Claude bots and their sessions are left alone."""
@@ -663,10 +722,14 @@ def main(only=None, dry=False):
         if slug == lead and agent:
             boss = agent['id']
     if dry:
+        if not only:
+            seed_lanes(existing, boss, dry=True)
         return
     if lead and set(existing) != before and not only:
         # The lead was seeded before the bots it hands work to existed: now its list of their ids is whole.
         put(build(lead), existing, boss)
+    if not only:
+        seed_lanes(existing, boss)
     for name in files.crew.get('retired') or []:
         if name in existing and existing[name].get('status') != 'paused' and not only:
             call('POST', f"/agents/{existing[name]['id']}/pause", {})

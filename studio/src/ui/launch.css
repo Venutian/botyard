@@ -90,3 +90,8 @@
   .studio-sheet table.launch td.empty { display: none; }
   .studio-sheet table.launch td small { grid-column: 2; }
 }
+
+/* A release: the button that starts one, or the line that follows it to its trip. */
+.studio-sheet table.launch .btn.release, .studio-sheet .acts .btn.release { display: inline-flex; width: auto; margin-top: 8px; min-height: 36px; padding: 0 14px; }
+.studio-sheet .link.release { display: block; width: auto; margin-top: 6px; font-weight: 600; color: var(--blue); text-align: left; }
+.studio-sheet .link.release.waits { color: var(--amber); }
