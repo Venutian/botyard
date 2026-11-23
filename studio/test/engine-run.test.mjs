@@ -194,6 +194,15 @@ test('a free-model run that got past an error and ended its turn is not failed; 
   assert.match(ended.why, /maximum context length/)
 })
 
+test('a free-model run is booked on the model the runner says it ran on, every one after a switch', () => {
+  const step = '{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}'
+  const one = readOutput('opencode_local', ['{"type":"model","model":"or/flint:free","sessionID":""}', step])
+  assert.deepEqual([one.model, one.models, one.session], ['or/flint:free', ['or/flint:free'], 's'])
+  const two = readOutput('opencode_local', ['{"type":"model","model":"nv/step-5","sessionID":""}', step, '{"type":"model","model":"kilo/nemotron:free","sessionID":""}', step])
+  assert.deepEqual([two.model, two.models], ['kilo/nemotron:free', ['nv/step-5', 'kilo/nemotron:free']])
+  assert.equal(readOutput('opencode_local', [step]).model, '', 'no line: the engine falls back to the set model')
+})
+
 test('a card is asked by a bot and answered by the owner, which wakes the bot; a document keeps its versions; a done job frees the one waiting on it', () => {
   const s = studio()
   const job = createJob(s.store, COMPANY, { title: 'Pick a map size', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })

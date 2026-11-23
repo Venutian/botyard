@@ -190,6 +190,7 @@ export function runFeed(content, { fromStart = true, cwd = '' } = {}) {
   const opencode = (e) => {
     const p = e.part || {}
     if (e.type === 'error') return say('error', e.error?.data?.message || e.error?.message || e.error?.name || 'The model reported an error')
+    if (e.type === 'model' && e.model) return say('note', `On ${e.model}`)
     if (e.type === 'text' && p.text) return say('said', p.text)
     if (e.type === 'reasoning' && p.text?.trim()) return say('thinking', p.text)
     if (e.type === 'tool_use' && p.tool) {

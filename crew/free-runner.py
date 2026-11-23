@@ -558,6 +558,18 @@ def with_model(args, model, session):
     return args
 
 
+def say_model(model, out=None):
+    """One line on the run's own output naming the model this start runs on: the engine books the run on the model
+    that actually ran (every one, after a switch), not on the bot's set model (23 Nov 2026: a run on flint was booked
+    on the set model, so the pass rates went to the wrong model)."""
+    if not model:
+        return
+    out = out or sys.stdout
+    # sessionID marks the line as OpenCode's for the engine's reader; it is filled in by the events that follow.
+    out.write(json.dumps({'type': 'model', 'model': model, 'sessionID': '', 'timestamp': int(time.time() * 1000)}) + '\n')
+    out.flush()
+
+
 def note(line):
     try:
         with open(botyard_home.state('fallback.log'), 'a') as f:
@@ -680,6 +692,7 @@ def main():
     started, minutes, noticed = clock(), run_minutes(), False
     looked = time.time()
     for switch in range(MOST_SWITCHES + 1 + len(guards.RETRY_WAITS)):
+        say_model(model)
         child = subprocess.Popen([bots.OPENCODE, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                  start_new_session=True)
         child.stdin.write(prompt)

@@ -74,7 +74,7 @@ test('what Codex prints is read: its thread, its last words, its tokens with the
     '{"type":"item.completed","item":{"id":"i2","type":"agent_message","text":"Done. COMMIT abc123"}}',
     '{"type":"turn.completed","usage":{"input_tokens":12000,"cached_input_tokens":9000,"output_tokens":400}}',
   ]
-  assert.deepEqual(readOutput('codex_local', lines), { session: '019a-thread', model: '', inputTokens: 3000, cachedInputTokens: 9000, outputTokens: 400, costUsd: null, said: 'Done. COMMIT abc123', failed: false, why: '' })
+  assert.deepEqual(readOutput('codex_local', lines), { session: '019a-thread', model: '', models: [], inputTokens: 3000, cachedInputTokens: 9000, outputTokens: 400, costUsd: null, said: 'Done. COMMIT abc123', failed: false, why: '' })
   const failed = readOutput('codex_local', ['{"type":"thread.started","thread_id":"t"}', '{"type":"turn.started"}', '{"type":"error","message":"You have hit your usage limit. Try again at 9:00 PM."}', '{"type":"turn.failed","error":{"message":"You have hit your usage limit. Try again at 9:00 PM."}}'])
   assert.equal(failed.failed, true)
   assert.match(failed.why, /usage limit/)
