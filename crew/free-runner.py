@@ -89,6 +89,11 @@ LOOPED = ('You were going round in circles: you ran {call} {times} times with no
 CONTINUE = ('The free model you were running on ran out partway through this task, so you are now on another '
             'model in the same session. Carry on from exactly where you stopped: check what is already done in '
             'the worktree (git status, the last files you changed) instead of starting over.')
+# A run that ends without one tool call did none of its work: every job is read, done and closed through tools. On
+# 22 Nov four runs of one scout on one free model wrote only "grant me read access" (the files were readable): the
+# resumed session kept repeating an old refusal. Such a model is set aside for NO_TOOLS_FOR and the job starts again
+# once on another model in a new session, so nothing the old session believed comes with it.
+NO_TOOLS_FOR = 86400
 
 
 class Loops:
@@ -101,6 +106,8 @@ class Loops:
         self.waited = 0
         # What the model is told when feed() stops the run for something that is not a circle.
         self.prompt = None
+        # Tool calls seen this start, whatever they returned.
+        self.tools = 0
 
     def feed(self, event):
         part = event.get('part') or {}
@@ -112,6 +119,7 @@ class Loops:
         state = part.get('state') or {}
         if state.get('status') not in (None, 'completed', 'error'):
             return None
+        self.tools += 1
         tool, given = part.get('tool') or '?', state.get('input') or {}
         key = (tool, json.dumps(given, sort_keys=True), self.snapshot)
         self.seen[key] += 1
@@ -513,6 +521,27 @@ def pick(bots, avoid_family=None):
     return None
 
 
+def no_tools(code, tools, prompt):
+    """True when a run ended as if done (code 0) with no tool call at all on a real task: it did none of the work."""
+    return code == 0 and tools == 0 and len(prompt or '') >= 200
+
+
+def without_session(args):
+    """The run's arguments with no --session (or -s): the next start is a new session."""
+    args, out, skip = list(args), [], False
+    for i, a in enumerate(args):
+        if skip:
+            skip = False
+            continue
+        if a in ('--session', '-s'):
+            skip = True
+            continue
+        if a.startswith('--session='):
+            continue
+        out.append(a)
+    return out
+
+
 def with_model(args, model, session):
     args = list(args)
     at = args.index('--model') if '--model' in args else args.index('-m') if '-m' in args else -1
@@ -642,6 +671,8 @@ def main():
     loops = Loops()
     looped = 0
     retried = 0
+    # Tool calls over the whole run (every start of it), so a short last step after a notice does not count as none.
+    first_prompt, fresh_start, ran_tools = prompt, False, 0
     started, minutes, noticed = clock(), run_minutes(), False
     looked = time.time()
     for switch in range(MOST_SWITCHES + 1 + len(guards.RETRY_WAITS)):
@@ -716,6 +747,7 @@ def main():
             stop_child(child)
             break
         code = child.wait()
+        ran_tools += loops.tools
         if told:
             used = int((clock() - started) / 60)
             note(f'The free builder was told at {used} of {minutes} minutes to write its state ({model}, same session)')
@@ -789,6 +821,21 @@ def main():
         wide = bool(code and failed and provider_wide(failed, model))
         if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
+        if no_tools(code, ran_tools, first_prompt):
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            fallback.set_free_aside(bots, model, 'made no tool calls on a real task', until=int(time.time() + NO_TOOLS_FOR))
+            nxt, bots = next_working(fallback, bots, avoid_family=bots.free_family(model))
+            if fresh_start or not nxt:
+                note(f'The free builder made no tool calls on {task} ({model}); {"no other model answers" if not nxt else "twice over"}, the run fails')
+                sys.stderr.write(f'{model} ended without one tool call: none of the work was done.\n')
+                return 1
+            note(f'The free builder made no tool calls on {task} ({model}); set aside a day, starting again on {nxt} in a new session')
+            sys.stderr.write(f'{model} ended without one tool call; starting the task again on {nxt} in a new session.\n')
+            args, model, session = with_model(without_session(args), nxt, None), nxt, None
+            claim(model)
+            prompt, fresh_start, ran_tools = first_prompt, True, 0
+            loops = Loops()
+            continue
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
             return code
         bots = set_aside(fallback, bots, model, failed)
