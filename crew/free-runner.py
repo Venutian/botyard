@@ -332,6 +332,10 @@ PACE_WAIT, PACE_MOST = 300, 45 * 60
 
 def pace_kind(env=None):
     env = env or os.environ
+    # The bot's role sets its pace (BOTYARD_PACE_KIND), apart from the models it takes: a scout may run on strong models.
+    kind = env.get('BOTYARD_PACE_KIND', '').strip()
+    if kind in ('build', 'check', 'scout'):
+        return kind
     return 'check' if env.get('BOTYARD_CHECKER') else 'scout' if env.get('BOTYARD_FREE_TIER') == 'light' else 'build'
 
 
