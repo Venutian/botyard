@@ -534,11 +534,12 @@ export async function chatThread(botId, options) {
   ])
   const bot = { id: agent.id, name: agent.name, title: agent.title || '' }
   if (!chat) return { bot, working: false, messages: [], cards: [] }
-  const [comments, interactions, live, files] = await Promise.all([
+  const [comments, interactions, live, files, runs] = await Promise.all([
     call(`/issues/${chat.id}/comments?limit=${SHOWN_MESSAGES}`, options),
     orElse(call(`/issues/${chat.id}/interactions`, options), []),
     orElse(call(`/issues/${chat.id}/live-runs`, options), []),
     orElse(call(`/issues/${chat.id}/attachments`, options), []),
+    orElse(call(`/companies/${id}/heartbeat-runs?agentId=${agent.id}&summary=true&limit=5`, options), []),
   ])
   const names = new Map([[agent.id, agent.name]])
   const pictures = new Map()
@@ -551,13 +552,22 @@ export async function chatThread(botId, options) {
     .reverse()
   // Settled cards only as far back as the messages go; one still waiting always shows.
   const since = messages.length ? Date.parse(messages[0].at) : 0
+  const working = chat.conversationState === 'active' || live.some((run) => run.agentId === agent.id && ['queued', 'running'].includes(run.status))
+  // A run that failed after the owner's last word, and no answer since: the chat says why, so a first hello
+  // that cannot be answered (no free model left today, a tool signed out) is not "Writing an answer" for ever.
+  const last = messages[messages.length - 1]
+  const ended = runs.filter((run) => (run.contextSnapshot?.issueId || run.issueId) === chat.id && run.finishedAt).sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))[0]
+  const stopped = !working && last?.mine && ended && ['failed', 'timed_out'].includes(ended.status) && Date.parse(ended.finishedAt) >= Date.parse(last.at)
+    ? { at: ended.finishedAt, why: String(ended.error || 'Its run stopped before it answered.').slice(0, 400) }
+    : null
   return {
     bot,
     /** The conversation's own id: a card is answered against it. */
     chatId: chat.id,
     // Working while a run of the bot is going on this chat: the engine's own conversation state stays
     // "open" or "waiting" through a run, so the phone never showed the bot typing.
-    working: chat.conversationState === 'active' || live.some((run) => run.agentId === agent.id && ['queued', 'running'].includes(run.status)),
+    working,
+    stopped,
     messages,
     cards: interactions
       .filter((i) => i.status === 'pending' || Date.parse(i.createdAt) >= since)

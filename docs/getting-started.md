@@ -36,19 +36,47 @@ To keep it running after you close the terminal, see "Start in five minutes" in 
 ## 2. Install one AI tool
 
 Bots run on AI tools you install yourself. Botyard never sees a password: each tool signs in on its own.
+Start with **OpenCode**: it runs free models with no account and no card, so your first job costs nothing.
+
+**The easy way: from Botyard itself.** Open **Setup** (or step 2 of the first-run guide) and press
+**Install OpenCode**. A terminal opens and installs it; press **Check again** when it is done.
+
+| Your computer | What the Install button does | What you need first |
+|---|---|---|
+| macOS | Runs OpenCode's own installer (`curl -fsSL https://opencode.ai/install \| bash`) | Nothing |
+| Linux | The same, or `npm install -g opencode-ai` when you have Node.js | Nothing |
+| Windows | `npm install -g opencode-ai` | [Node.js](https://nodejs.org) (take the LTS installer), or in PowerShell: `winget install OpenJS.NodeJS.LTS`. Close and open Botyard again after installing it. |
+
+**By hand**, if you prefer a terminal:
 
 | Tool | Costs | Install | Sign in |
 |---|---|---|---|
-| OpenCode | Nothing: free models, no account | `npm install -g opencode-ai` | Nothing to do |
+| OpenCode | Nothing: free models, no account | `npm install -g opencode-ai` (or, on macOS and Linux, `curl -fsSL https://opencode.ai/install \| bash`) | Nothing to do |
 | Claude Code | Your Claude plan | `npm install -g @anthropic-ai/claude-code` | `claude auth login` |
 | Codex | Your ChatGPT plan | `npm install -g @openai/codex` | `codex login` |
 | Gemini | Your Google account | `npm install -g @google/gemini-cli` | run `gemini` once |
 
-`npm` comes with Node.js, so install Node.js first even if you use the desktop app. Start with
-OpenCode if you are not sure: a new yard can do its first job with it, with no account.
+Claude, Codex and Gemini install with `npm`, which comes with Node.js. Setup shows each one, says
+whether it is installed and signed in, and opens the install or the sign-in in a terminal for you.
 
-You can do this later from the map: its Setup page lists each tool, says whether it is installed and
-signed in, and opens the install or sign-in in a terminal for you.
+### More free models: free keys (optional)
+
+OpenCode's free models have a daily allowance. When it is used up, a bot says so in the chat
+("No free model answers now") and the free models come back the next day. To have more free models
+at once, add free keys on **Setup**. Nothing to install: press **Get a free key** beside a provider,
+make the key on its site, then press **Paste a key** and paste it.
+
+| Provider | What is free | Card needed |
+|---|---|---|
+| OpenRouter | Models whose name ends in `:free`, about 50 requests a day | No |
+| NVIDIA | Its hosted models, about 40 requests a minute | No |
+| Google Gemini | Gemini Flash models on an AI Studio key, a daily cap per model | No |
+| Mistral | Every model at a low rate (asks a phone number) | No |
+| SambaNova | Its hosted models at a low daily cap | No |
+| Cohere | A trial key, about 1,000 calls a month | No |
+
+A key is kept in a file only you can read on this computer and is never shown again. The free bots
+use every provider you add, best model first.
 
 ## 3. Follow the first run
 
@@ -77,6 +105,7 @@ skipped and done later from **Setup**.
 | A tool you installed is "not installed" in the app | Close the app and open it again: it reads where programs are when it starts. |
 | "Botyard still needs: Git" | Install Git, then **Check again**. Every job ends in a commit, so Botyard cannot work without it. |
 | "Botyard needs Node.js 22.13 or newer" | Install a newer Node.js from nodejs.org, then start again. |
+| A bot says "No free model answers now" | The free allowance is used up for today. Add a free key on **Setup** (see "More free models" above), sign in to Claude, Codex or Gemini, or wait until tomorrow. |
 | A bot does not answer after five minutes | In **Setup**, check its AI says Ready. In **Crew**, check the bot is on, then open its last run: the log says what its AI said, and a sign-in or limit error shows there. |
 | A job is not taken | The lead takes new jobs. Check the lead is on and its AI is ready. A job waiting on you is in **Needs you**. |
 | The phone cannot connect | The phone must be on the same Wi-Fi as the computer. Allow incoming connections on port 5288 in the computer's firewall (Windows asks the first time). Away from home, see "Away from home" in the README. |
