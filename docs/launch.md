@@ -83,19 +83,30 @@ phased release on. Going live is never a default.
 
 A built-in track, `release-app`, per product and version:
 
-1. **Build** (script): the product's build command; leaves the artifact and its version and build number.
-2. **Tests** (script): the product's test command.
-3. **Readiness** (script): the checklist above; a fail goes back to the crew with what failed.
-4. **Upload to testing** (script): the store's testing lane; leaves the store's build id.
-5. **Wait for processing** (script): until the store has the build, or a time limit.
-6. **The owner decides** (gate): the card shows the version, the readiness list, the testing link and what
-   "send for review" will do.
-7. **Send for review** (script).
-8. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to the
-   crew with the store's words.
-9. **The owner decides** (gate): release now, or hold.
-10. **Release** (script), then **Watch the rollout** (script): crash-free sessions and events; a bad number
-    halts the rollout and goes to the owner.
+1. **Build** (bot, the `builder`): builds the app's next release for the stores in the plan (Play when
+   it has a package, the App Store when it has a bundle id), raises the version and build number above
+   what each store holds, and commits the raise on the job's branch. Leaves the AAB and the numbers.
+2. **Write the listing** (bot, the `writer`): the store listing as JSON, within each store's limits.
+3. **Make the store images** (bot, the `artist`): screenshots from the real app on the test phone, at
+   each store's sizes.
+4. **Score them** (bot, the `reviewer`, or the `writer` when there is no reviewer): the listing and
+   images against the store kit bar.
+5. **Check what a store would refuse** (script): the listing fields and limits, image sizes, the
+   privacy and support pages, the bundle and its version code against Play, and the store products for
+   an app that takes payments.
+6. **Upload to testing** (script): Play internal testing as a draft release, TestFlight to the internal
+   group.
+7. **The owner decides** (gate): the release is built, its listing and images are scored, the checks
+   pass and it is on the stores' testing lanes. Yes sends it for review: the listing goes onto each
+   store, Play gets a staged rollout, the App Store version goes to Apple.
+8. **Send for review** (script): the listing onto each store, a staged Play rollout, the App Store
+   version to Apple.
+9. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to
+   the crew with the store's words.
+
+On a fail the track goes back with what failed: the score to the listing (two rounds), the readiness
+check or the watch to the build (with its rounds); a failed build goes back to the build once, and then
+to the owner.
 
 Web products and Botyard's own GitHub releases use a short form: build, tests, preview or draft, the owner's
 gate, publish, check the live version.

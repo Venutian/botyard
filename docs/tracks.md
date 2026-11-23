@@ -91,6 +91,9 @@ Five tables, each row with its whole object kept as JSON next to the columns tha
   lead when the rounds are used, the owner when the ruling says no, and the landing in main. Its bots
   are named by role: `$builder`, `$checker` and `$lead` are inputs, which a studio fills once as the
   track's **defaults** (saved as its own copy) or a request names. A request may give `test_command`.
+- **release-app** — a product's release to the stores: build, listing, art and score by bots, the
+  store checks, upload to testing, the owner's gate, send for review and watch it. See
+  [launch](launch.md#the-release-track).
 
 A bot step's job ends with a line `TRACK STEP: <trip>/<step>/<try>`, so the crew's own scripts can
 leave such a job to its track. A bot leaves its results as documents on its job, or as `NAME: value`
