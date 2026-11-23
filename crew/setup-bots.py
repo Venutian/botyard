@@ -178,15 +178,43 @@ def grade_rank(model, table=None):
     return UNGRADED
 
 
+# A model is light when its pass rate is this far under the crew's. Until 23 Nov the line was a flat 50%, but the
+# checks fail most builds whatever the model (about 29% passed then): every free model fell under it, none was strong,
+# and the scout that runs only on strong free models waited for days.
+WEAK_BY = 0.15
+WEAK_AFTER = 3
+
+
+def crew_rate(scores):
+    """The share of all checked free builds that passed, over every model; None with nothing checked."""
+    rows = [s for s in (scores or {}).values() if isinstance(s, dict)]
+    passed = sum(s.get('pass', 0) for s in rows)
+    checked = passed + sum(s.get('fail', 0) for s in rows)
+    return passed / checked if checked else None
+
+
+def weak(score, rate):
+    """True when a model's builds pass clearly less often than the crew's do: WEAK_BY under the crew's rate,
+    over WEAK_AFTER checks or more. A model never passing over that many is weak whatever the rate."""
+    passed = score.get('pass', 0) if isinstance(score, dict) else 0
+    checked = passed + (score.get('fail', 0) if isinstance(score, dict) else 0)
+    if checked < WEAK_AFTER:
+        return False
+    if not passed:
+        return True
+    return rate is not None and passed / checked < rate - WEAK_BY
+
+
 def free_list(has_key=None, listed=None, credit_only=None):
     """Every free model this computer can ask, with its family and tier now: the list above, then what
     free-scout.py found, less any the tool itself no longer lists (a name that left the offer would only
     fail every run handed to it). With no OpenRouter or NVIDIA key the list is just shorter. A model
-    whose real builds fail the checker's or the lead's checks at least half the time, over three or
+    whose real builds pass the checks clearly less often than the crew's builds do (weak()), over three or
     more, counts as light whatever its tier."""
     listed = tool_models() if listed is None else listed
     found = [tuple(row) for row in read_json(FREE_FOUND, []) if row[0] not in {m for m, _, _ in FREE}]
     scores = read_json(FREE_SCORES, {})
+    rate = crew_rate(scores)
     rows = []
     paid = credit_only_providers() if credit_only is None else credit_only
     for model, family, tier in FREE + found:
@@ -194,9 +222,7 @@ def free_list(has_key=None, listed=None, credit_only=None):
             continue
         if not reachable(model, has_key) or not offered(model, listed):
             continue
-        score = scores.get(model, {})
-        checked = score.get('pass', 0) + score.get('fail', 0)
-        rows.append((model, family, 'light' if checked >= 3 and score.get('pass', 0) / checked < 0.5 else tier))
+        rows.append((model, family, 'light' if weak(scores.get(model, {}), rate) else tier))
     # Best first, by the benchmark grade; the list's own order breaks ties (sorted() keeps it).
     table = read_json(GRADES_FILE, {})
     return sorted(rows, key=lambda row: -grade_rank(row[0], table))
