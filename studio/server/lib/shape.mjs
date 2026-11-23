@@ -64,6 +64,9 @@ export const AIS = {
 const AI_OF_TYPE = Object.fromEntries(Object.entries(AIS).map(([id, ai]) => [ai.type, id]))
 const ROLES = [['general', 'General'], ['ceo', 'Leads the crew'], ['engineer', 'Builds'], ['qa', 'Checks'], ['researcher', 'Researches'], ['designer', 'Designs'], ['pm', 'Plans']]
 
+/** A crew file's word for what a bot is, as the engine's word (the same table as crew/crew_set.py's ROLES). */
+const CREW_ROLES = { lead: 'ceo', builder: 'engineer', checker: 'qa', reviewer: 'qa', ruler: 'qa', researcher: 'researcher', general: 'general' }
+
 const modelName = (id) => (id === 'auto' ? 'The best free model answering now' : modelLabel(id) || id)
 
 // ── what a bot may not do ───────────────────────────────────────────────────────────
@@ -354,6 +357,9 @@ const SEED_TIME_MS = 120_000
  */
 function seederFor(options = {}) {
   if (options.seed) return options.seed
+  // The seeder and the launchers it links are Python and shell scripts with symlinks: not on Windows,
+  // where the bots are made through the engine alone and run their tools directly (engine/start-tool.mjs).
+  if (process.platform === 'win32') return null
   if (options.fetcher || options.crewRepo || process.env.BOTYARD_CREW_SETS) return null
   if (!process.env.BOTYARD_API_URL && process.env.BOTYARD_SEEDER !== 'on') return null
   const script = path.join(REPO, 'crew', 'setup-bots.py')
@@ -456,7 +462,7 @@ function templateInput(t, bossId) {
   const b = t.bot
   const ai = Object.hasOwn(AIS, b.ai) ? b.ai : 'free'
   return {
-    name: b.name, title: b.title || '', does: b.does || '', role: b.role || 'general', reportsTo: bossId || null, ai,
+    name: b.name, title: b.title || '', does: b.does || '', role: CREW_ROLES[b.role] || (ROLES.some(([id]) => id === b.role) ? b.role : 'general'), reportsTo: bossId || null, ai,
     model: typeof b.model === 'string' && b.model ? b.model : AIS[ai].models[0],
     ...(b.effort ? { effort: b.effort } : {}),
     ...(Number(b.minutes) ? { minutes: Number(b.minutes) } : {}),

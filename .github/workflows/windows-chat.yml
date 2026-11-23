@@ -1,0 +1,62 @@
+# The proof that a beginner's Windows PC works: build the Windows app from this commit, install
+# OpenCode the way the guide says (npm), install the app, start Botyard as the app does on an empty
+# home, and say hello to the lead bot until it answers (tools/chat-check.mjs). Run before a release.
+name: Windows chat check
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/windows-*', 'ci/windows-*']
+permissions:
+  contents: read
+jobs:
+  chat:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the map
+        working-directory: studio
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Build the Windows app
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci --no-audit --no-fund
+          npx electron-builder --win --publish never
+      - name: Install OpenCode as the guide says
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai
+          Get-Command opencode | Format-List Source
+      - name: Install the app
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem desktop\dist -Filter *.exe | Select-Object -First 1).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList "/S"
+          for ($i = 0; $i -lt 30 -and -not (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter Botyard.exe -ErrorAction SilentlyContinue); $i++) { Start-Sleep 2 }
+          Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter Botyard.exe | Select-Object FullName
+      - name: Start Botyard as the app does, and say hello to the lead bot
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter Botyard.exe | Select-Object -First 1).FullName
+          $root = Join-Path (Split-Path $exe) "resources\botyard"
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          $env:BOTYARD_DESKTOP = "1"
+          $env:BOTYARD_LOG_DIR = "$env:RUNNER_TEMP\botlogs"
+          $env:PATH = "$env:PATH;$env:APPDATA\npm"
+          New-Item -ItemType Directory -Force $env:BOTYARD_LOG_DIR | Out-Null
+          Push-Location (Join-Path $root "studio")
+          $p = Start-Process -FilePath $exe -ArgumentList "`"$root\studio\server\studio.mjs`"" -RedirectStandardOutput "$env:RUNNER_TEMP\out.txt" -RedirectStandardError "$env:RUNNER_TEMP\err.txt" -PassThru -NoNewWindow
+          Pop-Location
+          node studio/tools/chat-check.mjs http://127.0.0.1:5274 --minutes 10
+          $code = $LASTEXITCODE
+          "--- server stdout"; Get-Content "$env:RUNNER_TEMP\out.txt" -Tail 40
+          "--- server stderr"; Get-Content "$env:RUNNER_TEMP\err.txt" -Tail 40
+          "--- run logs"; Get-ChildItem "$env:USERPROFILE\.botyard\run-logs" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 15 }
+          exit $code

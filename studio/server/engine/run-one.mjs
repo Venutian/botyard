@@ -12,6 +12,7 @@
  */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import { launchable, notStarted, stopTree } from './start-tool.mjs'
 
 const spec = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
 const startedAt = new Date().toISOString()
@@ -40,22 +41,38 @@ function finish(exitCode, signal, error = '') {
 
 let child
 try {
-  child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
+  // On Windows a tool installed with npm is a .cmd file, started through cmd.exe (start-tool.mjs).
+  const start = launchable(spec.command, spec.args, spec.env)
+  if (!start.found) throw Object.assign(new Error(`spawn ${spec.command} ENOENT`), { code: 'ENOENT' })
+  child = spawn(start.command, start.args, { cwd: spec.cwd, env: spec.env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true, ...start.options })
 } catch (err) {
-  write('stderr', `The run could not start: ${err.message}\n`)
-  finish(null, null, err.message)
+  const why = notStarted(spec.command, err)
+  write('stderr', `${why}\n`)
+  finish(null, null, why)
 }
 
 if (child) {
   fs.writeFileSync(spec.pidFile, JSON.stringify({ keeper: process.pid, tool: child.pid, startedAt }))
   /** The tool and everything it started. */
-  const stop = (signal) => { try { process.kill(-child.pid, signal) } catch { /* already gone */ } }
+  const stop = (signal) => stopTree(child.pid, signal)
   const grace = () => setTimeout(() => stop('SIGKILL'), Math.max(1, Number(spec.graceSec) || 15) * 1000).unref()
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
   child.stdout.on('data', (chunk) => write('stdout', chunk))
-  child.stderr.on('data', (chunk) => write('stderr', chunk))
-  child.on('error', (err) => { write('stderr', `The run could not start: ${err.message}\n`); finish(null, null, err.message) })
+  // A tool that says it is refused for now (spec.refuseOn) and would only wait is stopped at once, with the reason.
+  const refuseOn = (spec.refuseOn || []).map((w) => String(w).toLowerCase())
+  let refused = false
+  child.stderr.on('data', (chunk) => {
+    write('stderr', chunk)
+    if (!refused && refuseOn.length && refuseOn.some((w) => chunk.toLowerCase().includes(w))) {
+      refused = true
+      write('stderr', `${spec.refuseWhy || 'The tool was refused.'}\n`)
+      stop('SIGTERM'); grace()
+      child.removeAllListeners('close')
+      child.on('close', () => finish(1, null, spec.refuseWhy || 'The tool was refused.'))
+    }
+  })
+  child.on('error', (err) => { const why = notStarted(spec.command, err); write('stderr', `${why}\n`); finish(null, null, why) })
   child.on('close', (code, signal) => finish(code, signal))
   child.stdin.on('error', () => { /* the tool closed its input early */ })
   child.stdin.end(spec.promptFile ? fs.readFileSync(spec.promptFile) : '')
