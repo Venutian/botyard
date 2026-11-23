@@ -2534,6 +2534,7 @@ setView(view) {
       const html = parts.length
         ? pinnedCards + parts.map((p) => p.html).join('')
           + (chat.working ? '<p class="typing">Writing an answer…</p>' : '')
+          + (chat.stopped ? `<p class="chat-stopped" role="status"><strong>${esc(chat.bot.name)} could not answer.</strong> ${esc(chat.stopped.why)}</p>` : '')
         : '<p class="none">Nothing said yet. Write what you want done; the bot answers here.</p>'
       if (this._last.talk !== html) {
         // Stay at the bottom only if the reader was already there: scrolling back is reading.

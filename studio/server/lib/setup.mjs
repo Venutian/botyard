@@ -102,7 +102,10 @@ export function probes({ env = process.env } = {}) {
     studio: studioRoot(),
     nodeVersion: process.versions.node,
     desktop: Boolean(process.versions.electron),
-    which: (name) => findCommand(name, env),
+    // OpenCode's own installer puts it in ~/.opencode/bin and adds that to the shell's PATH only for new
+    // terminals, so a Botyard already running finds it there too (the crew's scripts look there as well).
+    which: (name) => findCommand(name, env) || (name === 'opencode' ? findCommand(path.join(env.HOME || env.USERPROFILE || os.homedir(), '.opencode', 'bin', 'opencode'), env) : null),
+    platform: process.platform,
     exists: (file) => fs.existsSync(file),
     /** Run a tool for its own answer. `code` is null when it could not be run or did not answer in time. */
     run: (name, args) => new Promise((resolve) => {
@@ -119,12 +122,19 @@ export function probes({ env = process.env } = {}) {
   }
 }
 
+/** OpenCode's own installer, from its site: it puts opencode in ~/.opencode/bin. */
+const OPENCODE_SCRIPT = 'curl -fsSL https://opencode.ai/install | bash'
 const item = (id, name, group, needed, what, state, detail, fix = null) => ({ id, name, group, needed, state, what, detail, fix })
 const command = (label, line) => ({ kind: 'command', label, command: line })
 
 async function checkTool(tool, p) {
   if (!p.which(tool.command)) {
-    const fix = tool.install ? command(`Install ${tool.name}`, tool.install) : { kind: 'link', label: `Get ${tool.name}`, url: tool.installLink }
+    let fix = tool.install ? command(`Install ${tool.name}`, tool.install) : { kind: 'link', label: `Get ${tool.name}`, url: tool.installLink }
+    // With no npm on a Mac or Linux computer, OpenCode's own installer needs no Node.js: a beginner with only
+    // the desktop app gets free models in one click. Windows has no such installer, so npm stays the way there.
+    if (tool.id === 'opencode' && !p.which('npm') && (p.platform || process.platform) !== 'win32' && p.which('curl')) {
+      fix = { ...command(`Install ${tool.name}`, OPENCODE_SCRIPT), argv: ['bash', '-c', OPENCODE_SCRIPT] }
+    }
     return item(tool.id, tool.name, 'ai', false, tool.what, 'missing', 'Not installed on this computer.', fix)
   }
   const [about, signed] = await Promise.all([p.run(tool.command, ['--version']), tool.signedIn(p).catch(() => null)])
@@ -155,7 +165,7 @@ async function check(p) {
   const items = [
     p.desktop
       ? item('node', 'Node.js', 'other', false, 'The AI tools are installed with npm and run on Node.js. Botyard itself brings its own.', nodeOk ? 'ok' : 'missing',
-        nodeOk ? `Version ${own}.` : own ? `Version ${own} is old: get ${NODE_NEEDED.join('.')} or newer before installing the AI tools.` : 'Not installed on this computer. Install it before the AI tools below: their install commands use npm, which comes with it.',
+        nodeOk ? `Version ${own}.` : own ? `Version ${own} is old: get ${NODE_NEEDED.join('.')} or newer before installing the AI tools.` : ((p.platform || process.platform) === 'win32' ? 'Not installed on this computer. Install it before the AI tools below: their install commands use npm, which comes with it.' : 'Not installed on this computer. OpenCode (free models) installs without it; Claude, Codex and Gemini install with npm, which comes with Node.js.'),
         nodeOk ? null : { kind: 'link', label: 'Get Node.js', url: 'https://nodejs.org' })
       : item('node', 'Node.js', 'needed', true, 'Botyard itself runs on it.', nodeOk ? 'ok' : 'missing',
         nodeOk ? `Version ${p.nodeVersion}.` : `Version ${p.nodeVersion} is too old: Botyard needs ${NODE_NEEDED.join('.')} or newer.`,
@@ -254,7 +264,7 @@ export async function setupAct(body = {}, { probe = null, open = null } = {}) {
     if (!entry) return [404, { error: 'Setup has no item by that name' }]
     if (entry.fix?.kind !== 'command') return [400, { error: entry.fix ? 'This one is not fixed by a command' : `${entry.name} needs nothing done` }]
     const line = entry.fix.command
-    const [name, ...args] = line.split(' ')
+    const [name, ...args] = entry.fix.argv || line.split(' ')
     const file = p.which(name)
     const note = entry.fix.note || ''
     if (!file) return [200, { ok: true, opened: false, command: line, note: `${name} is not on this computer, so Botyard cannot start it. Install it, then run the command.` }]

@@ -203,6 +203,9 @@ def provider_wide(text, model=None):
     """True when an error names a cap on the whole provider (a day's count, a quota for every model), not one
     model: STANDARDS.md rule 22. Such a cap sets every model of that provider aside."""
     text = (text or '').lower()
+    if 'free usage limit' in text:
+        # OpenCode's own free allowance is for all its free models together, until its day turns over.
+        return True
     if 'free-models-per-day' in text or any(w in text for w in WIDE) and any(w in text for w in ('quota',) + PER_DAY):
         return True
     if model and model.startswith(PER_MODEL_DAY):
@@ -223,19 +226,67 @@ def said(model, got):
     return text if provider_wide(text, model) else None
 
 
-def probe(opencode, model):
+# What OpenCode logs when a provider refuses for its allowance. OpenCode then retries for minutes and prints nothing,
+# so the ask is ended as soon as one of these is logged (23 Nov 2026: a new yard's first hello waited half an hour on
+# "Free usage limit reached" while every free model was asked in turn, 30 seconds each).
+REFUSED_NOW = ('free usage limit', 'usage limit reached', 'insufficient balance', 'quota exceeded', 'rate limit exceeded')
+
+
+def probe(opencode, model, timeout=30):
     """One word from the model, never from a cache: 'ok' when it answers, 'gone' when the provider says it
-    can never serve us, else 'out' (its limit, or busy)."""
+    can never serve us, else 'out' (its limit, or busy). OpenCode's own log is read as it comes, so a refusal
+    for the provider's allowance ends the ask at once instead of at the timeout."""
     SAID.pop(model, None)
     try:
-        out = subprocess.run([opencode, 'run', '-m', model, 'Reply with exactly: pong'], capture_output=True, text=True,
-                             timeout=30, stdin=subprocess.DEVNULL, cwd='/tmp', env={**os.environ, 'PWD': '/tmp'})
-    except (OSError, subprocess.TimeoutExpired):
+        child = subprocess.Popen([opencode, 'run', '--print-logs', '-m', model, 'Reply with exactly: pong'],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL,
+                                 cwd='/tmp', env={**os.environ, 'PWD': '/tmp'}, start_new_session=True)
+    except OSError:
         return 'out'
-    if 'pong' in out.stdout.lower():
+    out, err, refused = [], [], []
+
+    def read_err():
+        for line in child.stderr:
+            if 'level=ERROR' in line or 'error' in line.lower():
+                err.append(line[-400:])
+            if any(w in line.lower() for w in REFUSED_NOW):
+                refused.append(line)
+                try:
+                    os.killpg(child.pid, signal.SIGTERM)
+                except OSError:
+                    pass
+                return
+    readers = [threading.Thread(target=read_err, daemon=True),
+               threading.Thread(target=lambda: out.extend(child.stdout), daemon=True)]
+    for reader in readers:
+        reader.start()
+    try:
+        child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        child.wait()
+    for reader in readers:
+        reader.join(1)
+    text = ''.join(out)
+    if 'pong' in text.lower() and not refused:
         return 'ok'
-    SAID[model] = (out.stdout + ' ' + out.stderr)[-300:]
-    return 'gone' if any(w in (out.stdout + out.stderr).lower() for w in GONE) else 'out'
+    said_text = (text + ' ' + ''.join(refused or err[-2:]))
+    SAID[model] = said_text[-300:]
+    return 'gone' if any(w in said_text.lower() for w in GONE) else 'out'
+
+
+def no_free_model(asked):
+    """What the owner reads when no free model answers: why, and the two ways on."""
+    why = ' '.join(SAID.get(m, '') for m in asked).lower()
+    used_up = any(w in why for w in REFUSED_NOW)
+    head = ("No free model answers now: today's free allowance is used up" if used_up
+            else 'No free model answers now: each one asked was busy or did not reply')
+    return (f"{head} ({len(asked)} asked). Free models come back by themselves, at the latest when the provider's day "
+            "turns over. To go on sooner, paste a free key on the Setup page (OpenRouter, NVIDIA, Google Gemini and "
+            "others need no card), or sign in to Claude, Codex or Gemini there.\n")
 
 
 def answers(opencode, model):
@@ -668,18 +719,25 @@ def main():
         NEVER.discard(None)
         NEVER.add(build_family(bots))
         NEVER.discard(None)
+    answered, asked = False, []
     for _ in range(MOST_SWITCHES):
-        chosen = pick(bots) or model
+        chosen = pick(bots) or (model if model not in asked else None)
         claim(chosen)  # before asking it, so a run starting at the same moment picks another
         if not chosen:
             break
+        asked.append(chosen)
         got = probe(bots.OPENCODE, chosen)
         if got == 'ok':
             fallback.limits().answered(chosen)
+            answered = True
             break
         if got == 'out' and fallback.outage(bots, chosen):
+            answered = True  # the line is down, not the offer: the run goes on and waits it out as before
             break
         bots = set_aside(fallback, bots, chosen, said(chosen, got))
+    if not answered:
+        sys.stderr.write(no_free_model(asked))
+        return 1
     if chosen and chosen != model:
         args, model = with_model(args, chosen, None), chosen
     claim(model)

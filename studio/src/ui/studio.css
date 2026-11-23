@@ -665,6 +665,7 @@
 }
 .studio-chat .talk .none,
 .studio-chat .talk .typing { margin: 0; font-size: 13px; line-height: 1.45; color: var(--dim); }
+.studio-chat .talk .chat-stopped { margin: 0; padding: 8px 10px; font-size: 13px; line-height: 1.45; border-left: 3px solid var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
 
 .studio-chat .msg { max-width: 92%; align-self: flex-start; }
 .studio-chat .msg.mine { align-self: flex-end; }
