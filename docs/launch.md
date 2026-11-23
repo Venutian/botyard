@@ -85,7 +85,11 @@ A built-in track, `release-app`, per product and version:
 
 1. **Build** (bot, the `builder`): builds the app's next release for the stores in the plan (Play when
    it has a package, the App Store when it has a bundle id), raises the version and build number above
-   what each store holds, and commits the raise on the job's branch. Leaves the AAB and the numbers.
+   what each store holds, and commits the raise on the job's branch. Builds the Android App Bundle (.aab)
+   for release, signed with the app's upload key, and, when the app ships on iOS, the iOS build through the
+   app's own cloud build, sending it to TestFlight; leaves in the last comment: AAB: <full path of the .aab on
+   this computer>, VERSION: <version name>, BUILD: <build number / version code>, IOS_BUILD: <the iOS build
+   number, or none>.
 2. **Write the listing** (bot, the `writer`): the store listing as JSON, within each store's limits.
 3. **Make the store images** (bot, the `artist`): screenshots from the real app on the test phone, at
    each store's sizes.
