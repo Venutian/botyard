@@ -481,7 +481,7 @@ export async function runDetail(runId, options = {}) {
   const feed = log ? runFeed(content, { fromStart: from === 0, cwd: run.contextSnapshot?.cwd || '' }) : { items: [], cut: 0 }
   return {
     ...row,
-    model: usage.model ? modelLabel(usage.model) : '',
+    model: (usage.models?.length > 1 ? usage.models : usage.model ? [usage.model] : []).map(modelLabel).join(', then '),
     started: { assignment: 'Given a job', automation: 'Woken by the crew', on_demand: 'Started by hand', timer: 'On a timer' }[run.invocationSource] || '',
     trimmed: from + shortFrom > 0,
     log: lines,

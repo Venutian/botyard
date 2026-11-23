@@ -138,7 +138,7 @@ const whole = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.round(Number
  * own output lines (each a JSON object, or text that is skipped).
  */
 export function readOutput(adapterType, lines) {
-  const out = { session: '', model: '', inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costUsd: null, said: '', failed: false, why: '' }
+  const out = { session: '', model: '', models: [], inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costUsd: null, said: '', failed: false, why: '' }
   // Claude's tokens message by message, for a run that ends without its closing line (cut at its time
   // limit, cancelled, crashed): the closing line is the only place the tool itself adds them up.
   const perMessage = new Map()
@@ -218,6 +218,8 @@ export function readOutput(adapterType, lines) {
       if (e.type === 'text' && e.part?.text) out.said = String(e.part.text).trim() || out.said
       if (e.type === 'error') { out.failed = true; out.why = String(e.error?.data?.message || e.error?.message || e.error?.name || 'The tool reported an error').slice(0, 400) }
       if (e.model || e.part?.model) out.model = e.model || e.part.model
+      // The free runner names each model it starts, so a run that switched models is booked on every one it ran on.
+      if (e.type === 'model' && e.model && out.models.at(-1) !== e.model) out.models.push(String(e.model))
     }
   }
   if (adapterType === 'claude_local' && !closed && perMessage.size) {

@@ -103,12 +103,14 @@ print(json.dumps({{"type": "text", "sessionID": "ses_old", "part": {{"text": "Pl
             sys.stdin = open(task)
             env = {k: os.environ.pop(k, None) for k in ('BOTYARD_FREE_PACE', 'BOTYARD_FREE_TIER', 'BOTYARD_CHECKER')}
             try:
-                with open(os.devnull, 'w') as sink:
-                    out, err, sys.stdout, sys.stderr = sys.stdout, sys.stderr, sink, sink
+                with open(os.path.join(d, 'stdout'), 'w+') as sink, open(os.devnull, 'w') as quiet:
+                    out, err, sys.stdout, sys.stderr = sys.stdout, sys.stderr, sink, quiet
                     try:
                         code = fred.main()
                     finally:
                         sys.stdout, sys.stderr = out, err
+                    sink.seek(0)
+                    self.printed = [json.loads(line) for line in sink if line.startswith('{')]
             finally:
                 sys.stdin.close()
                 fred.load, fred.pause, fred.probe, fred.BUSY, fred.note, fred.next_working, fred.pick, sys.argv, sys.stdin = saved
@@ -131,6 +133,12 @@ print(json.dumps({{"type": "text", "sessionID": "ses_old", "part": {{"text": "Pl
         self.assertTrue(prompts[1].startswith(TASK))
         self.assertEqual([a[0] for a in aside], ['x/m'])
         self.assertIn('no tool calls', aside[0][1])
+
+    def test_each_start_names_its_model_on_the_run_output_first(self):
+        self.run_main([0, 3])
+        named = [e['model'] for e in self.printed if e.get('type') == 'model']
+        self.assertEqual(named, ['x/m', 'y/m'])
+        self.assertEqual(self.printed[0]['type'], 'model')
 
     def test_twice_without_a_tool_call_fails_the_run(self):
         code, calls, _, aside = self.run_main([0, 0])
