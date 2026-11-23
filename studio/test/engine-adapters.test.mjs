@@ -273,7 +273,7 @@ test('a Gemini run that the tool refuses, or that dies in the middle, is a faile
   const third = await s.ok('POST', `/api/companies/${s.id}/issues`, { title: 'Try three', projectId: s.project.id, assigneeAgentId: missing.id })
   const none = await s.runOn(missing, third)
   assert.equal(none.status, 'failed')
-  assert.match(none.error, /could not be started/)
+  assert.match(none.error, /not-installed is not installed on this computer.*Setup page/)
 })
 
 test('a bot that is kept from pushing, committing or editing is refused by a guard in front of git, whatever AI runs it', async (t) => {
