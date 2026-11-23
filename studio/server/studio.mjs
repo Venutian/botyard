@@ -378,6 +378,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process
     }
   } catch (err) {
     console.error(err.message)
+    // The log is a stream that would not be written before the exit: the reason goes in at once, so the
+    // desktop app can show it (23 Nov 2026: a Windows start failed with an empty log and no reason).
+    if (process.env.BOTYARD_LOG_DIR) {
+      try { fs.appendFileSync(path.join(process.env.BOTYARD_LOG_DIR, 'server-error.log'), `${err.stack || err.message}\n`) } catch { /* nowhere to write */ }
+    }
     process.exit(1)
   }
 }
