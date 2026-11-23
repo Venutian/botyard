@@ -404,6 +404,12 @@ def light_first():
     return os.environ.get('BOTYARD_FREE_TIER') == 'light'
 
 
+def best_first():
+    """True for a run whose bot takes the strongest free model answering, by measured pass rate, even one another run
+    is on (a money scout: its work is worth more than the share of a model's requests it takes)."""
+    return os.environ.get('BOTYARD_FREE_TIER') == 'best'
+
+
 def claim(model):
     """Records this run's model, or none, and returns the models the free builder's other live runs are on."""
     with open(BUSY, 'a+') as f:
@@ -501,6 +507,10 @@ def pick(bots, avoid_family=None):
     rested = resting()
     awake = [r for r in rows if provider_of(r[0]) not in rested]
     rows = awake or rows
+    if best_first() and not NEVER:
+        best = bots.free_best(rows, bots.read_json(bots.FREE_SCORES, {}))
+        if best:
+            return best[0]
     if light_first() and not NEVER:
         light = [m for m, f, t in rows if t != 'strong']
         for choice in ([m for m in light if m not in used], light):
