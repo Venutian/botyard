@@ -193,6 +193,22 @@ def crew_rate(scores):
     return passed / checked if checked else None
 
 
+def proven(score):
+    """How surely a model's real builds pass the checks: the low end of the 95% range of its pass rate (Wilson), so
+    23 passes in 49 counts above 2 in 3. 0 for a model with no checked build."""
+    passed = score.get('pass', 0) if isinstance(score, dict) else 0
+    n = passed + (score.get('fail', 0) if isinstance(score, dict) else 0)
+    if not n:
+        return 0.0
+    z, p = 1.96, passed / n
+    return (p + z * z / (2 * n) - z * ((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5) / (1 + z * z / n)
+
+
+def free_best(rows, scores):
+    """The strong models of `rows`, the best measured first (proven()); the list's own order breaks ties."""
+    return sorted([m for m, _, t in rows if t == 'strong'], key=lambda m: -proven(scores.get(m)))
+
+
 def weak(score, rate):
     """True when a model's builds pass clearly less often than the crew's do: WEAK_BY under the crew's rate,
     over WEAK_AFTER checks or more. A model never passing over that many is weak whatever the rate."""

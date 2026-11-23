@@ -388,6 +388,9 @@ class CrewSet:
             if spec.get('freeModels') == 'light':
                 # A scout takes the light free models first, leaving the strong ones to builds and checks.
                 config['env']['BOTYARD_FREE_TIER'] = plain('light')
+            elif spec.get('freeModels') == 'best':
+                # The strongest free model answering, by measured pass rate, even one another run is on.
+                config['env']['BOTYARD_FREE_TIER'] = plain('best')
             if spec.get('pace') in ('build', 'check', 'scout'):
                 # How the day's free pace counts this bot's starts, set by its role, not by the models it takes.
                 config['env']['BOTYARD_PACE_KIND'] = plain(spec['pace'])
