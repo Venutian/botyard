@@ -96,65 +96,6 @@ CONTINUE = ('The free model you were running on ran out partway through this tas
 NO_TOOLS_FOR = 86400
 
 
-class ContextTracker:
-    """Tracks the session's context size from step_finish events. Returns True when handover is due."""
-
-    def __init__(self, model):
-        self.model = model
-        self.max_context = CONTEXT_MAX_PER_MODEL.get(model, 262144)
-        self.handover_limit = min(CONTEXT_HANDOVER, self.max_context - 10000)
-        self.total_tokens = 0
-        self.handover_done = False
-        self.state_comment = None
-
-    def feed(self, event):
-        """Process a step_finish event, update token count. Returns state comment if handover triggered."""
-        if event.get('type') != 'step_finish':
-            return None
-        part = event.get('part') or {}
-        tokens = part.get('tokens')
-        if not isinstance(tokens, dict):
-            return None
-        step_tokens = (
-            tokens.get('input', 0) +
-            tokens.get('output', 0) +
-            tokens.get('reasoning', 0) +
-            tokens.get('cache_read', 0) +
-            tokens.get('cache_write', 0)
-        )
-        self.total_tokens += step_tokens
-        if not self.handover_done and self.total_tokens >= self.handover_limit:
-            self.handover_done = True
-            self.state_comment = self._make_state_comment()
-            return self.state_comment
-        return None
-
-    def _make_state_comment(self):
-        files = self._get_touched_files()
-        files_str = ', '.join(files) if files else 'none'
-        return (f"State: done {self.total_tokens:,} tokens used on {self.model}; "
-                f"left: continue the task; "
-                f"files touched: {files_str}")
-
-    def _get_touched_files(self):
-        """Get list of modified files from git status."""
-        try:
-            import subprocess
-            result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0 and result.stdout.strip():
-                files = []
-                for line in result.stdout.strip().split('\n'):
-                    if line.strip():
-                        # Format: "XY filename" where X=index status, Y=worktree status
-                        parts = line.split(maxsplit=1)
-                        if len(parts) == 2:
-                            files.append(parts[1])
-                return files[:10]  # Limit to 10 files
-        except Exception:
-            pass
-        return []
-
-
 class Loops:
     """Counts identical tool calls against the worktree as it stood. feed() takes OpenCode's JSON events
     one at a time and returns a short description of the call once it has repeated too often."""
@@ -252,17 +193,24 @@ BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
 # over to a model that can (same session), instead of failing the run.
 CONTEXT = ('context length', 'context window', 'context limit', 'maximum context length', 'prompt is too long', 'token count exceeds', 'exceeds the context', 'too many tokens')
 
-# Context handover: free runs hand over before the context fills.
+# A session that grows past CONTEXT_HANDOVER tokens hands over to a fresh one at the end of a step, before the model's
+# window fills (week to 24 Nov: 98 free runs died on "exceeds the model maximum context length of 262144", 49M
+# tokens spent for nothing). The size is OpenCode's own count of the last step (part.tokens.total), which is the whole
+# context sent. CONTEXT_HANDOVER_FOR moves the point for a free model whose window is known to be smaller than 262144.
 CONTEXT_HANDOVER = 200000
-# Per-model override for max context (default 262144). Models with known smaller limits go here.
-CONTEXT_MAX_PER_MODEL = {
-    'openai/gpt-4o-mini': 128000,
-    'openai/gpt-4o': 128000,
-    'anthropic/claude-3-haiku': 200000,
-    'anthropic/claude-3-sonnet': 200000,
-    'google/gemini-1.5-flash': 1000000,
-    'google/gemini-1.5-pro': 2000000,
-}
+CONTEXT_HANDOVER_FOR = {}
+# The session is asked once for its state before it is left; an answer that takes longer than this is not waited for.
+STATE_WAIT = 180
+ASK_STATE = ('This session is near the end of its context window ({size:,} of about 262,144 tokens), so the work goes '
+             'on in a new session that knows nothing of this one. Do not call any tool. Answer now in under 200 words of '
+             'plain text with three parts. DONE: what is finished (and committed, with the commit). LEFT: what is still '
+             'to do, in order, starting with the very next step. FILES: the files you changed.')
+RESUME = ('That is the state a previous session on this task wrote when its context filled; you go on from it in a new '
+          'session. Check it against the worktree (git status, git log) before you trust it, then carry on from where '
+          'it stopped: do not start the task again from the top. The task as it was first given:\n\n{task}')
+CONTEXT_FRESH = ('A previous session on this task ran out of context before it could write its state, so you go on in a '
+                 'new session. Look at git status, git log and the job\'s comments to see what is already done, then '
+                 'carry on from there: do not start again from the top. The task as it was first given:\n\n{task}')
 
 
 # Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
@@ -436,6 +384,95 @@ def alive(pid):
         return False
 
 
+def context_size(event):
+    """The session's context size in tokens at the end of a step: OpenCode's step_finish carries part.tokens with
+    total, input, output, reasoning and cache.read / cache.write (read from opencode.db, 24 Nov 2026). Each step sends
+    the whole session, so the last step's count is the size; steps are never added up. None for any other event."""
+    if not isinstance(event, dict) or event.get('type') != 'step_finish':
+        return None
+    tokens = (event.get('part') or {}).get('tokens')
+    if not isinstance(tokens, dict):
+        return None
+    total = tokens.get('total')
+    if isinstance(total, (int, float)) and total > 0:
+        return int(total)
+    cache = tokens.get('cache') if isinstance(tokens.get('cache'), dict) else {}
+    parts = (tokens.get('input'), tokens.get('output'), tokens.get('reasoning'), cache.get('read'), cache.get('write'))
+    return int(sum(n for n in parts if isinstance(n, (int, float)))) or None
+
+
+def handover_at(model):
+    """The context size at which a session on `model` hands over to a fresh one."""
+    return CONTEXT_HANDOVER_FOR.get(model, CONTEXT_HANDOVER)
+
+
+def carries_session(args):
+    """True when the run starts in an earlier session (--session or -s), which brings that session's history along."""
+    return any(a in ('--session', '-s') or a.startswith('--session=') for a in args)
+
+
+def ask_state(opencode, args, model, session, size, out=None, wait=None):
+    """Asks the full session once, with no tools, for a short state (done, left, files) and returns its text, or None
+    when it gives none in time. Its events go on to the run's output so the engine books the tokens."""
+    out = out or sys.stdout
+    try:
+        child = subprocess.Popen([opencode, *with_model(without_session(args), model, session)], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+        got, _ = child.communicate(ASK_STATE.format(size=size), timeout=wait or STATE_WAIT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        got = child.communicate()[0] or ''
+    except OSError:
+        return None
+    said = []
+    for line in (got or '').splitlines():
+        out.write(line + '\n')
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get('type') == 'text':
+            said.append(str((event.get('part') or {}).get('text') or ''))
+    out.flush()
+    text = '\n'.join(t.strip() for t in said if t.strip()).strip()
+    return text[:3000] or None
+
+
+def changed_files(run=subprocess.run):
+    """The worktree's changed files (git status), at most 20: the state when the model gives none."""
+    try:
+        got = run(['git', 'status', '--porcelain'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line[3:] for line in (got.stdout or '').splitlines() if len(line) > 3][:20]
+
+
+def handover_comment(size, model, state, files=None):
+    """The comment the job gets at a handover: the session's size and model, then the model's own state."""
+    if not state:
+        state = ('The session did not write its state in time. Files changed in the worktree: '
+                 f"{', '.join(files) if files else 'none'}.")
+    return f"Context handover at {size:,} tokens on {model}: this session stops and a fresh one goes on.\n\n{state}"
+
+
+def post_comment(text):
+    """Posts `text` as a comment on the run's own job. False when the run has no job or the post fails."""
+    base, job = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
+    if not (base and job):
+        return False
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST',
+                                     data=json.dumps({'body': text + '\n\n<!-- botyard-script: free-runner -->'}).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
+        urllib.request.urlopen(req, timeout=20).close()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def stop_child(child, wait=30):
     """Waits for a stopped OpenCode to exit, and kills it if it has not after `wait` seconds: a slow exit crashed the
     whole run with TimeoutExpired (18 Nov, four scout runs failed that way)."""
@@ -593,25 +630,6 @@ def say_same_family(bots, model, post=None):
         return post(text)
     if not (base and job):
         return False
-    try:
-        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST', data=json.dumps({'body': text}).encode(),
-                                     headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
-        urllib.request.urlopen(req, timeout=20).close()
-        return True
-    except (OSError, ValueError):
-        return False
-
-
-def post_state_comment(state_text, model, tokens_used, tools_count):
-    """Posts the context handover state as a comment on the job."""
-    base, job = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
-    if not (base and job):
-        return False
-    text = (f"Context handover at {tokens_used:,} tokens on {model}\n\n"
-            f"{state_text}\n\n"
-            f"Tools used this session: {tools_count}\n\n"
-            f"<!-- botyard-script: free-runner -->")
-    note(f'Context handover state posted to job: {tokens_used:,} tokens, {tools_count} tools')
     try:
         req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST', data=json.dumps({'body': text}).encode(),
                                      headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
@@ -843,10 +861,11 @@ def main():
     signal.signal(signal.SIGINT, stop)
 
     loops = Loops()
-    context_tracker = ContextTracker(model)
     looped = 0
     retried = 0
-    handover_done = False
+    # The session's context size at its last step end, whether it brings history from before this start, and the last
+    # handover comment of this run (the state a fresh session after a context error starts from).
+    size, carried, handed = 0, carries_session(args), None
     # Tool calls over the whole run (every start of it), so a short last step after a notice does not count as none.
     first_prompt, fresh_start, ran_tools = prompt, False, 0
     started, minutes, noticed = clock(), run_minutes(), False
@@ -860,14 +879,11 @@ def main():
         lines = queue.Queue()
         threading.Thread(target=lambda: [lines.put(line) for line in child.stdout] + [lines.put(None)], daemon=True).start()
         heard, ended, ran_out, circling, failed = time.time(), False, False, None, None
-        told = False
+        told = handing = False
         while not ended:
             try:
                 line = lines.get(timeout=10)
             except queue.Empty:
-                if child.poll() is not None:
-                    ended = True
-                    break
                 line = ''
             if line is None:
                 ended = True
@@ -900,18 +916,15 @@ def main():
                     circling = loops.feed(event) or circling
                     failed = error_of(event) or failed
                     step_ended = event.get('type') == 'step_finish'
-                    # Context handover: track tokens and trigger fresh session at limit
-                    if not handover_done and step_ended:
-                        state = context_tracker.feed(event)
-                        if state:
-                            handover_done = True
-                            note(f'Context handover at {context_tracker.total_tokens:,} tokens on {model}; posting state and starting fresh session')
-                            sys.stderr.write(f'Context limit reached ({context_tracker.total_tokens:,} tokens); handing over to fresh session.\n')
-                            os.killpg(child.pid, signal.SIGTERM)
-                            stop_child(child)
-                            break
+                    size = context_size(event) or size
                 except ValueError:
                     step_ended = False
+                if step_ended and session and size >= handover_at(model):
+                    # Past the handover point at a step's end: stopped here, before the window fills.
+                    handing = True
+                    os.killpg(child.pid, signal.SIGTERM)
+                    stop_child(child)
+                    break
                 if not circling and session and notice_due(started, minutes, clock(), noticed, step_ended):
                     # STANDARDS.md rule 22: the model is told once at 80% of the limit. OpenCode takes its prompt
                     # once per start, so the run is stopped at a step's end and goes on in the same session with the notice.
@@ -938,17 +951,17 @@ def main():
             break
         code = child.wait()
         ran_tools += loops.tools
-        if handover_done:
-            # Context handover: restart with fresh session (no --session) and state comment as prompt
-            state_comment = context_tracker.state_comment or f"State: done {context_tracker.total_tokens:,} tokens used; left: continue; files: check git status"
-            # Post state comment to job before starting fresh session
-            post_state_comment(state_comment, model, context_tracker.total_tokens, loops.tools)
-            note(f'Context handover: starting fresh session with state on {model}')
-            args, model, session = with_model(without_session(args), model, None), model, None
-            claim(model)
-            prompt = state_comment
-            handover_done = False
-            context_tracker = ContextTracker(model)
+        if handing:
+            # Once per session: the full session is asked for its state, the state goes on the job, and the work
+            # goes on in a new session (no --session) whose prompt begins with that state.
+            state = ask_state(bots.OPENCODE, args, model, session, size)
+            handed = handover_comment(size, model, state, None if state else changed_files())
+            post_comment(handed)
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            note(f'The free builder handed over on {task} at {size:,} tokens on {model}; {"state written" if state else "no state"}, fresh session')
+            sys.stderr.write(f'The session reached {size:,} tokens: its state is on the job and a fresh session goes on.\n')
+            args, session, size, carried = with_model(without_session(args), model, None), None, 0, False
+            prompt = handed + '\n\n' + RESUME.format(task=first_prompt)
             loops = Loops()
             continue
         if told:
@@ -1022,24 +1035,8 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
-        ctx_err = code and failed and context_error(failed)
-        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or ctx_err):
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
-        # Context error: start fresh session with state (or original prompt + note), never same oversized session
-        if ctx_err:
-            state = context_tracker.state_comment if context_tracker.handover_done else None
-            if state is None:
-                state = f"Note: previous session hit context limit ({context_tracker.total_tokens:,} tokens). Original task: {first_prompt[:200]}"
-            # Post state comment to job
-            post_state_comment(state, model, context_tracker.total_tokens, loops.tools)
-            note(f'Context error on {model}; starting fresh session with state')
-            sys.stderr.write(f'Context limit exceeded; continuing in fresh session.\n')
-            args, model, session = with_model(without_session(args), model, None), model, None
-            claim(model)
-            prompt = state
-            context_tracker = ContextTracker(model)
-            loops = Loops()
-            continue
         if no_tools(code, ran_tools, first_prompt):
             task = botyard_home.run_var('JOB_ID', '?')[:8]
             fallback.set_free_aside(bots, model, 'made no tool calls on a real task', until=int(time.time() + NO_TOOLS_FOR))
