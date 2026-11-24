@@ -5,13 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
 import { portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
-import { pileName } from './Jobs';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
 import { PcLoadCard } from '../ui/PcLoad';
-import { Icon } from '../ui/Icon';
+import { Icon, IconName, isIcon } from '../ui/Icon';
 import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, GlassButton, Group, Hinted, Label, Sign, styles as kit, Txt, Words } from '../ui/kit';
 import { Tag } from '../ui/page';
@@ -22,7 +21,29 @@ import { TrayBar } from './Tray';
 const REFRESH_MS = 15_000;
 /** The last answer, kept on the phone so the screen is full the moment the app opens. */
 const STORE_KEY = 'manager:last';
-const SHOWN_FEED = 12;
+const SHOWN_FEED = 8;
+const SHOWN_WORK = 8;
+const SHOWN_PROJECTS = 6;
+/** Open work with nothing done for this many hours is folded away as not moving. */
+const STALL_HOURS = 3;
+
+/** The top line, short: who is working and what needs a look, without the list of jobs ("7 bots are working: Fred on ...  and more."). */
+export const headline = (state: string) => state.replace(/:[^.]*(?:\.\.\.|…)?[^.]*\./, '.').replace(/\s+/g, ' ').trim();
+
+/** The jobs pile a problem line opens, when it names one. */
+const troublePile = (text: string): JobPile | undefined => (/blocked/i.test(text) ? 'blocked' : /in progress/i.test(text) ? 'inhand' : undefined);
+
+/** A view of the owner's own (Engram, a page), as a small button with its icon. */
+function ViewButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const { t } = useLook();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+      style={({ pressed }) => [styles.viewButton, { backgroundColor: t.card, borderColor: t.line, borderRadius: t.r.button }, pressed && kit.dim]}>
+      <Icon name={icon} size={18} color={t.accentText} />
+      <Txt size={14} weight={600}>{label}</Txt>
+    </Pressable>
+  );
+}
 const STEP_NAMES = ['Build', 'Check', 'Final check', 'Merge', 'Push'];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -110,6 +131,9 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [allFeed, setAllFeed] = useState(false);
+  const [allWork, setAllWork] = useState(false);
+  const [showStalled, setShowStalled] = useState(false);
+  const [showCrew, setShowCrew] = useState(false);
   const shown = useRef<Manager | null>(null);
   const [flow, setFlow] = useState<Flow | null>(null);
   const [flowWindow, setFlowWindow] = useState<FlowWindow>('now');
@@ -212,6 +236,10 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
   }
 
   const open = view.lines.filter((line) => line.open);
+  // Work nobody has touched for hours is not work going on: it is shown apart, folded, so what moves is on top.
+  const isStalled = (line: WorkLine) => ['build', 'check', 'fix', 'ruling'].includes(line.stage) && view.at - line.at >= STALL_HOURS * 3_600_000;
+  const moving = open.filter((line) => !isStalled(line));
+  const stalled = open.filter(isStalled);
   // Each bot's colour by its name, the one its robot wears: a line is coloured by the bot on it.
   const colours = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id]).colour]));
   const feed = allFeed ? view.feed : view.feed.slice(0, SHOWN_FEED);
@@ -234,7 +262,7 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
     >
       <View style={styles.head}>
         <View style={kit.flex}>
-          {t.plates ? <Sign size={30} accessibilityRole="header">{view.state}</Sign> : <Txt size={22} weight={700} accessibilityRole="header" style={styles.state}>{view.state}</Txt>}
+          {t.plates ? <Sign size={28} accessibilityRole="header">{headline(view.state)}</Sign> : <Txt size={22} weight={700} accessibilityRole="header" style={styles.state}>{headline(view.state)}</Txt>}
           <Txt size={12} color={t.ink3}>As of {clock(new Date(view.at).toISOString())}</Txt>
           <ConnectionBadge connection={connection} />
         </View>
@@ -244,6 +272,12 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
         </View>
       </View>
       {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">Showing the last update. {error}</Txt> : null}
+
+      {/* The owner's other views, one tap from the top: Engram (the notes) and the owner's own pages on screens of their own. */}
+      <View style={styles.views}>
+        <ViewButton icon="sparkle" label="Engram" onPress={() => nav.push({ name: 'engram' })} />
+        {ownPages.map((page) => <ViewButton key={page.name} icon={isIcon(page.icon) ? page.icon : 'book'} label={page.title} onPress={() => nav.push({ name: 'own', page: page.name, title: page.title })} />)}
+      </View>
 
       <View onLayout={(e) => { needsAt.current = e.nativeEvent.layout.y; }}>
         <Label style={styles.firstLabel}>{`Needs you (${waiting})`}</Label>
@@ -263,15 +297,26 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
         {decisions.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
       </View>
 
-      {others.length || view.trouble.length ? <Label>Also going on</Label> : null}
+      {view.trouble.length ? <Label>{`Problems (${view.trouble.length})`}</Label> : null}
+      {view.trouble.length ? (
+        <Group>
+          {view.trouble.map((item, index) => {
+            const pile = troublePile(item.text);
+            const row = (
+              <View style={[styles.trouble, index < view.trouble.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+                <View style={[styles.troubleDot, { backgroundColor: item.level === 'bad' ? t.bad : item.level === 'warn' ? t.warn : t.ink3 }]} />
+                <Txt size={14} style={kit.flex} numberOfLines={2}>{item.text}</Txt>
+                {pile ? <Icon name="chevron" size={16} color={t.ink3} /> : null}
+              </View>
+            );
+            return pile ? <Pressable key={item.text} accessibilityRole="button" onPress={() => nav.push({ name: 'jobs', pile })} style={({ pressed }) => pressed && kit.dim}>{row}</Pressable> : <View key={item.text}>{row}</View>;
+          })}
+        </Group>
+      ) : null}
+
+      {others.length ? <Label>Also going on</Label> : null}
       <View style={styles.stack}>
         {others.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
-        {view.trouble.map((item) => (
-          <View key={item.text} style={[styles.trouble, { backgroundColor: t.card, borderRadius: t.r.card }]}>
-            <View style={[styles.troubleDot, { backgroundColor: item.level === 'bad' ? t.bad : t.warn }]} />
-            <Txt size={14} style={kit.flex}>{item.text}</Txt>
-          </View>
-        ))}
       </View>
 
       {archivedCards.length ? (
@@ -287,32 +332,54 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
         </View>
       ) : null}
 
-      <PcLoadCard connection={connection} />
-
-      {/* The home views: the crew map here; Engram (the owner's notes) and the owner's own pages on screens of their own. The phone has no yard. */}
-      <Chips value={'crew' as string}
-        options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }, ...ownPages.map((p) => ({ id: `own:${p.name}`, name: p.title }))]}
-        onChange={(v) => {
-          if (v === 'engram') nav.push({ name: 'engram' });
-          const page = ownPages.find((p) => `own:${p.name}` === v);
-          if (page) nav.push({ name: 'own', page: page.name, title: page.title });
-        }}
-        hints={{ crew: DESCRIBE.home.crew, engram: DESCRIBE.home.engram }} />
-      <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
-
       <Label>Work in hand</Label>
-      {view.piles?.length ? <Chips value={'' as string} options={view.piles.map((pile) => ({ id: pile.id as string, name: pileName(pile) }))} onChange={(pile) => nav.push({ name: 'jobs', pile: pile as JobPile })} hints={Object.fromEntries(view.piles.map((pile) => [pile.id as string, (DESCRIBE.pile as Record<string, string>)[pile.name]]).filter(([, text]) => text))} /> : null}
-      {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
+      {/* The piles in one row that scrolls sideways: each opens its jobs. */}
+      {view.piles?.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.piles} style={styles.pileRow}>
+          {view.piles.map((pile) => (
+            <Pressable key={pile.id} accessibilityRole="button" accessibilityLabel={`${pile.name}: ${pile.count}`} onPress={() => nav.push({ name: 'jobs', pile: pile.id })}
+              style={({ pressed }) => [styles.pile, { backgroundColor: t.card, borderColor: pile.id === 'blocked' && pile.count ? t.bad : t.line, borderRadius: t.r.chip }, pressed && kit.dim]}>
+              <Txt size={18} weight={700} color={pile.id === 'blocked' && pile.count ? t.bad : t.ink}>{pile.count}</Txt>
+              <Txt size={12} color={t.ink2} numberOfLines={1}>{pile.name}</Txt>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}
       <View style={styles.stack}>
-        {open.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
+        {(allWork ? moving : moving.slice(0, SHOWN_WORK)).map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
       </View>
+      {moving.length > SHOWN_WORK && !allWork ? (
+        <Pressable accessibilityRole="button" onPress={() => setAllWork(true)} style={styles.more}>
+          <Txt size={14} weight={600} color={t.accentText}>Show all {moving.length}</Txt>
+          <Icon name="chevron" size={16} color={t.accentText} />
+        </Pressable>
+      ) : null}
+      {stalled.length ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: showStalled }} onPress={() => setShowStalled((v) => !v)} style={({ pressed }) => [styles.fold, { borderColor: t.line }, pressed && kit.dim]}>
+          <View style={[styles.troubleDot, { backgroundColor: t.warn }]} />
+          <Txt size={14} weight={600} style={kit.flex}>{`${stalled.length} not moving: nothing done for ${STALL_HOURS} hours or more`}</Txt>
+          <Icon name={showStalled ? 'up' : 'down'} size={16} color={t.ink2} />
+        </Pressable>
+      ) : null}
+      {showStalled ? <View style={styles.stack}>{stalled.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}</View> : null}
+      {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
+
+      {/* The crew: the pace, and who works on what. The tree is long, so it waits to be opened. */}
+      <Label>Crew</Label>
+      <PcLoadCard connection={connection} />
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCrew }} onPress={() => setShowCrew((v) => !v)} style={({ pressed }) => [styles.fold, { borderColor: t.line }, pressed && kit.dim]}>
+        <Icon name="people" size={18} color={t.accentText} />
+        <Txt size={14} weight={600} color={t.accentText} style={kit.flex}>{showCrew ? 'Hide the crew map' : 'Show the crew map: who works on what'}</Txt>
+        <Icon name={showCrew ? 'up' : 'down'} size={16} color={t.accentText} />
+      </Pressable>
+      {showCrew ? <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} /> : null}
 
       <Label>Projects</Label>
       <Group>
-        {view.projects.map((project, index) => (
+        {view.projects.slice(0, SHOWN_PROJECTS).map((project, index, list) => (
           <Pressable key={project.id} accessibilityRole="button" onPress={() => nav.push({ name: 'project', id: project.id })}
-            style={({ pressed }) => [styles.project, index < view.projects.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}>
+            style={({ pressed }) => [styles.project, index < list.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}>
             <View style={kit.flex}>
               {t.plates ? <Sign size={20}>{project.name}</Sign> : <Txt size={15} weight={600}>{project.name}</Txt>}
               <Txt size={13} color={project.blocked ? t.bad : t.ink2}>{projectLine(project)}</Txt>
@@ -321,6 +388,13 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
           </Pressable>
         ))}
       </Group>
+
+      {view.projects.length > SHOWN_PROJECTS ? (
+        <Pressable accessibilityRole="button" onPress={() => nav.push({ name: 'projects' })} style={styles.more}>
+          <Txt size={14} weight={600} color={t.accentText}>All {view.projects.length} projects</Txt>
+          <Icon name="chevron" size={16} color={t.accentText} />
+        </Pressable>
+      ) : null}
 
       <Label>Lately</Label>
       {feed.length === 0 ? <Txt color={t.ink2} style={styles.indent}>Nothing has happened today yet.</Txt> : null}
@@ -364,4 +438,10 @@ const styles = StyleSheet.create({
   dot: { borderRadius: 4, height: 8, marginTop: 6, width: 8 },
   feedTime: { marginTop: 1, width: 38 },
   more: { alignItems: 'center', flexDirection: 'row', gap: 4, justifyContent: 'center', minHeight: 48 },
+  fold: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 10, minHeight: 48 },
+  pileRow: { marginHorizontal: -18 },
+  piles: { gap: 8, paddingHorizontal: 18 },
+  pile: { borderWidth: StyleSheet.hairlineWidth, gap: 1, minHeight: 56, minWidth: 84, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  views: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  viewButton: { alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 14 },
 });
