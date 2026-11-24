@@ -83,12 +83,8 @@ function parseLink(url: string | null): Connection | null {
   return { host: params.host, token: params.token, deviceId: params.device, away: params.away, edge };
 }
 
-/** The phone chats with the studio's lead alone, so the chat tab opens that conversation instead of a list. */
-const LEAD = 'lead';
-type TabId = Tab | typeof LEAD;
-const TABS: { id: TabId; name: string; icon: IconName }[] = [
+const TABS: { id: Tab; name: string; icon: IconName }[] = [
   { id: 'home', name: 'Now', icon: 'home' },
-  { id: LEAD, name: 'Lead', icon: 'chat' },
   { id: 'studio', name: 'Studio', icon: 'studio' },
   { id: 'style', name: 'Style', icon: 'style' },
 ];
@@ -98,13 +94,14 @@ const isUnread = (bot: ChatBot, p: Prefs) => {
   return Boolean(last && !last.mine && last.at > (p.seen[bot.id] ?? ''));
 };
 
-function TabBar({ tab, onChange, unread }: { tab: Tab; onChange: (next: TabId) => void; unread: boolean }) {
+/** The bottom menu: the three places, always there. A chat is opened from Now, never from here. */
+function TabBar({ tab, onChange }: { tab: Tab; onChange: (next: Tab) => void }) {
   const { p, t } = useLook();
   const insets = useSafeAreaInsets();
   const tap = useTap();
   return (
-    <View pointerEvents="box-none" style={[styles.tabHolder, { bottom: Math.max(insets.bottom, 12) }]}>
-      <View style={[styles.tabBar, { backgroundColor: t.plates ? t.panel : t.glass, borderColor: t.outline ? (t.plates && t.dark ? '#05070a' : t.ink) : t.line, borderWidth: t.outline ? 2 : StyleSheet.hairlineWidth, boxShadow: t.shadow }, t.plates && { borderRadius: 12 }]}>
+    <View pointerEvents="box-none" style={[styles.tabHolder, { bottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.tabBar, { backgroundColor: t.glass, borderColor: t.line, boxShadow: t.shadow }]} accessibilityRole="tablist">
         {TABS.map(({ id, name, icon }) => {
           const active = tab === id;
           return (
@@ -117,11 +114,12 @@ function TabBar({ tab, onChange, unread }: { tab: Tab; onChange: (next: TabId) =
                 tap();
                 onChange(id);
               }}
-              style={[styles.tab, t.plates && { borderRadius: 8 }, active && { backgroundColor: t.plates ? t.ink : t.accent }]}
+              style={({ pressed }) => [styles.tab, pressed && { opacity: 0.7 }]}
             >
-              <Icon name={icon} size={21} color={active ? (t.plates ? t.card : t.accentInk) : t.ink2} />
-              {p.tabLabels ? <Txt size={13} weight={700} color={active ? (t.plates ? t.card : t.accentInk) : t.ink2}>{name}</Txt> : null}
-              {id === LEAD && unread ? <View style={[styles.tabDot, { backgroundColor: t.accent }]} /> : null}
+              <View style={[styles.tabIcon, active && { backgroundColor: t.accent }]}>
+                <Icon name={icon} size={20} color={active ? t.accentInk : t.ink2} weight={active ? 2.2 : 2} />
+              </View>
+              {p.tabLabels ? <Txt size={11} weight={active ? 700 : 600} color={active ? t.ink : t.ink2}>{name}</Txt> : null}
             </Pressable>
           );
         })}
@@ -230,20 +228,19 @@ function Studio({ connection, onForget }: { connection: Connection; onForget: ()
 
   const lead = leadOf(crew.bots);
   const unread = Boolean(lead && isUnread(lead, p));
-  const choose = (next: TabId) => {
-    if (next !== LEAD) return setTab(next);
+  // The lead's chat opens over Now with a way back; a studio with no lead shows the crew, any of whom can be chatted with.
+  const talk = useCallback(() => {
     if (lead) nav.push({ name: 'chat', botId: lead.id });
-    // A studio with no lead has nobody to open by default: show the crew, and any of them can be chatted with.
     else if (crew.bots?.length) nav.push({ name: 'bots' });
     else tell('No bot is here yet', crew.error || (crew.bots ? 'This studio has no bots yet. Add one from the Studio tab.' : 'The crew list is still loading. Try again in a moment.'));
-  };
+  }, [lead, crew.bots, crew.error, nav]);
   const list = (
     <>
       {p.wallpaperEverywhere ? <Wallpaper id={p.wallpaper} /> : null}
-      {tab === 'home' ? <HomeScreen connection={connection} crew={crew} nav={nav} /> : null}
+      {tab === 'home' ? <HomeScreen connection={connection} crew={crew} nav={nav} onTalk={talk} leadName={lead?.name} leadUnread={unread} /> : null}
       {tab === 'studio' ? <StudioScreen connection={connection} nav={nav} /> : null}
       {tab === 'style' ? <StyleScreen crew={crew} nav={nav} onForget={onForget} /> : null}
-      <TabBar tab={tab} onChange={choose} unread={unread} />
+      <TabBar tab={tab} onChange={setTab} />
     </>
   );
   const pushed = stack.map((route, index) => <Pushed key={`${route.name}-${index}`} route={route} connection={connection} crew={crew} nav={nav} />);
@@ -404,7 +401,7 @@ const styles = StyleSheet.create({
   resting: { alignItems: 'center', flex: 1, gap: 10, justifyContent: 'center' },
   center: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   tabHolder: { alignItems: 'center', left: 0, position: 'absolute', right: 0 },
-  tabBar: { borderRadius: 30, flexDirection: 'row', gap: 4, padding: 5 },
-  tab: { alignItems: 'center', borderRadius: 25, flexDirection: 'row', gap: 7, justifyContent: 'center', minHeight: 48, minWidth: 58, paddingHorizontal: 13 },
-  tabDot: { borderRadius: 4, height: 8, position: 'absolute', right: 12, top: 9, width: 8 },
+  tabBar: { borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', paddingHorizontal: 6, paddingVertical: 6, width: '88%', maxWidth: 420 },
+  tab: { alignItems: 'center', flex: 1, gap: 3, justifyContent: 'center', minHeight: 52 },
+  tabIcon: { alignItems: 'center', borderRadius: 16, height: 32, justifyContent: 'center', width: 56 },
 });

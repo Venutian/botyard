@@ -310,6 +310,10 @@ export async function studioSummary(options) {
   for (const need of [...asked, ...inChats]) need.project = projectOfJob.get(need.id) || ''
   const view = (issue) => jobView(issue, names, projectNames)
   const liveAgents = new Set(live.map((run) => run.agentId))
+  const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
+  const unnamed = new Set(live.filter((run) => !run.issueId).map((run) => run.agentId))
+  const now = Date.now()
+  const going = (i) => liveJobs.has(i.id) || unnamed.has(i.assigneeAgentId) || now - (Date.parse(i.startedAt || '') || 0) < 15 * 60_000
   const looks = crewLooks(agents)
   const byNewest = [...issues].sort((a, b) => String(b.lastActivityAt || '').localeCompare(String(a.lastActivityAt || '')))
   return {
@@ -317,7 +321,10 @@ export async function studioSummary(options) {
     bots: agents.map((a) => botView(a, liveAgents, looks)),
     projects: projects.map((p) => ({ id: p.id, name: p.name })),
     needsYou: [...inChats, ...asked],
-    running: byNewest.filter((i) => RUNNING.has(i.status)).map(view),
+    // Running means a run is going on the job (or it started in the last quarter hour): the engine keeps some
+    // jobs in progress after their run ends, and those are counted apart as stalled.
+    running: byNewest.filter((i) => RUNNING.has(i.status) && going(i)).map(view),
+    stalled: byNewest.filter((i) => RUNNING.has(i.status) && !going(i)).length,
     queued: byNewest.filter((i) => QUEUED.has(i.status)).map(view),
     finished: byNewest.filter((i) => FINISHED.has(i.status) && !isCheck(i)).slice(0, SHOWN_DONE).map(view),
     usage: usageView(spend),

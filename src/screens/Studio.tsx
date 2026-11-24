@@ -8,7 +8,9 @@ import { ask, tell } from '../ui/ask';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { Icon } from '../ui/Icon';
 import { DESCRIBE } from '../ui/describe';
-import { Button, Chips, Field, GlassButton, Group, Hazard, Hinted, Label, Row, styles as kit, Title, Toggle, Txt } from '../ui/kit';
+import { Button, Chips, Field, GlassButton, Group, Hazard, Hinted, Label, Row, styles as kit, Title, Toggle, Txt, useTap } from '../ui/kit';
+import { IconName } from '../ui/Icon';
+import { alpha } from '../theme/color';
 
 const REFRESH_MS = 20_000;
 const LIMITS = [1, 2, 5, 10, 20, 50].map((m) => ({ id: String(m * 1_000_000), name: `${m}M` }));
@@ -100,14 +102,14 @@ function ReportCard({ report, onOpen }: { report: DayReport; onOpen: (id: string
 export function SortButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { t } = useLook();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={({ pressed }) => [styles.sortButton, { borderColor: t.ink3 }, t.plates && { borderRadius: t.r.chip, borderWidth: 2 }, pressed && kit.dim]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={({ pressed }) => [styles.sortButton, pressed && kit.dim]}>
       <Txt size={13} weight={600} color={t.ink2}>{label}</Txt>
     </Pressable>
   );
 }
 
 export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { item: NeedsYou; connection: Connection; onDone: () => void; onOpen: (item: NeedsYou) => void; onMark?: (item: NeedsYou, change: { read?: boolean; archived?: boolean }) => void }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const act = (decision: 'approve' | 'reject') => {
@@ -135,13 +137,13 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
         styles.card,
         { backgroundColor: item.read ? 'transparent' : t.card, borderColor: t.outline ? t.ink : tone, borderLeftWidth: 4, borderWidth: t.outline ? 2 : 0, boxShadow: item.read ? undefined : t.shadow },
         // A plate: small corners, and hazard stripes along the top while it is new.
-        t.plates && { borderRadius: t.r.card, borderLeftWidth: 2, overflow: 'hidden', borderColor: item.read ? t.line : t.dark ? '#05070a' : t.ink },
+        t.plates && { borderRadius: t.r.card, borderWidth: item.read ? StyleSheet.hairlineWidth : 0, borderLeftWidth: item.read ? StyleSheet.hairlineWidth : 0, overflow: 'hidden', borderColor: t.line },
         t.plates && !item.read && styles.striped,
       ]}
     >
       {t.plates && !item.read ? <Hazard /> : null}
       <Txt size={12} weight={700} color={tone}>{item.read || t.plates ? '' : '● '}{tag}</Txt>
-      {tag && (DESCRIBE.status as Record<string, string>)[tag] ? <Txt size={13} color={t.ink2}>{(DESCRIBE.status as Record<string, string>)[tag]}</Txt> : null}
+      {p.explain && tag && (DESCRIBE.status as Record<string, string>)[tag] ? <Txt size={13} color={t.ink2}>{(DESCRIBE.status as Record<string, string>)[tag]}</Txt> : null}
       <Txt size={16} weight={item.read ? 400 : 600} color={item.read ? t.ink2 : undefined}>{item.title}</Txt>
       {item.detail ? <Txt size={14} color={t.ink2}>{item.detail}</Txt> : null}
       {item.kind === 'approval' ? <Field value={note} onChangeText={setNote} placeholder="Add a note (optional)" accessibilityLabel="A note with your answer, optional" maxLength={2000} style={{ backgroundColor: t.control }} /> : null}
@@ -164,22 +166,72 @@ export function NeedsYouCard({ item, connection, onDone, onOpen, onMark }: { ite
   );
 }
 
-/** Every section of the studio the PC map has, one line each: what it answers. */
-const SECTIONS: { title: string; detail: string; route: Route }[] = [
-  { title: 'Jobs', detail: 'Any job: in hand, waiting, backlog, blocked, done today or cancelled, by project or bot, or searched', route: { name: 'jobs' } },
-  { title: 'Projects', detail: 'Your ranking, the shelf, each project in full; add one', route: { name: 'projects' } },
-  { title: 'Bots', detail: 'Who is working, resting or stuck and why; add a bot or change one', route: { name: 'bots' } },
-  { title: 'Runs and activity', detail: 'Every run and why one failed; who did what', route: { name: 'runs' } },
-  { title: 'Models and spend', detail: 'Who runs on what, free models, and the week by bot', route: { name: 'models' } },
-  { title: 'Improvements', detail: 'What the audits found worth improving, its status, and the job that carries it', route: { name: 'improvements' } },
-  { title: 'Routines and helpers', detail: 'Work that starts by itself, and the scripts that keep the crew moving', route: { name: 'routines' } },
-  { title: 'Tracks', detail: 'How each request moves step by step, what waits for you, and what it cost', route: { name: 'tracks' } },
-  { title: 'Launch', detail: 'Every product on every store and channel: where it stands, and what it waits on', route: { name: 'launch' } },
-  { title: 'Library', detail: 'Pictures, documents and files the crew made', route: { name: 'library' } },
-  { title: 'Connectors', detail: 'Services the crew may use, who may use each, and the sign-ins', route: { name: 'connectors' } },
-  { title: 'Company', detail: 'Members and open invites', route: { name: 'company' } },
-  { title: 'Setup', detail: 'What the studio needs to run: free models, your AI sign-ins, keys', route: { name: 'setup' } },
+/**
+ * Every section of the studio the PC map has. The four used most are big tiles that say how things stand;
+ * the rest are small tiles, three to a row. `detail` is what a screen reader says.
+ */
+type Section = { title: string; short: string; detail: string; icon: IconName; route: Route };
+const MAIN: Section[] = [
+  { title: 'Jobs', short: 'In hand, waiting, done', detail: 'Any job: in hand, waiting, backlog, blocked, done today or cancelled, by project or bot, or searched', icon: 'jobs', route: { name: 'jobs' } },
+  { title: 'Projects', short: 'Ranking and goals', detail: 'Your ranking, the shelf, each project in full; add one', icon: 'folder', route: { name: 'projects' } },
+  { title: 'Bots', short: 'Who works on what', detail: 'Who is working, resting or stuck and why; add a bot or change one', icon: 'bot', route: { name: 'bots' } },
+  { title: 'Runs', short: 'Every run, and why one failed', detail: 'Every run and why one failed; who did what', icon: 'activity', route: { name: 'runs' } },
 ];
+const MORE: Section[] = [
+  { title: 'Models', short: '', detail: 'Who runs on what, free models, and the week by bot', icon: 'chip', route: { name: 'models' } },
+  { title: 'Tracks', short: '', detail: 'How each request moves step by step, what waits for you, and what it cost', icon: 'route', route: { name: 'tracks' } },
+  { title: 'Launch', short: '', detail: 'Every product on every store and channel: where it stands, and what it waits on', icon: 'rocket', route: { name: 'launch' } },
+  { title: 'Routines', short: '', detail: 'Work that starts by itself, and the scripts that keep the crew moving', icon: 'repeat', route: { name: 'routines' } },
+  { title: 'Improve', short: '', detail: 'What the audits found worth improving, its status, and the job that carries it', icon: 'sparkle', route: { name: 'improvements' } },
+  { title: 'Library', short: '', detail: 'Pictures, documents and files the crew made', icon: 'book', route: { name: 'library' } },
+  { title: 'Connectors', short: '', detail: 'Services the crew may use, who may use each, and the sign-ins', icon: 'plug', route: { name: 'connectors' } },
+  { title: 'Company', short: '', detail: 'Members and open invites', icon: 'people', route: { name: 'company' } },
+  { title: 'Setup', short: '', detail: 'What the studio needs to run: free models, your AI sign-ins, keys', icon: 'sliders', route: { name: 'setup' } },
+];
+
+/** How a big tile's section stands now, from the studio's summary; nothing when there is nothing to say. */
+function tileStatus(title: string, s: Summary) {
+  if (title === 'Jobs') return `${s.running.length} running, ${s.queued.length} queued${s.stalled ? `, ${s.stalled} stuck` : ''}`;
+  if (title === 'Bots') {
+    const working = s.bots.filter((b) => b.status === 'running').length;
+    return `${working} of ${s.bots.length} working`;
+  }
+  if (title === 'Projects') return `${s.projects.length} ${s.projects.length === 1 ? 'project' : 'projects'}`;
+  if (title === 'Runs' && s.report) return `${s.report.finishedCount} finished in 24 h`;
+  return undefined;
+}
+
+/** A section as a tile: its icon on a tinted square, its name, and on a big tile how it stands now. */
+function Tile({ section, big, status, onPress }: { section: Section; big?: boolean; status?: string; onPress: () => void }) {
+  const { p, t } = useLook();
+  const tap = useTap();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={section.title}
+      accessibilityHint={[status, section.detail].filter(Boolean).join('. ')}
+      onPress={() => { tap(); onPress(); }}
+      style={({ pressed }) => [
+        big ? styles.bigTile : styles.smallTile,
+        { backgroundColor: t.card, borderColor: t.line, borderRadius: t.r.card, boxShadow: t.shadow },
+        pressed && styles.tilePressed,
+      ]}
+    >
+      <View style={[big ? styles.bigIcon : styles.smallIcon, { backgroundColor: alpha(t.accent, t.dark ? 0.16 : 0.2) }]}>
+        <Icon name={section.icon} size={big ? 22 : 20} color={t.accentText} />
+      </View>
+      {big ? (
+        <View style={styles.bigText}>
+          <Txt size={17} weight={700} numberOfLines={1}>{section.title}</Txt>
+          <Txt size={13} color={status ? t.ink : t.ink2} weight={status ? 600 : 400} numberOfLines={2}>{status || section.short}</Txt>
+        </View>
+      ) : (
+        <Txt size={13} weight={600} numberOfLines={1} style={styles.smallName}>{section.title}</Txt>
+      )}
+      {big && p.explain ? <Txt size={12} color={t.ink3}>{section.detail}</Txt> : null}
+    </Pressable>
+  );
+}
 
 export function StudioScreen({ connection, nav }: { connection: Connection; nav: Nav }) {
   const { t } = useLook();
@@ -221,7 +273,6 @@ export function StudioScreen({ connection, nav }: { connection: Connection; nav:
         <View style={styles.head}>
           <View style={kit.flex}>
             <Title>{summary?.company || 'Studio'}</Title>
-            {summary ? <Txt color={t.ink2}>{summary.running.length} running, {summary.queued.length} queued</Txt> : null}
             <ConnectionBadge connection={connection} />
           </View>
           <GlassButton icon="plus" label="New job" hint={DESCRIBE.icon.newJob} onPress={() => nav.push({ name: 'new' })} />
@@ -229,12 +280,16 @@ export function StudioScreen({ connection, nav }: { connection: Connection; nav:
         {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">{summary ? 'Showing the last update. ' : ''}{error}</Txt> : null}
         {!summary && !error ? <ActivityIndicator color={t.accent} style={styles.firstLabel} accessibilityLabel="Loading" /> : null}
 
-        <Label style={styles.firstLabel}>Sections</Label>
-        <Group>
-          {SECTIONS.map((section, index) => (
-            <Row key={section.title} title={section.title} detail={section.detail} last={index === SECTIONS.length - 1} onPress={() => nav.push(section.route)} right={<Icon name="chevron" size={18} color={t.ink3} />} />
+        <View style={[styles.grid, styles.firstLabel]}>
+          {MAIN.map((section) => (
+            <Tile key={section.title} section={section} big onPress={() => nav.push(section.route)}
+              status={summary ? tileStatus(section.title, summary) : undefined} />
           ))}
-        </Group>
+        </View>
+        <Label>More</Label>
+        <View style={styles.grid}>
+          {MORE.map((section) => <Tile key={section.title} section={section} onPress={() => nav.push(section.route)} />)}
+        </View>
 
         {summary?.report ? (
           <>
@@ -279,7 +334,15 @@ const styles = StyleSheet.create({
   card: { borderRadius: 18, gap: 4, padding: 14 },
   striped: { paddingTop: 21 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  sort: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
-  sortButton: { borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 12, paddingVertical: 5 },
+  sort: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginBottom: -8, marginTop: 0 },
+  sortButton: { justifyContent: 'center', minHeight: 44, minWidth: 44, paddingHorizontal: 8 },
   reportLine: { justifyContent: 'center', minHeight: 44 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  bigTile: { borderWidth: StyleSheet.hairlineWidth, flexBasis: '46%', flexGrow: 1, gap: 14, minHeight: 132, padding: 14 },
+  smallTile: { alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, flexBasis: '30%', flexGrow: 1, gap: 10, justifyContent: 'center', minHeight: 96, paddingHorizontal: 6, paddingVertical: 14 },
+  tilePressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+  bigIcon: { alignItems: 'center', borderRadius: 12, height: 42, justifyContent: 'center', width: 42 },
+  smallIcon: { alignItems: 'center', borderRadius: 12, height: 40, justifyContent: 'center', width: 40 },
+  bigText: { gap: 2 },
+  smallName: { textAlign: 'center' },
 });

@@ -76,6 +76,21 @@ test('one piece of work is one line through its build, checks and fix rounds', (
   assert.match(manager.state, /^1 bot is working: Lead checking Town kit LH-3\./)
 })
 
+test('a job left in progress with no run going is not counted as work, and is said once as stuck', () => {
+  const now = Date.parse('2026-11-24T14:00:00Z')
+  const job = (id, identifier, status, startedAt) => ({ id, identifier, title: `Town kit ${identifier}`, status, assigneeAgentId: 'builder', projectId: 'p1', startedAt, updatedAt: startedAt, createdAt: startedAt })
+  const m = buildManager({
+    agents: [{ id: 'builder', name: 'Builder', role: 'engineer', status: 'idle', adapterConfig: {} }],
+    issues: [job('a', 'LH-1', 'in_progress', '2026-11-24T13:50:00Z'), job('b', 'LH-2', 'in_progress', '2026-11-21T10:00:00Z'), job('c', 'LH-3', 'in_progress', '2026-11-22T10:00:00Z')],
+    projects: [{ id: 'p1', name: 'Lighthouse' }],
+    live: [{ agentId: 'builder', issueId: 'a' }],
+    files: noFiles(),
+    now,
+  })
+  assert.match(m.state, /^1 bot is working/)
+  assert.ok(m.trouble.some((t) => t.text === '2 jobs are marked in progress with no run going for over an hour'))
+})
+
 test('work that failed its check is trouble until something newer starts', () => {
   number = 0
   const build = job('Frame clock', 'done', 'freelancer')

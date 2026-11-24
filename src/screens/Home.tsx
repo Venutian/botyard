@@ -101,7 +101,7 @@ const FeedRow = memo(function FeedRow({ item, last, onOpen }: { item: FeedItem; 
 });
 
 /** The manager's home: what is going on in the studio right now, on one screen. */
-export function HomeScreen({ connection, crew, nav }: { connection: Connection; crew: Crew; nav: Nav }) {
+export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread }: { connection: Connection; crew: Crew; nav: Nav; /** Opens the lead's chat. */ onTalk: () => void; leadName?: string; /** The lead said something not yet read. */ leadUnread?: boolean }) {
   const { p, t } = useLook();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<Manager | null>(null);
@@ -239,6 +239,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
           <ConnectionBadge connection={connection} />
         </View>
         <View style={styles.headButtons}>
+          <GlassButton icon="chat" label={leadName ? `Talk to ${leadName}` : 'Talk to the crew'} dot={leadUnread} onPress={onTalk} />
           <GlassButton icon="plus" label="New job" hint={DESCRIBE.icon.newJob} onPress={() => nav.push({ name: 'new' })} />
         </View>
       </View>
@@ -266,8 +267,9 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       <View style={styles.stack}>
         {others.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
         {view.trouble.map((item) => (
-          <View key={item.text} style={[styles.trouble, { backgroundColor: t.card, borderLeftColor: item.level === 'bad' ? t.bad : t.warn }, t.plates && { borderRadius: t.r.card }]}>
-            <Txt size={14}>{item.text}</Txt>
+          <View key={item.text} style={[styles.trouble, { backgroundColor: t.card, borderRadius: t.r.card }]}>
+            <View style={[styles.troubleDot, { backgroundColor: item.level === 'bad' ? t.bad : t.warn }]} />
+            <Txt size={14} style={kit.flex}>{item.text}</Txt>
           </View>
         ))}
       </View>
@@ -338,7 +340,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
 }
 
 const styles = StyleSheet.create({
-  headButtons: { alignItems: 'flex-end', gap: 8 },
+  headButtons: { flexDirection: 'row', gap: 8 },
   allRead: { alignSelf: 'flex-end', justifyContent: 'center', minHeight: 44, paddingHorizontal: 4 },
   waiting: { alignItems: 'center', flex: 1, gap: 14, justifyContent: 'center', padding: 24 },
   centerText: { textAlign: 'center' },
@@ -348,7 +350,8 @@ const styles = StyleSheet.create({
   indent: { marginLeft: 4 },
   stack: { gap: 8 },
   shrink: { flexShrink: 1 },
-  trouble: { borderLeftWidth: 4, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
+  trouble: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  troubleDot: { borderRadius: 4, height: 8, width: 8 },
   bot: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 64, paddingHorizontal: 12, paddingVertical: 9 },
   botHead: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   card: { borderRadius: 18, gap: 3, padding: 14 },

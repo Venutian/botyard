@@ -313,7 +313,7 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
 }
 
 /** What each bot is doing this minute. A job marked running with no live run is said to be waiting. */
-function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), fold = copyGroups([]), now }) {
+function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), unnamed = new Set(), fold = copyGroups([]), now }) {
   const models = new Map(agents.map((a) => [a.id, a.adapterConfig?.model || '']))
   // A run going on a job puts its bot in that job's bay, even before the job is marked in progress.
   return issues.filter((i) => (i.status === 'in_progress' || (liveJobs.has(i.id) && i.status !== 'done' && i.status !== 'cancelled')) && i.assigneeAgentId).map((issue) => {
@@ -333,6 +333,8 @@ function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs 
       stage: what.kind === 'check' ? `Checking ${withRefs(what.of)}` : what.kind === 'ruling' ? 'Ruling' : what.kind === 'fix' ? `Fix ${what.round}` : 'Building',
       minutes: Math.max(0, Math.round((now - since) / 60_000)),
       live: liveAgents.has(issue.assigneeAgentId),
+      // A run is going on this very job; a job marked in progress whose run has ended is not being worked on.
+      running: liveJobs.has(issue.id) || unnamed.has(issue.assigneeAgentId),
     }
   }).sort((a, b) => a.minutes - b.minutes)
 }
@@ -533,8 +535,11 @@ function stateLine({ working, trouble, lines }) {
     const verb = checked ? 'checking' : w.stage === 'Ruling' ? 'ruling on' : 'on'
     return `${w.bot.split(' ')[0]} ${verb} ${short(w.title.replace(FIX, ''), 34)} ${checked || w.ref}`
   }
-  const doing = working.length
-    ? `${plural(working.length, 'bot is', 'bots are')} working: ${working.slice(0, 3).map(said).join(', ')}${working.length > 3 ? ' and more' : ''}`
+  // Only a job with a run going counts as worked on: the engine keeps some jobs "in progress" after their run ends.
+  // A job started in the last quarter hour counts too: its run may still be starting.
+  const busy = working.filter((w) => w.running || w.minutes < 15)
+  const doing = busy.length
+    ? `${plural(busy.length, 'bot is', 'bots are')} working: ${busy.slice(0, 3).map(said).join(', ')}${busy.length > 3 ? ' and more' : ''}`
     : 'Nobody is working right now'
   const open = lines.filter((l) => l.open && !['build', 'check', 'ruling'].includes(l.stage)).length
   return `${doing}.${bad ? ` ${plural(bad, 'thing needs', 'things need')} a look.` : open ? ` ${plural(open, 'piece', 'pieces')} of work ${open === 1 ? 'is' : 'are'} waiting.` : ''}`
@@ -555,11 +560,16 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     if (match) mergedAt.set(match[1], line.at)
   }
   const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
-  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, fold, now })
+  // A live run that names no job still counts for the job its bot holds.
+  const unnamed = new Set(live.filter((run) => !run.issueId).map((run) => run.agentId))
+  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, unnamed, fold, now })
   const jobs = foldKeys(issues, ['assigneeAgentId'], fold)
   const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
   const bots = botRows({ agents: fold.top, issues: jobs, projectNames, liveAgents, working, files, fold, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
+  // Jobs left in progress with no run for an hour: counted as stuck, never as work going on.
+  const stale = working.filter((w) => !w.running && w.minutes >= 60).length
+  if (stale) trouble.push({ level: 'warn', text: `${plural(stale, 'job is', 'jobs are')} marked in progress with no run going for over an hour` })
   return {
     state: stateLine({ working, trouble, lines }),
     trouble,

@@ -116,6 +116,8 @@ export type Summary = {
   plans?: Plans;
   needsYou: NeedsYou[];
   running: Job[];
+  /** Jobs marked in progress with no run going (an older door leaves it out). */
+  stalled?: number;
   queued: Job[];
   finished: Job[];
   sessions: Session[];
