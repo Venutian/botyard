@@ -119,11 +119,27 @@ def paths(value):
             yield from paths(item)
 
 
+def closed_folders():
+    """The folders no bot may touch (owner-guard.py's list). A run here is never on Claude, so no folder's readers count."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('owner_guard', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'owner-guard.py'))
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        return [row[0] for row in guard.closed_folders()]
+    except Exception:
+        return []
+
+
 def verdict(session, call):
     """Why this tool call is refused, or None to allow it."""
     name, args = call.get('name') or '', call.get('args') or call.get('rawInput') or {}
     if name in REFUSED_TOOLS:
         return f'{name} is not for the bots'
+    said = json.dumps(args, ensure_ascii=False)
+    for folder in closed_folders():
+        if folder in said:
+            return f'{folder} is closed to the bots'
     if name in ('run_command', 'send_command_input'):
         text = ' '.join(str(v) for k, v in args.items() if k.lower() in ('commandline', 'command', 'input'))
         found = forbidden(text)
