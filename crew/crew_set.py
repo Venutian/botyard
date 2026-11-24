@@ -230,7 +230,17 @@ class CrewSet:
     # ── a bot on an AI ───────────────────────────────────────────────────────────────
     # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
     # Codex, Claude) for its work: build() refuses, and its "fallbacks" are for a person to ask for on purpose.
+    # The one exception is the owner's own word in the bot's file: a fallback marked "for": "backup" may be used by a
+    # script when no free model answers, so a free bot is never idle for days.
     paid_by_hand = False
+
+    def backups(self, slug):
+        """The paid AIs a script may move a free bot to when no free model answers: its fallbacks marked
+        "for": "backup", in the order its file gives. Empty for a bot on a paid AI (its own chain moves it)."""
+        spec = self.spec(slug)
+        if spec['ai'] != 'free':
+            return []
+        return [ai for ai, f in spec['fallbacks'].items() if ai in AIS and ai != 'free' and (f or {}).get('for') == 'backup']
 
     def check_order(self, slug):
         """The AIs a checker's checks move down, in the order its file gives: its own, then each of its "fallbacks"
@@ -418,7 +428,8 @@ class CrewSet:
         lane = bool(lane and ai and ai != own['ai'])
         if lane and ai not in self.check_lanes(slug):
             raise PaidEngine(f"{own['name']} has no lane on {ai}: its file lists none with \"for\": \"checks\".")
-        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand and not lane:
+        if (ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand and not lane
+                and ai not in self.backups(slug)):
             raise PaidEngine(f"{own['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         spec = self.on(slug, ai)
         if lane:
