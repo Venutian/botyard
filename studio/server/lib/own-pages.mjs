@@ -72,7 +72,9 @@ export function readOwnPage(dir, name) {
   // "phone": true says the server file answers GET /phone with a view the phone app draws (docs: "A page on the phone").
   if (manifest.phone != null && manifest.phone !== true && manifest.phone !== false) return { why: 'its "phone" must be true or false' }
   if (manifest.phone === true && !server) return { why: 'its "phone" needs a "server" file to answer GET /phone' }
-  return { page: { name, title, does: text(manifest.does, 120), wide: manifest.wide !== false, phone: manifest.phone === true, folder, script, style, server } }
+  // "icon": one of the phone app's icon names for its tile (an unknown name gets the app's page icon).
+  const icon = typeof manifest.icon === 'string' && /^[a-z][a-z-]{0,23}$/.test(manifest.icon) ? manifest.icon : ''
+  return { page: { name, title, does: text(manifest.does, 120), wide: manifest.wide !== false, phone: manifest.phone === true, icon, folder, script, style, server } }
 }
 
 /** Every own page of this yard, by name, and the folders that are not pages with why. No folder: none. */
@@ -95,7 +97,7 @@ export function ownPages(env = process.env) {
 
 /** What the map is told of a page: where to load it from, never where it is on the disk. */
 const forMap = (p) => ({
-  name: p.name, title: p.title, does: p.does, wide: p.wide, phone: p.phone,
+  name: p.name, title: p.title, does: p.does, wide: p.wide, phone: p.phone, icon: p.icon,
   script: `${OWN_PATH}/${p.name}/files/${path.relative(p.folder, p.script).split(path.sep).join('/')}`,
   style: p.style ? `${OWN_PATH}/${p.name}/files/${path.relative(p.folder, p.style).split(path.sep).join('/')}` : '',
 })

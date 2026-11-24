@@ -86,7 +86,7 @@ test('a folder is a page only with a valid name and manifest, and every file it 
 test('a page says it has a phone view with "phone": true, and only with a server file to answer it', async () => {
   const y = yard()
   try {
-    y.page('pocket', { title: 'Pocket', script: 'page.js', server: 'server.mjs', phone: true }, { 'page.js': '', 'server.mjs': SERVER })
+    y.page('pocket', { title: 'Pocket', script: 'page.js', server: 'server.mjs', phone: true, icon: 'bank' }, { 'page.js': '', 'server.mjs': SERVER })
     y.page('desk', { title: 'Desk', script: 'page.js', server: 'server.mjs' }, { 'page.js': '', 'server.mjs': SERVER })
     y.page('no-server', { title: 'X', script: 'page.js', phone: true }, { 'page.js': '' })
     y.page('odd-phone', { title: 'X', script: 'page.js', server: 'server.mjs', phone: 'yes' }, { 'page.js': '', 'server.mjs': SERVER })
@@ -95,7 +95,7 @@ test('a page says it has a phone view with "phone": true, and only with a server
     assert.deepEqual(problems.map((p) => p.name).sort(), ['no-server', 'odd-phone'])
     await served(y.env, async (get) => {
       const { pages: listed } = await (await get('/api/studio/own')).json()
-      assert.deepEqual(listed.map((p) => [p.name, p.phone]), [['desk', false], ['pocket', true]])
+      assert.deepEqual(listed.map((p) => [p.name, p.phone, p.icon]), [['desk', false, ''], ['pocket', true, 'bank']])
     })
   } finally { y.done() }
 })
@@ -121,7 +121,7 @@ test('the list tells the map where to load a page from and never where it is on 
     y.page('broken', { title: 'X', script: 'gone.js' })
     await served(y.env, async (get) => {
       const list = await (await get('/api/studio/own')).json()
-      assert.deepEqual(list.pages, [{ name: 'notes', title: 'Notes', does: '', wide: true, phone: false, script: '/api/studio/own/notes/files/ui/page.js', style: '/api/studio/own/notes/files/page.css' }])
+      assert.deepEqual(list.pages, [{ name: 'notes', title: 'Notes', does: '', wide: true, phone: false, icon: '', script: '/api/studio/own/notes/files/ui/page.js', style: '/api/studio/own/notes/files/page.css' }])
       assert.equal(list.problems[0].name, 'broken')
       assert.ok(!JSON.stringify(list).includes(y.home))
       assert.equal((await get('/api/studio/own', { method: 'POST', body: '{}' })).status, 405)

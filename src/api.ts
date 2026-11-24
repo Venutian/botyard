@@ -471,7 +471,7 @@ export const requestId = () =>
 /** Mark "Needs you" cards read or archived; the map on the PC shows the same marks. */
 /** Pages of the owner's own on the PC (their own-pages folder): the list, and a page's own calls to its server file. */
 /** `phone`: the page's server answers `GET /phone` with a view the app draws (src/ownView.ts). */
-export type OwnPage = { name: string; title: string; does: string; phone?: boolean };
+export type OwnPage = { name: string; title: string; does: string; phone?: boolean; icon?: string };
 export const getOwnPages = (c: Connection) => call<{ pages: OwnPage[] }>(c, '/own');
 /** A call to one own page's server file, `/own/<page>/api/...`. A studio's own screens use this. */
 export const ownCall = <T>(c: Connection, path: string, method = 'GET', body?: unknown) => {

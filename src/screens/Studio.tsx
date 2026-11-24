@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, DayReport, decide, getSummary, Guard, NeedsYou, Plans, setGuard, Summary } from '../api';
+import { Connection, DayReport, decide, getOwnPages, getSummary, Guard, NeedsYou, OwnPage, Plans, setGuard, Summary } from '../api';
 import { Nav, Route } from '../crew';
 import { useLook } from '../theme/prefs';
 import { ask, tell } from '../ui/ask';
@@ -9,7 +9,7 @@ import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { Icon } from '../ui/Icon';
 import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, Field, GlassButton, Group, Hazard, Hinted, Label, Row, styles as kit, Title, Toggle, Txt, useTap } from '../ui/kit';
-import { IconName } from '../ui/Icon';
+import { IconName, isIcon } from '../ui/Icon';
 import { alpha } from '../theme/color';
 
 const REFRESH_MS = 20_000;
@@ -233,12 +233,22 @@ function Tile({ section, big, status, onPress }: { section: Section; big?: boole
   );
 }
 
+/** A page of the owner's own that has a phone view, as a big tile after the studio's own: its icon, or a page. */
+const ownSection = (page: OwnPage): Section => ({ title: page.title, short: page.does, detail: page.does, icon: isIcon(page.icon) ? page.icon : 'book', route: { name: 'own', page: page.name, title: page.title } });
+
 export function StudioScreen({ connection, nav }: { connection: Connection; nav: Nav }) {
   const { t } = useLook();
   const insets = useSafeAreaInsets();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  // The owner's own pages with a phone view (server/lib/own-pages.mjs): none from an older door.
+  const [ownPages, setOwnPages] = useState<OwnPage[]>([]);
+  useEffect(() => {
+    let live = true;
+    getOwnPages(connection).then((r) => { if (live) setOwnPages((r?.pages ?? []).filter((p) => p.phone)); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [connection]);
 
   const load = useCallback(async () => {
     try {
@@ -281,7 +291,7 @@ export function StudioScreen({ connection, nav }: { connection: Connection; nav:
         {!summary && !error ? <ActivityIndicator color={t.accent} style={styles.firstLabel} accessibilityLabel="Loading" /> : null}
 
         <View style={[styles.grid, styles.firstLabel]}>
-          {MAIN.map((section) => (
+          {[...MAIN, ...ownPages.map(ownSection)].map((section) => (
             <Tile key={section.title} section={section} big onPress={() => nav.push(section.route)}
               status={summary ? tileStatus(section.title, summary) : undefined} />
           ))}

@@ -140,7 +140,7 @@ screen calls its page through `ownCall` in the app's `src/api.ts`.
 **A page on the phone.** Put `"phone": true` in `page.json` and have the server file answer
 `GET /phone` with a view: `{ "title", "note", "blocks": [...] }`. The phone app runs none of the page's
 code; it draws the blocks with its own parts, and the page gets a chip on the phone's home, beside
-Engram. The blocks are `heading`, `text` (markdown), `tiles` (numbers side by side), `chart` (bars up;
+Engram, and a big tile in the Studio tab (`"icon"` in `page.json` picks one of the app's icons for it). The blocks are `heading`, `text` (markdown), `tiles` (numbers side by side), `chart` (bars up;
 a bar with `pick` opens the view again with `param=pick`), `bars` (bars across, with a `mark` for a usual
 amount), `rows`, `list`, `choose` (chips that open the view again with `param=id`), `actions` (buttons
 that POST to the page's own server, then read the view again) and `fold` (shut until tapped). Each

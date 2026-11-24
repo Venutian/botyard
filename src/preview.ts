@@ -656,7 +656,7 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (route === '/activity') return { items: [{ at: ago(4), who: 'Reviewer', what: 'commented on', to: '', job: map, kind: 'commented', times: 3 }, { at: ago(18), who: 'Builder', what: 'had a run fail on', to: '', job: saves, kind: 'failed', run: 'u2', times: 1 }, { at: ago(40), who: 'Lead', what: 'handed on', to: 'Builder', job: map, kind: 'delegated', times: 1 }], total: 3, page: 0, pages: 1, since: null };
   if (route === '/spend') return spend;
   if (route === '/improvements') return improvements;
-  if (route === '/own') return { pages: [{ name: 'sales', title: 'Sales', does: 'What the Harbour store sold, by month', phone: true }] };
+  if (route === '/own') return { pages: [{ name: 'sales', title: 'Sales', does: 'What the Harbour store sold, by month', phone: true, icon: 'activity' }] };
   if (route === '/own/sales/api/phone') return salesView(/month=(\d{4}-\d{2})/.exec(path)?.[1] ?? '2026-10');
   if (route.startsWith('/own/sales/api/') && method === 'POST') return { ok: true };
   if (route === '/brain') return brainSample;
