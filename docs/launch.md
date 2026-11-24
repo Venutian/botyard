@@ -51,8 +51,9 @@ work, with the owner's yes at a gate before anything goes to review, goes live o
 release with its files; a push to a non-default Steam branch or an itch channel that is not public; dry runs
 that validate a store edit without committing it.
 
-**Always the owner's yes, on a card that names the product, version, channel and what will happen:** sending
-for review; releasing to production or raising a rollout; publishing a GitHub release; making a web money
+**Always the owner's yes, on a card that names the product, version, channel and what will happen:** a store
+release (one card for the whole of it: sending for review, Apple's release once approved, Play's staged rollout and
+its raises; see "One card" below); publishing a GitHub release; making a web money
 product live; setting the default Steam branch; making an itch page public; any price, payout, purchase or
 spend; accepting terms. A "yes" is logged with who and when.
 
@@ -60,8 +61,46 @@ spend; accepting terms. A "yes" is logged with who and when.
 key once on its key row; creating the first app record where a store has no API for it; content rating,
 privacy and data-safety forms; tax and bank details; agreements. Bots never type a key.
 
-Safe defaults: uploads go to testing lanes; Play releases start as drafts; App Store releases are manual with
-phased release on. Going live is never a default.
+Safe defaults: uploads go to testing lanes; nothing goes to review or live without the release card's yes. After
+that yes, Apple releases the version by itself once approved, phased over seven days, and Play's rollout is raised
+step by step while crashes stay under Google's line. Going live is never a default; it is what the one yes asks for.
+
+## One card
+
+A store release asks the owner once. Every step before the card either passes or is fixed by the crew: a failure
+goes back to the step that makes the change with its findings, and past its rounds to the ruler (the `ruler` input,
+else the crew's lead), who decides in the owner's place. Only the ruler's ASK OWNER (a spend, a sign-in, a key, a
+form only a person may fill) puts a second question to the owner. The card shows the store-rules result, the store
+checks and what is on the testing lanes, and says everything its yes does:
+
+- the listing goes onto each store and the release is sent for review;
+- the App Store version is set to go live by itself once approved, as a phased release over seven days;
+- Play's production release starts at 20% and is raised to 50% after a day and to everyone after three days, while
+  the user-perceived crash rate stays under 1.09% and the ANR rate under 0.47% (Google's bad-behaviour lines);
+  above a line the rollout halts by itself and the release goes to the ruler;
+- it states what the store-rules register asks the owner to state, and confirms the console steps only the owner
+  can fill (data safety, privacy and age-rating answers, agreements). The statements are kept per app in
+  `config/store-attestations.json` and are not asked again until a rule changes or a year passes.
+
+## Store rules
+
+Before the store checks, the release is scanned against what Apple and Google reject, with the
+[App Store Compliance Playbook](https://github.com/mjmirza/app-store-compliance)'s guard and fleet sweep
+(`studio/server/lib/store-rules.mjs`). The playbook is not part of Botyard and is not copied into it: its licence is
+the OpenRoots Agent License 2.3 (free for individuals, nonprofits and companies under USD 20 million a year in
+revenue; AI training needs a separate licence), not Botyard's. Each yard fetches it once into
+`~/.botyard/tools/app-store-compliance` at one pinned commit (`RULES_PIN`), and refuses any other commit; a new pin is a
+Botyard change, reviewed like any other.
+
+- The scan reads a copy of the built app without dependencies, build output, other worktrees or built packages.
+- A **critical** or **high** finding blocks: the release goes back to the builder with each finding, its file and its
+  fix. A scan that did not see the whole app blocks too.
+- The crew may waive a **high** finding it has proven false, in the app's `store/waivers.json` (the playbook's waiver
+  form: finding id, severity and file as printed, a reason, evidence, a reviewer and an expiry within 180 days). A
+  **critical** finding is fixed, never waived. Waivers are listed on the owner's card.
+- **Medium** findings are listed to look at; they do not block.
+- The countries come from the product's `regions` in the plan (US, GB, DE and SE when none are named), and what the
+  app does that laws name from its `features` (`personal_data`, `subscriptions`, `kids`, ...).
 
 ## Readiness checklist
 
@@ -88,14 +127,14 @@ A built-in track, `release-app`, per product and version:
 3. **Readiness** (script): the checklist above; a fail goes back to the crew with what failed.
 4. **Upload to testing** (script): the store's testing lane; leaves the store's build id.
 5. **Wait for processing** (script): until the store has the build, or a time limit.
-6. **The owner decides** (gate): the card shows the version, the readiness list, the testing link and what
-   "send for review" will do.
-7. **Send for review** (script).
-8. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to the
+6. **Store rules** (script): the scan above; a block goes back to the builder.
+7. **The owner's one card** (gate): the store-rules result, the store checks, what is on the testing lanes, and
+   everything the yes does (see "One card").
+8. **Send for review** (script): the listing onto each store; Apple's version set to release itself once approved.
+9. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to the
    crew with the store's words.
-9. **The owner decides** (gate): release now, or hold.
-10. **Release** (script), then **Watch the rollout** (script): crash-free sessions and events; a bad number
-    halts the rollout and goes to the owner.
+10. **Go live** (script): Play's rollout raised step by step while the crash and ANR rates hold, halted by itself
+    when they do not; Apple's phased release runs by itself.
 
 Web products and Botyard's own GitHub releases use a short form: build, tests, preview or draft, the owner's
 gate, publish, check the live version.
@@ -104,7 +143,8 @@ gate, publish, check the live version.
 
 **Prepare release** on a product's row (page and phone) starts one trip on `release-app` for that product, with its
 package and bundle id from the plan. The plan's `release.inputs` name the studio's own bots: `builder`, `writer`
-(the listing), `artist` (the store images) and `reviewer` (who scores them). One release runs at a time per product;
+(the listing), `artist` (the store images), `reviewer` (who scores them) and `ruler` (who decides a failure past its
+rounds; the crew's lead when the plan names none). A product's `regions` and `features` go to the store-rules scan. One release runs at a time per product;
 the board follows it to its trip and says when it waits for the owner.
 
 The checks before any upload (`studio/server/lib/release-checks.mjs`): every listing field present and within each

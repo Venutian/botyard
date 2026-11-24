@@ -166,6 +166,22 @@ const appleTools = [
     run: async (creds, f, a) => { need(a, 'versionId'); return (await apple(creds, f, '/v1/appStoreVersionReleaseRequests', { method: 'POST', body: JSON.stringify({ data: { type: 'appStoreVersionReleaseRequests', relationships: { appStoreVersion: rel('appStoreVersions', a.versionId) } } }) })).data },
   },
   {
+    name: 'asc_release_after_approval', alwaysAsk: true,
+    description: 'Set an App Store version to go live by itself once Apple approves it, as a phased release over seven days.',
+    input: { versionId: { type: 'string' } },
+    run: async (creds, f, a) => {
+      need(a, 'versionId')
+      await apple(creds, f, `/v1/appStoreVersions/${encodeURIComponent(a.versionId)}`, { method: 'PATCH', body: JSON.stringify({ data: { type: 'appStoreVersions', id: a.versionId, attributes: { releaseType: 'AFTER_APPROVAL' } } }) })
+      try {
+        return (await apple(creds, f, '/v1/appStoreVersionPhasedReleases', { method: 'POST', body: JSON.stringify({ data: { type: 'appStoreVersionPhasedReleases', attributes: { phasedReleaseState: 'INACTIVE' }, relationships: { appStoreVersion: rel('appStoreVersions', a.versionId) } } }) })).data
+      } catch (err) {
+        // A version that already has its phased release answers 409: that one stands.
+        if (/answered 409/.test(String(err?.message))) return { already: true }
+        throw err
+      }
+    },
+  },
+  {
     name: 'asc_phased_release', alwaysAsk: true,
     description: 'Pause, resume or complete a phased (staged) release.',
     input: { phasedReleaseId: { type: 'string' }, state: { type: 'string', enum: ['PAUSED', 'ACTIVE', 'COMPLETE'] } },
