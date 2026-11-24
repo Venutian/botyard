@@ -14,6 +14,9 @@ steps are still at work), or one changed in the last `--idle` hours (12 by defau
     an older open try of a goal that has a newer job   closed (cancelled), with which job carries the goal now
     a job "in progress" with nothing done for a day     blocked, with why, so it is seen instead of looking busy
 
+    a job about another job ("Unblock: LH-12: ...") once that job is done or cancelled   closed, with which
+    a blocked job whose own branch holds nothing that is not in main                        done: its work is in main
+
 What it only measures: jobs blocked for more than three days (each is someone's decision to make).
 """
 import argparse
@@ -32,6 +35,8 @@ OUT = 'open-work.json'
 OPEN = ('todo', 'in_progress', 'blocked')
 # What a job's title says beyond its goal: a fix round, a check, a track's step or round.
 GOAL_NOISE = re.compile(r'^(?:fix \d+ of |check [a-z]+-\d+(?: \([^)]*\))?: |review [a-z]+-\d+: )|\s*·.*$|\s*\(round \d+\)$', re.I)
+# A job about another job says so first: "Unblock: LH-12: ...", "Decide next step: LH-12: ...".
+ABOUT = re.compile(r'^[A-Z][A-Za-z ]{2,30}: ([A-Z][A-Z0-9]*-\d+)\b')
 STALL_HOURS = 24
 BLOCKED_DAYS = 3
 
@@ -55,7 +60,7 @@ def when(job, *keys):
     return None
 
 
-def plan(jobs, live, now, idle_hours=12, requests=()):
+def plan(jobs, live, now, idle_hours=12, requests=(), landed=(), unlanded=()):
     """What to do: [{'job', 'id', 'to', 'why'}] and what to say: {'stalled', 'blocked_long', 'duplicates'}.
     `live` holds the ids of jobs with a run going; `requests` the jobs of track requests still moving, which their
     track closes itself (a track runs on without its request's job, so a script never closes one). Pure, so it can be tested."""
@@ -80,6 +85,21 @@ def plan(jobs, live, now, idle_hours=12, requests=()):
             actions.append({'job': older.get('identifier'), 'id': older['id'], 'to': 'cancelled',
                             'why': f"Closed: an older try of this goal. {carrier.get('identifier')} ({carrier.get('status')}) carries it now."})
             closed.add(older['id'])
+    by_code = {j.get('identifier'): j for j in jobs}
+    for j in jobs:
+        if j['id'] in closed or j.get('status') not in OPEN or not resting(j):
+            continue
+        about = ABOUT.match(j.get('title') or '')
+        subject = by_code.get(about.group(1)) if about else None
+        # A job whose own branch still holds work not in main is never closed for what it is about.
+        if subject and subject['id'] != j['id'] and subject.get('status') in ('done', 'cancelled') and j.get('identifier') not in unlanded:
+            actions.append({'job': j.get('identifier'), 'id': j['id'], 'to': 'cancelled',
+                            'why': f"Closed: it is about {subject.get('identifier')}, which is {subject.get('status')} now."})
+            closed.add(j['id'])
+        elif j.get('status') == 'blocked' and j.get('identifier') in landed:
+            actions.append({'job': j.get('identifier'), 'id': j['id'], 'to': 'done',
+                            'why': 'Done: its branch holds nothing that is not in main, so its work is in main.'})
+            closed.add(j['id'])
     for j in jobs:
         if j['id'] in closed or j.get('status') != 'in_progress' or not resting(j):
             continue
@@ -97,6 +117,31 @@ def plan(jobs, live, now, idle_hours=12, requests=()):
         'duplicates': sorted(g for g, family in goals.items() if sum(1 for j in family if j.get('status') in OPEN and j['id'] not in closed) > 1),
     }
     return actions, say
+
+
+def in_main(jobs, studio):
+    """(codes of blocked jobs whose own branch holds nothing that is not in main, codes of open jobs whose own branch
+    still holds work that is not in main), over every project repo."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('not_in_main', os.path.join(HERE, 'not-in-main.py'))
+    nim = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nim)
+    wanted = {j.get('identifier') for j in jobs if j.get('status') in OPEN}
+    blocked = {j.get('identifier') for j in jobs if j.get('status') == 'blocked'}
+    out, held = set(), set()
+    for repo in nim.project_repos(call('GET', f'/companies/{studio}/projects')):
+        base = nim.main_of(repo)
+        if not base:
+            continue
+        for branch in nim.git(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split():
+            match = nim.JOB_BRANCH.match(branch)
+            if not match or match.group(1) not in wanted:
+                continue
+            if [x for x in nim.git(repo, 'cherry', base, branch).splitlines() if x.startswith('+')]:
+                held.add(match.group(1))
+            elif match.group(1) in blocked:
+                out.add(match.group(1))
+    return out - held, held
 
 
 def call(method, path, body=None):
@@ -129,7 +174,8 @@ def main(argv=None):
         except Exception:  # noqa: BLE001 - an engine with no tracks has no requests
             pass
     now = dt.datetime.now(dt.timezone.utc)
-    actions, say = plan(jobs, live, now, args.idle, moving)
+    landed, unlanded = in_main(jobs, studio)
+    actions, say = plan(jobs, live, now, args.idle, moving, landed, unlanded)
     done = []
     for a in actions:
         if args.dry:

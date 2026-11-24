@@ -42,5 +42,20 @@ class OpenWork(unittest.TestCase):
         self.assertEqual([a['job'] for a in actions], ['LH-7'], 'only the job resting alone is blocked')
 
 
+    def test_a_job_about_a_finished_job_is_closed_and_a_landed_blocked_one_is_done(self):
+        jobs = [job('LH-1', 'Crew: lamp lands', 'done', '2026-11-19T00:00:00Z'),
+                job('LH-2', 'Unblock: LH-1: the lamp check', 'blocked', '2026-11-20T00:00:00Z'),
+                job('LH-3', 'Decide next step: LH-9: the door', 'blocked', '2026-11-20T00:00:00Z'),
+                job('LH-9', 'Crew: door opens', 'in_progress', '2026-11-20T00:00:00Z', touched='2026-11-24T11:00:00Z'),
+                job('LH-4', 'Crew: roof holds', 'blocked', '2026-11-20T00:00:00Z')]
+        jobs.append(job('LH-5', 'Crew: LH-1 lands in main', 'blocked', '2026-11-20T00:00:00Z'))
+        actions, _ = ow.plan(jobs, live=set(), now=NOW, landed={'LH-4'}, unlanded={'LH-5'})
+        got = {a['job']: a['to'] for a in actions}
+        self.assertEqual(got.get('LH-2'), 'cancelled')
+        self.assertNotIn('LH-3', got, 'what it is about is still open')
+        self.assertEqual(got.get('LH-4'), 'done')
+        self.assertNotIn('LH-5', got, 'its own branch still holds work: never closed for what it is about')
+
+
 if __name__ == '__main__':
     unittest.main()
