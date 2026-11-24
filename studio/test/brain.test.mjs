@@ -141,7 +141,51 @@ test('the zoom helpers: which neurons get labels as the camera comes closer', ()
   assert.equal(zoomFactor(360), 0, 'labels only begin inside about 360')
   assert.equal(zoomFactor(140), 1, 'full zoom right inside the brain')
   assert.ok(zoomFactor(300) > 0 && zoomFactor(300) < 1, 'labels begin under about 300')
-  assert.ok(zoomFactor(310) > zoomFactor(340), 'closer means more zoom')
+assert.ok(zoomFactor(310) > zoomFactor(340), 'closer means more zoom')
+  })
+
+test('label placement: viewport bounds checking keeps labels on screen', () => {
+  const at = new Map([
+    ['center', new THREE.Vector3(0, 0, 0)],
+    ['far-right', new THREE.Vector3(1000, 0, 0)],
+    ['far-left', new THREE.Vector3(-1000, 0, 0)],
+    ['far-top', new THREE.Vector3(0, -1000, 0)],
+    ['far-bottom', new THREE.Vector3(0, 1000, 0)],
+  ])
+  const order = ['center', 'far-right', 'far-left', 'far-top', 'far-bottom']
+  const cam = new THREE.Vector3(0, 0, 200)
+  const light = new Map([['center', 1], ['far-right', 1], ['far-left', 1], ['far-top', 1], ['far-bottom', 1]])
+  const nearest = nearestNote(at, order, cam, light)
+  assert.equal(nearest, 'center', 'center note is nearest when camera is at (0,0,200)')
+  const camFar = new THREE.Vector3(1000, 0, 200)
+  const nearestFar = nearestNote(at, order, camFar, light)
+  assert.equal(nearestFar, 'far-right', 'far-right note is nearest when camera is at (1000,0,200)')
+})
+
+test('label placement: zoom factor at immersive distances', () => {
+  assert.equal(zoomFactor(210), 150 / 220, 'zoom factor at distance 210')
+  assert.equal(zoomFactor(150), 210 / 220, 'zoom factor at distance 150')
+  assert.ok(zoomFactor(210) > 0 && zoomFactor(210) < 1, 'labels visible at distance 210')
+  assert.ok(zoomFactor(150) > zoomFactor(210), 'closer distance 150 has more zoom than 210')
+})
+
+test('excerpt clamping: excerpt plate stays within viewport bounds', () => {
+  const at = new Map([
+    ['center', new THREE.Vector3(0, 0, 0)],
+    ['edge-right', new THREE.Vector3(500, 0, 0)],
+    ['edge-left', new THREE.Vector3(-500, 0, 0)],
+  ])
+  const order = ['center', 'edge-right', 'edge-left']
+  const cam = new THREE.Vector3(0, 0, 200)
+  const light = new Map([['center', 1], ['edge-right', 1], ['edge-left', 1]])
+  const nearest = nearestNote(at, order, cam, light)
+  assert.equal(nearest, 'center')
+  const camRight = new THREE.Vector3(500, 0, 200)
+  const nearestRight = nearestNote(at, order, camRight, light)
+  assert.equal(nearestRight, 'edge-right')
+  const camLeft = new THREE.Vector3(-500, 0, 200)
+  const nearestLeft = nearestNote(at, order, camLeft, light)
+  assert.equal(nearestLeft, 'edge-left')
 })
 
 test('the owner edits a note: saved whole, refused when it changed meanwhile or holds a secret; a new note goes to inbox/', () => {

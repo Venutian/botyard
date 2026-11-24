@@ -567,9 +567,16 @@ export class BrainField {
     if (v.z > 1) { e.hidden = true; return }
     const w = this.host.clientWidth
     const h = this.host.clientHeight
+    const x = (v.x + 1) / 2 * w + 16
+    const y = (1 - v.y) / 2 * h + 14
+    const rect = e.getBoundingClientRect()
+    const ew = rect.width || 250
+    const eh = rect.height || 80
+    const clampedX = Math.max(10, Math.min(w - ew - 10, x))
+    const clampedY = Math.max(10, Math.min(h - eh - 10, y))
     e.textContent = n.excerpt || n.title
     e.style.setProperty('--ink', this.inks[(this.slot?.get(n.area) ?? 0) % this.inks.length])
-    e.style.transform = `translate(${(v.x + 1) / 2 * w + 16}px, ${(1 - v.y) / 2 * h + 14}px)`
+    e.style.transform = `translate(${clampedX}px, ${clampedY}px)`
     e.hidden = false
   }
 
@@ -588,7 +595,10 @@ export class BrainField {
       if (!p) continue
       v.set(p.x, p.y, p.z).project(this.camera)
       if (v.z > 1) continue
-      list.push({ id, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, d: p.distanceTo(cam) })
+      const x = ((v.x + 1) / 2) * w
+      const y = ((1 - v.y) / 2) * h
+      if (x < -50 || x > w + 50 || y < -50 || y > h + 50) continue
+      list.push({ id, x, y, d: p.distanceTo(cam) })
     }
     list.sort((a, b) => a.d - b.d)
     const shown = []
@@ -610,6 +620,8 @@ export class BrainField {
         if (y > h - 14) { ok = false; break }
       }
       if (!ok) continue
+      x = Math.max(half + 4, Math.min(w - half - 4, x))
+      y = Math.max(14, Math.min(h - 14, y))
       shown.push({ ...item, half, x, y, ink: inks[(slot?.get(n.area) ?? 0) % inks.length] })
       placed.push({ x, y, half })
     }

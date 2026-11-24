@@ -91,6 +91,7 @@
   pointer-events: none;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
+.brainmap .bf-node-label[hidden] { display: none !important; }
 .brainmap .bf-node-label::before { content: ''; width: 3px; height: 11px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
 .brainmap .bf-excerpt {
   position: absolute;
