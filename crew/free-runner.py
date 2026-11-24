@@ -370,8 +370,8 @@ def error_of(event):
 
 
 def context_error(text):
-    """True when an error says the prompt outgrew the model's context window: the model cannot take the work, so
-    the run goes on in the same session on a model that can, instead of failing the run."""
+    """True when an error says the prompt outgrew the model's context window. A session with history then goes on
+    in a fresh session; a new session that overflows on its first call goes on with a model that can take it."""
     text = (text or '').lower()
     return any(w in text for w in CONTEXT)
 
@@ -1035,6 +1035,17 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
+        if code and failed and context_error(failed) and (size or carried):
+            # The session outgrew the window: every model would get the same oversized session, so the work goes on
+            # in a new one, from the last handover's state when there is one. A new session that overflows on its first
+            # call (its prompt alone is too big) still goes to another model below.
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            note(f'The free builder overflowed the context on {task} ({model}, {size:,} tokens); fresh session')
+            sys.stderr.write(f'{model} ran out of context; going on in a fresh session.\n')
+            args, session, size, carried = with_model(without_session(args), model, None), None, 0, False
+            prompt = handed + '\n\n' + RESUME.format(task=first_prompt) if handed else CONTEXT_FRESH.format(task=first_prompt)
+            loops = Loops()
+            continue
         if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
         if no_tools(code, ran_tools, first_prompt):

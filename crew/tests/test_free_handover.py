@@ -196,5 +196,31 @@ class Handover(unittest.TestCase):
         self.assertIsNone(session_of(calls[2]))
 
 
+class ContextError(unittest.TestCase):
+    def test_an_overflow_after_steps_goes_on_in_a_fresh_session_with_the_task(self):
+        code, calls, prompts, posted = run_main([[step(150000), ['error', OVERFLOW]], [WORK, DONE2]])
+        self.assertEqual((code, len(calls)), (0, 2))
+        self.assertIsNone(session_of(calls[1]), 'never the same oversized session')
+        self.assertIn('ran out of context', prompts[1])
+        self.assertIn(TASK, prompts[1])
+        self.assertIn('x/m', calls[1])
+
+    def test_an_overflow_of_a_resumed_session_goes_on_in_a_fresh_session(self):
+        code, calls, prompts, posted = run_main([[['error', OVERFLOW]], [WORK, DONE2]],
+                                                argv=('run', '-m', 'x/m', '--session', 'ses_old'))
+        self.assertEqual((code, len(calls)), (0, 2))
+        self.assertIsNone(session_of(calls[1]))
+
+    def test_an_overflow_after_a_handover_starts_from_that_state(self):
+        code, calls, prompts, posted = run_main([
+            [step(210000), 'sleep'], [STATE],
+            [step(90000, 'ses_2'), ['error', OVERFLOW]],
+            [WORK, DONE2],
+        ])
+        self.assertEqual((code, len(calls), len(posted)), (0, 4, 1))
+        self.assertIsNone(session_of(calls[3]))
+        self.assertTrue(prompts[3].startswith(posted[0]))
+
+
 if __name__ == '__main__':
     unittest.main()
