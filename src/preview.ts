@@ -607,6 +607,38 @@ const brainSample = {
   ],
 };
 
+/** A page of the studio's own on the phone (src/ownView.ts): made-up store sales, one month at a time. */
+function salesView(month: string) {
+  const months = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
+  const sold = [8200, 9100, 7600, 10400, 11900, 12400];
+  const names = ['May', 'June', 'July', 'August', 'September', 'October'];
+  const at = Math.max(0, months.indexOf(month));
+  return {
+    title: 'Sales',
+    note: 'What the Harbour store sold. Made-up numbers.',
+    blocks: [
+      { kind: 'chart', title: 'Sold each month', param: 'month', items: months.map((m, i) => ({ label: names[i].slice(0, 3), value: sold[i], shown: `${sold[i]} kr`, on: i === at, pick: m })) },
+      { kind: 'heading', text: `${names[at]} 2026` },
+      { kind: 'tiles', items: [
+        { label: 'Sold', value: `${sold[at]} kr`, note: at ? `${sold[at] >= sold[at - 1] ? '+' : ''}${Math.round((sold[at] / sold[at - 1] - 1) * 100)}% on the month before` : '', tone: at && sold[at] >= sold[at - 1] ? 'good' : '' },
+        { label: 'Orders', value: String(Math.round(sold[at] / 98)) },
+        { label: 'Refunds', value: '2', tone: 'warn' },
+      ] },
+      { kind: 'bars', title: 'By product', items: [
+        { label: 'Harbour, full game', value: sold[at] * 0.7, shown: `${Math.round(sold[at] * 0.7)} kr`, mark: sold[at] * 0.6, note: 'the line is the usual month' },
+        { label: 'Soundtrack', value: sold[at] * 0.2, shown: `${Math.round(sold[at] * 0.2)} kr` },
+        { label: 'Art book', value: sold[at] * 0.1, shown: `${Math.round(sold[at] * 0.1)} kr` },
+      ] },
+      { kind: 'rows', title: 'Biggest orders', items: [
+        { title: 'Studio licence', detail: 'Harbour, 10 seats', right: '1 490 kr' },
+        { title: 'Bundle', detail: 'Game and soundtrack', right: '249 kr', note: 'Refunded', tone: 'warn' },
+      ] },
+      { kind: 'actions', items: [{ label: 'Fetch now', call: '/sync', done: 'The store\'s new orders are in.' }] },
+      { kind: 'fold', title: 'How these are counted', blocks: [{ kind: 'text', text: 'An order counts on the day it was paid. A refund takes it off the month it was **paid** in.' }] },
+    ],
+  };
+}
+
 export function sample(path: string, method: string, _body?: unknown) {
   const [route] = path.split('?');
   const shaped = shaping(route, method, (_body ?? {}) as Record<string, any>);
@@ -624,6 +656,9 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (route === '/activity') return { items: [{ at: ago(4), who: 'Reviewer', what: 'commented on', to: '', job: map, kind: 'commented', times: 3 }, { at: ago(18), who: 'Builder', what: 'had a run fail on', to: '', job: saves, kind: 'failed', run: 'u2', times: 1 }, { at: ago(40), who: 'Lead', what: 'handed on', to: 'Builder', job: map, kind: 'delegated', times: 1 }], total: 3, page: 0, pages: 1, since: null };
   if (route === '/spend') return spend;
   if (route === '/improvements') return improvements;
+  if (route === '/own') return { pages: [{ name: 'sales', title: 'Sales', does: 'What the Harbour store sold, by month', phone: true }] };
+  if (route === '/own/sales/api/phone') return salesView(/month=(\d{4}-\d{2})/.exec(path)?.[1] ?? '2026-10');
+  if (route.startsWith('/own/sales/api/') && method === 'POST') return { ok: true };
   if (route === '/brain') return brainSample;
   if (route === '/brain/note') { const id = decodeURIComponent(/id=([^&]+)/.exec(path)?.[1] ?? ''); const n = brainSample.notes.find((x) => x.id === id); return n ? { ...n, meta: {}, text: `# ${n.title}\n\n${n.excerpt}\n\nSee [[${n.links[0] ?? n.id}]].` } : null; }
   if (route.startsWith('/improvements/') && method === 'POST') return { ok: true, jobRef: '' };

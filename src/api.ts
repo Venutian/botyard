@@ -2,6 +2,7 @@
 import { AppState, Platform } from 'react-native';
 import { normalizeHost, pickWay, ways, unreachable } from './connection';
 import type { Edge, Route, Way } from './connection';
+import { readView, viewPath } from './ownView';
 
 export { normalizeHost, wayLabel, ways, unreachable } from './connection';
 export type { Edge, Route, Way } from './connection';
@@ -467,13 +468,17 @@ export const requestId = () =>
 
 /** Mark "Needs you" cards read or archived; the map on the PC shows the same marks. */
 /** Pages of the owner's own on the PC (their own-pages folder): the list, and a page's own calls to its server file. */
-export type OwnPage = { name: string; title: string; does: string };
+/** `phone`: the page's server answers `GET /phone` with a view the app draws (src/ownView.ts). */
+export type OwnPage = { name: string; title: string; does: string; phone?: boolean };
 export const getOwnPages = (c: Connection) => call<{ pages: OwnPage[] }>(c, '/own');
 /** A call to one own page's server file, `/own/<page>/api/...`. A studio's own screens use this. */
 export const ownCall = <T>(c: Connection, path: string, method = 'GET', body?: unknown) => {
   if (!/^\/own\/[a-z0-9][a-z0-9-]{0,31}\/api(\/|$)/.test(path)) throw new Error('Not an own page\'s call');
   return call<T>(c, path, method, body);
 };
+/** A page's phone view, read through `readView` so only what the app knows is drawn. */
+export const getOwnView = async (c: Connection, page: string, choices: Record<string, string>) =>
+  readView(await ownCall<unknown>(c, `/own/${page}/api${viewPath(choices)}`));
 export const markCards = (c: Connection, keys: string[], change: { read?: boolean; archived?: boolean }) =>
   call(c, '/cards', 'POST', { keys, ...change });
 

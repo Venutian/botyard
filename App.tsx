@@ -33,6 +33,7 @@ import { TripScreen } from './src/screens/Trip';
 import { JobScreen, NewJobScreen } from './src/screens/Job';
 import { ImprovementsScreen } from './src/screens/Improvements';
 import { EngramNoteScreen, EngramScreen } from './src/screens/Engram';
+import { OwnPageScreen } from './src/screens/OwnPage';
 import { ModelsScreen } from './src/screens/Models';
 import { BotsScreen } from './src/screens/Crew';
 import { JobsScreen } from './src/screens/Jobs';
@@ -158,6 +159,7 @@ function Pushed({ route, connection, crew, nav }: { route: Route; connection: Co
       {route.name === 'improvements' ? <ImprovementsScreen connection={connection} nav={nav} /> : null}
       {route.name === 'engram' ? <EngramScreen connection={connection} nav={nav} /> : null}
       {route.name === 'engramNote' ? <EngramNoteScreen key={route.id} id={route.id} connection={connection} nav={nav} /> : null}
+      {route.name === 'own' ? <OwnPageScreen key={route.page} page={route.page} title={route.title} connection={connection} nav={nav} /> : null}
       {route.name === 'devices' ? <DevicesScreen connection={connection} nav={nav} /> : null}
       {route.name === 'new' ? <NewJobScreen connection={connection} crew={crew} nav={nav} /> : null}
       {route.name === 'bot' ? <BotScreen key={route.botId} botId={route.botId} connection={connection} crew={crew} nav={nav} /> : null}
