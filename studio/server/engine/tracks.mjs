@@ -45,6 +45,12 @@ export function goalOf(title) {
 export const TRACK_TOOLS = path.join(here, 'track-tools')
 const MOST_STEPS = 40
 const MOST_ROUNDS = 20
+/**
+ * The most tries one step of one trip gets, however many lines send work back to it (24 Nov 2026: each line kept its
+ * own count, so a build was tried 11 times and ruled on 8). A version may set `maxTries`; past it the trip is stuck,
+ * which blocks its request's job with the reason, for a person to decide.
+ */
+const MAX_TRIES = 5
 const VALUE_CHARS = 20_000
 const LOST_AFTER_MS = 20_000
 /** Trips still moving: the engine looks at these on every turn. */
@@ -899,6 +905,12 @@ function route(store, trip, version, step, row, outcome, now) {
     return { ...trip, status: 'stuck', reason: `Step "${step.id}" failed and has nothing after it` }
   }
   const findings = row.snapshot?.findings || ''
+  // Going back to a step tried as often as a trip may: the trip stops trying and waits for a person.
+  if (outcome === 'fail' && order.indexOf(line.to) <= order.indexOf(step.id)) {
+    const most = Number(version.maxTries) || MAX_TRIES
+    const tries = store.row('SELECT COUNT(*) AS n FROM trip_steps WHERE trip_id = ? AND step_id = ?', trip.id, line.to).n
+    if (tries >= most) return { ...trip, status: 'stuck', reason: words(`"${line.to}" was tried ${tries} times and "${step.id}" still failed: ${findings}`, 500) }
+  }
   const back = outcome === 'fail' && order.indexOf(line.to) <= order.indexOf(step.id) && line.rounds
   if (!back) return goTo(store, trip, version, line.to, outcome === 'fail' ? { findings } : {}, now)
   const key = `${line.from}>${line.to}`

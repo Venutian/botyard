@@ -769,3 +769,43 @@ test('one request a goal: asking again for a goal that is moving is refused and 
   store.put('requests', { ...store.object('SELECT raw FROM requests WHERE id = ?', first.id), status: 'stopped' })
   assert.ok(startRequest(store, 'co', { track: 'crew', title: 'Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER }))
 })
+
+test('a step is tried at most five times in a trip, whichever lines send it back; then the trip waits for a person', async () => {
+  const { store, dataDir } = yard()
+  const LOOP = {
+    key: 'loop', title: 'Loop', inputs: ['brief'],
+    steps: [
+      { id: 'build', kind: 'bot', bot: 'Builder', words: 'Build.', needs: ['brief'], leaves: ['commit'] },
+      { id: 'check', kind: 'bot', bot: 'Checker', words: 'Check.', needs: ['commit'], leaves: ['verdict'] },
+      { id: 'review', kind: 'bot', bot: 'Judge', words: 'Review.', needs: ['commit'], leaves: ['verdict'] },
+      { id: 'decide', kind: 'gate', title: 'Owner decides' },
+    ],
+    lines: [
+      { from: 'build', to: 'check', on: 'pass' }, { from: 'build', to: 'decide', on: 'fail' },
+      { from: 'check', to: 'review', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 9, then: 'decide' },
+      { from: 'review', to: 'build', on: 'fail', rounds: 9, then: 'decide' }, { from: 'review', to: 'decide', on: 'pass' },
+    ],
+  }
+  saveTrack(store, 'co', LOOP, { now: T0, actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'loop', title: 'Harbour: lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  let n = 0
+  const tick = () => tickTracks(store, { dataDir, io: fakeIo(), now: T0 + ++n * 1000 })
+  await tick()
+  const tripId = store.row('SELECT id FROM trips').id
+  for (let round = 0; round < 12; round++) {
+    const build = workingJob(store, tripId, 'build')
+    if (!build) break
+    botDoes(store, build, { commit: `aaa${1000 + round}` }, T0)
+    await tick()
+    const check = workingJob(store, tripId, 'check')
+    if (!check) break
+    botDoes(store, check, { verdict: 'FAIL: no lamp' }, T0)
+    await tick()
+  }
+  const trip = store.object('SELECT raw FROM trips WHERE id = ?', tripId)
+  assert.equal(trip.status, 'stuck')
+  assert.match(trip.reason, /"build" was tried 5 times/)
+  assert.equal(store.row("SELECT COUNT(*) AS n FROM trip_steps WHERE trip_id = ? AND step_id = 'build'", tripId).n, 5)
+  await tick()
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'blocked', 'its request waits for a person, once')
+})

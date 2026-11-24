@@ -125,3 +125,13 @@ step is told the request's values as `BOTYARD_IN_<NAME>`, and `BOTYARD_PROJECT_F
 - **Timers inside a track.** Starting work on a timetable stays with routines.
 - **Moving every crew rule at once.** A project moves onto a track when it is ready; the others go on
   as before.
+
+## Limits that keep work from going round
+
+- **Five tries a step.** However many lines send work back to a step, a trip tries it at most five times
+  (`maxTries` on a track sets another number). Past that the trip is stuck, and its request's job is blocked
+  once with the reason, for a person to decide.
+- **One request a goal.** A request for a goal that already has a request moving in the same project is
+  refused, and the refusal names the one that carries it. A track is never started on one of its own steps.
+- **No job left open.** On every turn, a round that ended has its job closed with why; a stuck request's
+  job is blocked once; a stopped one is closed.
