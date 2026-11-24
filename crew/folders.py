@@ -277,13 +277,15 @@ def writes(env=None):
 
 
 def protected(env=None):
-    """What no bot may have: [{path, kind, why, read}]. `read` is True (anyone may read), 'claude' (a Claude run only) or False (nobody).
+    """What no bot may have: [{path, kind, why, read, readers}]. `read` is True (anyone may read), 'claude' (a Claude run only) or False
+    (nobody). `readers` names the bots that may read a `read: False` folder all the same, and only on Claude: a run on a free model
+    never reads it, whoever it is for.
     A path is listed as named and where it really is, so a symlink into a repository is not a way round."""
     p = botyard_home.places(env)
     out = []
 
-    def add(path, kind, why, read=True):
-        out.extend({'path': each, 'kind': kind, 'why': why, 'read': read} for each in both(path))
+    def add(path, kind, why, read=True, readers=()):
+        out.extend({'path': each, 'kind': kind, 'why': why, 'read': read, 'readers': list(readers)} for each in both(path))
 
     add(p['keys'], 'keys', 'the keys the owner pasted', False)
     add(os.path.join(p['crew'], 'claude-token'), 'keys', "the owner's long-lived Claude token", False)
@@ -296,7 +298,8 @@ def protected(env=None):
         add(vault, 'notes', "the owner's notes", 'claude')
     for row in studio_file(env).get('never') or []:
         if row.get('path'):
-            add(expand(row['path'], marks(env)), 'never', row.get('why') or "on the studio's never list", row.get('read', True))
+            add(expand(row['path'], marks(env)), 'never', row.get('why') or "on the studio's never list", row.get('read', True),
+                [r for r in row.get('readers') or [] if isinstance(r, str)])
     return out
 
 
