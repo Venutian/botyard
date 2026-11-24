@@ -89,6 +89,16 @@ export function layoutTitles(cands, { w, h, max = 12, least = 6, pad = 6, avoid 
   return shown
 }
 
+/**
+ * Which neuron titles are drawn with the camera `dist` from the orbit target: none until the zoom begins (zoomFactor),
+ * then layoutTitles over the neurons still lit (`light` above half: search and area dimming drop the rest), so the
+ * nearest ones, at most `max`, none overlapping. The live frame calls this; the tests call it with plain numbers.
+ */
+export function titlesAt(dist, cands, opts) {
+  if (zoomFactor(dist) <= 0) return []
+  return layoutTitles(cands.filter((c) => (c.light ?? 1) > 0.5), opts)
+}
+
 /** The excerpt plate beside its neuron: below right, flipped left or up where the stage runs out, then kept inside. */
 export function placeExcerpt(x, y, bw, bh, w, h, pad = 6) {
   let left = x + 16
@@ -580,6 +590,7 @@ export class BrainField {
       if (live) this.time.value = now / 1000
       const damping = this.controls.update()
       const dist = this.camera.position.distanceTo(this.controls.target)
+      this.dist = dist
       this.zoom = this._zoom(dist)
       const nearNote = this._nearestNote()
       if (nearNote !== this.nearNote) this.nearNote = nearNote
@@ -701,15 +712,17 @@ export class BrainField {
     if (excerpt) avoid.push(excerpt)
     const cands = []
     for (const id of this.order) {
-      if ((this.light?.get(id) ?? 1) <= 0.5) continue
+      const light = this.light?.get(id) ?? 1
+      if (light <= 0.5) continue
       const p = this.at.get(id)
       const n = this.byId.get(id)
       if (!p || !n) continue
       const at = this._onStage(p, w, h)
       const pw = Math.min(PLATE_MAX, w - 12, this._textWidth(n.title) + PLATE_EXTRA + (at.inFrame ? 0 : PLATE_EDGE))
-      cands.push({ id, ...at, d: p.distanceTo(this.camera.position), w: pw, h: PLATE_H })
+      cands.push({ id, ...at, light, d: p.distanceTo(this.camera.position), w: pw, h: PLATE_H })
     }
-    const shown = layoutTitles(cands, { w, h, max: LABEL_MAX, least: LABEL_LEAST, avoid })
+    const shown = titlesAt(this.dist ?? Infinity, cands, { w, h, max: LABEL_MAX, least: LABEL_LEAST, avoid })
+    if (!shown.length) { this._dropLabels(); return }
     for (let i = 0; i < LABEL_MAX; i += 1) {
       const el = this.labelPool[i]
       const s = shown[i]
