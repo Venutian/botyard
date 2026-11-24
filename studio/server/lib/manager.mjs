@@ -513,7 +513,8 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
   if (aside.length && !answering.length) out.push({ level: 'bad', text: 'Every free model is out, so the bots on free models cannot work' })
   else if (aside.length) out.push({ level: 'info', text: `${plural(aside.length, 'free model is', 'free models are')} set aside; ${answering.length} still answer` })
   // Done jobs whose code never reached main (crew/not-in-main.py): a job is not done while its work is not in main.
-  const left = (files.notInMain?.jobs || []).filter((j) => j && j.job)
+  // An older try whose goal landed later (not-in-main.py marks it `superseded`) is not lost work.
+  const left = (files.notInMain?.jobs || []).filter((j) => j && j.job && !j.superseded)
   if (left.length) {
     const byCode = new Map(issues.map((i) => [i.identifier, i]))
     const named = [...new Set(left.map((j) => (byCode.has(j.job) ? refOf(byCode.get(j.job), projectNames) : j.job)))]
