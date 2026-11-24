@@ -722,3 +722,38 @@ test('a request has one open card at a time: a new question updates it and says 
   assert.equal(pending.length, 1, 'one open card')
   assert.match(pending[0].title, /\(asked 2 times\)$/)
 })
+
+test('a round that ended leaves no job open, a stuck request says so once, and a step is never a request of its own', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'run tests': () => ({ out: { verdict: 'pass' } }) })
+  const request = startRequest(store, 'co', { track: 'crew', title: 'Add a lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  const job = (id) => store.object('SELECT raw FROM jobs WHERE id = ?', id)
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+  await tick(2)
+  // The check's bot gives up: its job blocked, no question. The track sends the work back for round 2.
+  const check = workingJob(store, tripId, 'check')
+  store.put('jobs', { ...job(check), status: 'blocked' })
+  await tick(3)
+  const round2 = workingJob(store, tripId, 'build')
+  assert.ok(round2, 'round 2 of the build is at work')
+  // The blocked check is not left blocked: on the next turn it is closed, with why.
+  const settled = await tick(4)
+  assert.equal(job(check).status, 'cancelled')
+  assert.ok(settled.settled.includes(job(check).identifier))
+  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ? ORDER BY position', check).at(-1).body, /Closed by the track: the work went back to an earlier step/)
+  assert.equal(job(round2).status, 'todo', 'the round at work is never touched')
+  // A track started on one of its own steps is refused.
+  assert.throws(() => startRequest(store, 'co', { track: 'crew', jobId: round2, inputs: { brief: 'b' } }, { now: T0, actor: OWNER }), /is a step of a track already/)
+  // A trip that gets stuck: its request's job says so once, as blocked; a stopped one is closed.
+  const trip = store.object('SELECT raw FROM trips WHERE id = ?', tripId)
+  store.put('trips', { ...trip, status: 'stuck', reason: 'Step "land" has nothing after it' })
+  await tick(5)
+  assert.equal(job(request.jobId).status, 'blocked')
+  assert.equal(job(round2).status, 'todo', 'a stuck trip\'s working step is left to the owner')
+  await tick(6)
+  assert.equal(store.objects('SELECT raw FROM comments WHERE job_id = ?', request.jobId).filter((c) => /cannot go on/.test(c.body)).length, 1, 'said once')
+})

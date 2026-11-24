@@ -403,6 +403,8 @@ export function startRequest(store, companyId, body = {}, { now = Date.now(), ac
   if (missing.length) throw new Refused(400, `This track needs ${missing.join(', ')} from the request`)
   let job = body.jobId ? store.object('SELECT raw FROM jobs WHERE id = ? OR identifier = ?', body.jobId, body.jobId) : null
   if (body.jobId && !job) throw new Refused(400, 'That job does not exist')
+  // A track's own step is not a request: a track started on it would run the same work twice (24 Nov 2026: "· Build · Build").
+  if (job && String(job.description || '').includes(TRACK_MARK)) throw new Refused(409, `${job.identifier} is a step of a track already: ask for the work on its request instead`)
   if (job && store.row("SELECT id FROM requests WHERE job_id = ? AND status NOT IN ('done', 'stopped')", job.id)) throw new Refused(409, 'That job already has a request moving')
   const projectId = body.projectId || job?.projectId || null
   if (version.delivers === 'change' && !projectId && !given.repo) throw new Refused(400, 'This track delivers a change: say which project (or repo) it lands in')
@@ -998,7 +1000,7 @@ async function moveTrip(store, tripId, ctx) {
  */
 export async function tickTracks(store, { dataDir, io = trackIo, now = Date.now() } = {}) {
   ensureBuiltIns(store, { now })
-  const report = { moved: [], stuck: [] }
+  const report = { moved: [], stuck: [], settled: settleLeftovers(store, { now }) }
   const trips = store.rows(`SELECT id FROM trips WHERE status IN (${MOVING.map(() => '?').join(', ')}) ORDER BY parent_trip_id IS NULL, created_at`, ...MOVING)
   for (const { id } of trips) {
     try {
@@ -1012,6 +1014,42 @@ export async function tickTracks(store, { dataDir, io = trackIo, now = Date.now(
     if (after?.status === 'stuck') report.stuck.push({ id, reason: after.reason })
   }
   return report
+}
+
+/**
+ * What a track leaves open, closed on every turn, so no job stays "in progress" or "blocked" for work that has
+ * moved on (24 Nov 2026: 36 such jobs, 34 blocked, 7 of 78 open jobs with a run going):
+ *
+ *   a round that ended (passed, failed or started over) whose job is still open: closed, cancelled, with why
+ *   a request whose trip is stuck: its job blocked, with the reason, once
+ *   a request whose trip was stopped: its job cancelled, with the reason
+ *
+ * Returns the codes of the jobs it closed. Nothing it closes had a bot at work on it: a step at work is a
+ * working row, which it does not touch.
+ */
+export function settleLeftovers(store, { now = Date.now() } = {}) {
+  const settled = []
+  const ended = store.objects("SELECT ts.raw AS raw FROM trip_steps ts JOIN jobs j ON j.id = ts.job_id WHERE ts.status IN ('passed', 'failed', 'stale') AND j.status NOT IN ('done', 'cancelled')")
+  for (const row of ended) {
+    const job = store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId)
+    if (!job || ['done', 'cancelled'].includes(job.status)) continue
+    const why = row.status === 'passed' ? 'its round passed' : row.status === 'stale' ? 'the work went back to an earlier step' : `its round ended NOT MET${row.snapshot?.findings ? `: ${words(String(row.snapshot.findings).split('\n')[0], 300)}` : ''}`
+    addComment(store, job.id, { body: `Closed by the track: ${why}. The track goes on in a later round or step; this job holds nothing more to do.` }, { now, actor: ENGINE, quiet: true })
+    patchJob(store, job.id, { status: 'cancelled' }, { now, actor: ENGINE })
+    settled.push(job.identifier)
+  }
+  const done = store.objects("SELECT t.raw AS raw FROM trips t WHERE t.status IN ('stuck', 'stopped') AND t.parent_trip_id IS NULL")
+  for (const trip of done) {
+    const request = store.object('SELECT raw FROM requests WHERE id = ?', trip.requestId)
+    const job = request && store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
+    if (!job || ['done', 'cancelled'].includes(job.status)) continue
+    if (trip.status === 'stuck' && job.status === 'blocked') continue
+    const reason = words(trip.reason || (trip.status === 'stuck' ? 'The track cannot go on' : 'The track was stopped'), 500)
+    addComment(store, job.id, { body: trip.status === 'stuck' ? `Blocked: the track cannot go on. ${reason}` : `Closed: the track was stopped. ${reason}` }, { now, actor: ENGINE, quiet: true })
+    patchJob(store, job.id, { status: trip.status === 'stuck' ? 'blocked' : 'cancelled' }, { now, actor: ENGINE })
+    settled.push(job.identifier)
+  }
+  return settled
 }
 
 // ── the owner's hands on a trip ──────────────────────────────────────────────────────
@@ -1067,7 +1105,7 @@ export function rerunTrip(store, tripId, body = {}, { now = Date.now(), actor } 
     const request = requestOr404(store, trip.requestId)
     if (request.status !== 'working') putRequest(store, { ...request, status: 'working', finishedAt: null }, now)
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
-    if (job && ['done', 'cancelled'].includes(job.status)) patchJob(store, job.id, { status: 'in_progress' }, { now, actor: ENGINE })
+    if (job && ['done', 'cancelled', 'blocked'].includes(job.status)) patchJob(store, job.id, { status: 'in_progress' }, { now, actor: ENGINE })
   }
   return tripOr404(store, tripId)
 }
