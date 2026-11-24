@@ -96,6 +96,45 @@ CONTINUE = ('The free model you were running on ran out partway through this tas
 NO_TOOLS_FOR = 86400
 
 
+class ContextTracker:
+    """Tracks the session's context size from step_finish events. Returns True when handover is due."""
+
+    def __init__(self, model):
+        self.model = model
+        self.max_context = CONTEXT_MAX_PER_MODEL.get(model, 262144)
+        self.handover_limit = min(CONTEXT_HANDOVER, self.max_context - 10000)
+        self.total_tokens = 0
+        self.handover_done = False
+        self.state_comment = None
+
+    def feed(self, event):
+        """Process a step_finish event, update token count. Returns state comment if handover triggered."""
+        if event.get('type') != 'step_finish':
+            return None
+        part = event.get('part') or {}
+        tokens = part.get('tokens')
+        if not isinstance(tokens, dict):
+            return None
+        step_tokens = (
+            tokens.get('input', 0) +
+            tokens.get('output', 0) +
+            tokens.get('reasoning', 0) +
+            tokens.get('cache_read', 0) +
+            tokens.get('cache_write', 0)
+        )
+        self.total_tokens += step_tokens
+        if not self.handover_done and self.total_tokens >= self.handover_limit:
+            self.handover_done = True
+            self.state_comment = self._make_state_comment()
+            return self.state_comment
+        return None
+
+    def _make_state_comment(self):
+        return (f"State: done {self.total_tokens:,} tokens used; "
+                f"left: continue the task; "
+                f"files touched: check git status")
+
+
 class Loops:
     """Counts identical tool calls against the worktree as it stood. feed() takes OpenCode's JSON events
     one at a time and returns a short description of the call once it has repeated too often."""
@@ -192,6 +231,18 @@ BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
 # A prompt that outgrew the model's context window: the model cannot take the work, so the run hands
 # over to a model that can (same session), instead of failing the run.
 CONTEXT = ('context length', 'context window', 'context limit', 'maximum context length', 'prompt is too long', 'token count exceeds', 'exceeds the context', 'too many tokens')
+
+# Context handover: free runs hand over before the context fills.
+CONTEXT_HANDOVER = 200000
+# Per-model override for max context (default 262144). Models with known smaller limits go here.
+CONTEXT_MAX_PER_MODEL = {
+    'openai/gpt-4o-mini': 128000,
+    'openai/gpt-4o': 128000,
+    'anthropic/claude-3-haiku': 200000,
+    'anthropic/claude-3-sonnet': 200000,
+    'google/gemini-1.5-flash': 1000000,
+    'google/gemini-1.5-pro': 2000000,
+}
 
 
 # Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
@@ -753,8 +804,10 @@ def main():
     signal.signal(signal.SIGINT, stop)
 
     loops = Loops()
+    context_tracker = ContextTracker(model)
     looped = 0
     retried = 0
+    handover_done = False
     # Tool calls over the whole run (every start of it), so a short last step after a notice does not count as none.
     first_prompt, fresh_start, ran_tools = prompt, False, 0
     started, minutes, noticed = clock(), run_minutes(), False
@@ -773,6 +826,9 @@ def main():
             try:
                 line = lines.get(timeout=10)
             except queue.Empty:
+                if child.poll() is not None:
+                    ended = True
+                    break
                 line = ''
             if line is None:
                 ended = True
@@ -805,6 +861,16 @@ def main():
                     circling = loops.feed(event) or circling
                     failed = error_of(event) or failed
                     step_ended = event.get('type') == 'step_finish'
+                    # Context handover: track tokens and trigger fresh session at limit
+                    if not handover_done and step_ended:
+                        state = context_tracker.feed(event)
+                        if state:
+                            handover_done = True
+                            note(f'Context handover at {context_tracker.total_tokens:,} tokens on {model}; posting state and starting fresh session')
+                            sys.stderr.write(f'Context limit reached ({context_tracker.total_tokens:,} tokens); handing over to fresh session.\n')
+                            os.killpg(child.pid, signal.SIGTERM)
+                            stop_child(child)
+                            break
                 except ValueError:
                     step_ended = False
                 if not circling and session and notice_due(started, minutes, clock(), noticed, step_ended):
@@ -833,6 +899,17 @@ def main():
             break
         code = child.wait()
         ran_tools += loops.tools
+        if handover_done:
+            # Context handover: restart with fresh session (no --session) and state comment as prompt
+            state_comment = context_tracker.state_comment or f"State: done {context_tracker.total_tokens:,} tokens used; left: continue; files: check git status"
+            note(f'Context handover: starting fresh session with state on {model}')
+            args, model, session = with_model(without_session(args), model, None), model, None
+            claim(model)
+            prompt = state_comment
+            handover_done = False
+            context_tracker = ContextTracker(model)
+            loops = Loops()
+            continue
         if told:
             used = int((clock() - started) / 60)
             note(f'The free builder was told at {used} of {minutes} minutes to write its state ({model}, same session)')
@@ -904,8 +981,22 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
-        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
+        ctx_err = code and failed and context_error(failed)
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or ctx_err):
             ran_out = True
+        # Context error: start fresh session with state (or original prompt + note), never same oversized session
+        if ctx_err:
+            state = context_tracker.state_comment if context_tracker.handover_done else None
+            if state is None:
+                state = f"Note: previous session hit context limit ({context_tracker.total_tokens:,} tokens). Original task: {first_prompt[:200]}"
+            note(f'Context error on {model}; starting fresh session with state')
+            sys.stderr.write(f'Context limit exceeded; continuing in fresh session.\n')
+            args, model, session = with_model(without_session(args), model, None), model, None
+            claim(model)
+            prompt = state
+            context_tracker = ContextTracker(model)
+            loops = Loops()
+            continue
         if no_tools(code, ran_tools, first_prompt):
             task = botyard_home.run_var('JOB_ID', '?')[:8]
             fallback.set_free_aside(bots, model, 'made no tool calls on a real task', until=int(time.time() + NO_TOOLS_FOR))
