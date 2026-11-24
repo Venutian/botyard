@@ -16,7 +16,7 @@ spec.loader.exec_module(fred)
 
 OVERFLOW = "Requested token count exceeds the model's maximum context length of 262144"
 # The run's job and pace: cleared, so a run here has no job to post to (the earlier build's tests posted a fake
-# handover comment to the real job, NGE-3411) and no pace or checker setting from the shell.
+# handover comment to the real job, job 3411) and no pace or checker setting from the shell.
 RUN_ENV = ('BOTYARD_API_URL', 'BOTYARD_API_KEY', 'BOTYARD_JOB_ID', 'BOTYARD_CHECKER', 'BOTYARD_FREE_PACE',
            'BOTYARD_FREE_TIER', 'BOTYARD_RUN_MINUTES')
 TASK = 'Build the thing in crew/x.py and test it.'
