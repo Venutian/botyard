@@ -33,6 +33,14 @@ export const HANDED = ['findings', 'note', 'base']
 const NAME = /^[a-z][a-z0-9_-]{0,39}$/
 /** The last line of every job a bot step makes: the crew's own scripts leave such a job to its track. */
 export const TRACK_MARK = 'TRACK STEP:'
+/** What a title says beyond its goal: a fix round, a check, a track's step or round ("Crew: X · Build (round 3)"). */
+const GOAL_NOISE = /^(?:fix \d+ of |check [a-z]+-\d+(?: \([^)]*\))?: |review [a-z]+-\d+: )|\s*·.*$|\s*\(round \d+\)$/i
+/** The goal a title works on: "Fix 2 of Crew: X", "Crew: X · Build" and "Crew: X" share one. */
+export function goalOf(title) {
+  let text = String(title || '').trim()
+  for (let n = 0; n < 3; n++) text = text.replace(GOAL_NOISE, '').trim()
+  return text.toLowerCase()
+}
 /** Small tools a track's script steps may call: `node "$BOTYARD_TRACK_TOOLS/land.mjs"`. */
 export const TRACK_TOOLS = path.join(here, 'track-tools')
 const MOST_STEPS = 40
@@ -408,6 +416,12 @@ export function startRequest(store, companyId, body = {}, { now = Date.now(), ac
   if (job && store.row("SELECT id FROM requests WHERE job_id = ? AND status NOT IN ('done', 'stopped')", job.id)) throw new Refused(409, 'That job already has a request moving')
   const projectId = body.projectId || job?.projectId || null
   if (version.delivers === 'change' && !projectId && !given.repo) throw new Refused(400, 'This track delivers a change: say which project (or repo) it lands in')
+  // One request a goal (24 Nov 2026: one goal asked for up to four times, each running its own track): the one moving
+  // already carries it, and findings go to it instead.
+  const goal = goalOf(job?.title || words(body.title, 500))
+  const twin = goal && store.objects("SELECT raw FROM requests WHERE company_id = ? AND status IN ('working', 'not-in-main')", companyId)
+    .find((r) => (r.projectId || null) === (projectId || null) && r.jobId !== job?.id && goalOf(r.title) === goal)
+  if (twin) throw new Refused(409, `${twin.jobCode || 'A request'} already carries this goal on its track: send it the findings or a note instead of asking again`)
   if (!job) job = createJob(store, companyId, { title: words(body.title, 500) || track.title, description: words(body.words, 40_000), projectId, status: 'in_progress' }, { now, actor })
   const request = {
     id: randomUUID(), companyId, projectId, jobId: job.id, jobCode: job.identifier, trackId: track.id, trackKey: track.key, version: version.version,

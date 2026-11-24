@@ -757,3 +757,15 @@ test('a round that ended leaves no job open, a stuck request says so once, and a
   await tick(6)
   assert.equal(store.objects('SELECT raw FROM comments WHERE job_id = ?', request.jobId).filter((c) => /cannot go on/.test(c.body)).length, 1, 'said once')
 })
+
+test('one request a goal: asking again for a goal that is moving is refused and names the one that carries it', async () => {
+  const { store } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const first = startRequest(store, 'co', { track: 'crew', title: 'Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  assert.throws(() => startRequest(store, 'co', { track: 'crew', title: 'Fix 1 of Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER }),
+    new RegExp(`${first.jobCode} already carries this goal`))
+  // Another goal, or the same goal once the first is stopped, is asked for as before.
+  startRequest(store, 'co', { track: 'crew', title: 'Harbour: the door opens', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  store.put('requests', { ...store.object('SELECT raw FROM requests WHERE id = ?', first.id), status: 'stopped' })
+  assert.ok(startRequest(store, 'co', { track: 'crew', title: 'Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER }))
+})
