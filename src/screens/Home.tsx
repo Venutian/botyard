@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
+import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
 import { portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
 import { pileName } from './Jobs';
@@ -188,6 +188,14 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
     });
   }, [connection]);
 
+  // The owner's own pages that have a phone view, beside Engram. An older door, or none, is simply none.
+  const [ownPages, setOwnPages] = useState<OwnPage[]>([]);
+  useEffect(() => {
+    let live = true;
+    getOwnPages(connection).then((r) => { if (live) setOwnPages((r?.pages ?? []).filter((p) => p.phone)); }).catch(() => { if (live) setOwnPages([]); });
+    return () => { live = false; };
+  }, [connection]);
+
   const openNeed = useCallback((item: NeedsYou) => {
     if (!item.read) mark([item], { read: true });
     if (item.botId && item.botId === leadId) nav.push({ name: 'chat', botId: item.botId });
@@ -279,8 +287,15 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
 
       <PcLoadCard connection={connection} />
 
-      {/* The home views: the crew map here, Engram (the owner's notes) on its own screen. The phone has no yard. */}
-      <Chips value={'crew' as string} options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }]} onChange={(v) => { if (v === 'engram') nav.push({ name: 'engram' }); }} hints={{ crew: DESCRIBE.home.crew, engram: DESCRIBE.home.engram }} />
+      {/* The home views: the crew map here; Engram (the owner's notes) and the owner's own pages on screens of their own. The phone has no yard. */}
+      <Chips value={'crew' as string}
+        options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }, ...ownPages.map((p) => ({ id: `own:${p.name}`, name: p.title }))]}
+        onChange={(v) => {
+          if (v === 'engram') nav.push({ name: 'engram' });
+          const page = ownPages.find((p) => `own:${p.name}` === v);
+          if (page) nav.push({ name: 'own', page: page.name, title: page.title });
+        }}
+        hints={{ crew: DESCRIBE.home.crew, engram: DESCRIBE.home.engram }} />
       <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
 
       <Label>Work in hand</Label>

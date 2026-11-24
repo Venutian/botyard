@@ -47,6 +47,8 @@ export type Route =
   /** Engram: the owner's notes, read-only. */
   | { name: 'engram' }
   | { name: 'engramNote'; id: string }
+  /** A page of the owner's own that has a phone view (screens/OwnPage.tsx). */
+  | { name: 'own'; page: string; title: string }
   | { name: 'devices' }
   | { name: 'new' }
   | { name: 'bot'; botId: string }

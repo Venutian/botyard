@@ -6,7 +6,7 @@
  * own calls under `/api/studio/own/<name>/api/...` with the folder's server file.
  *
  *   page.json   { "title": "Notes", "does": "one line under the title", "script": "page.js",
- *                 "style": "page.css", "server": "server.mjs", "wide": true }
+ *                 "style": "page.css", "server": "server.mjs", "wide": true, "phone": false }
  *   page.js     export function mount(el, tools) { ... }      (in the browser, see src/ui/own-pages.js)
  *   server.mjs  export default async function handle({ method, path, query, body, home, runHelper })
  *               returns { status?, body } for JSON, or { status?, type, text, download? } for a file
@@ -69,7 +69,10 @@ export function readOwnPage(dir, name) {
   if (manifest.style != null && !/\.css$/.test(style)) return { why: 'its "style" must name a .css file inside the folder' }
   const server = manifest.server == null ? '' : inside(folder, manifest.server)
   if (manifest.server != null && !/\.mjs$/.test(server)) return { why: 'its "server" must name a .mjs file inside the folder' }
-  return { page: { name, title, does: text(manifest.does, 120), wide: manifest.wide !== false, folder, script, style, server } }
+  // "phone": true says the server file answers GET /phone with a view the phone app draws (docs: "A page on the phone").
+  if (manifest.phone != null && manifest.phone !== true && manifest.phone !== false) return { why: 'its "phone" must be true or false' }
+  if (manifest.phone === true && !server) return { why: 'its "phone" needs a "server" file to answer GET /phone' }
+  return { page: { name, title, does: text(manifest.does, 120), wide: manifest.wide !== false, phone: manifest.phone === true, folder, script, style, server } }
 }
 
 /** Every own page of this yard, by name, and the folders that are not pages with why. No folder: none. */
@@ -92,7 +95,7 @@ export function ownPages(env = process.env) {
 
 /** What the map is told of a page: where to load it from, never where it is on the disk. */
 const forMap = (p) => ({
-  name: p.name, title: p.title, does: p.does, wide: p.wide,
+  name: p.name, title: p.title, does: p.does, wide: p.wide, phone: p.phone,
   script: `${OWN_PATH}/${p.name}/files/${path.relative(p.folder, p.script).split(path.sep).join('/')}`,
   style: p.style ? `${OWN_PATH}/${p.name}/files/${path.relative(p.folder, p.style).split(path.sep).join('/')}` : '',
 })
