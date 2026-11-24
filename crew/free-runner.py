@@ -130,9 +130,29 @@ class ContextTracker:
         return None
 
     def _make_state_comment(self):
-        return (f"State: done {self.total_tokens:,} tokens used; "
+        files = self._get_touched_files()
+        files_str = ', '.join(files) if files else 'none'
+        return (f"State: done {self.total_tokens:,} tokens used on {self.model}; "
                 f"left: continue the task; "
-                f"files touched: check git status")
+                f"files touched: {files_str}")
+
+    def _get_touched_files(self):
+        """Get list of modified files from git status."""
+        try:
+            import subprocess
+            result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                files = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        # Format: "XY filename" where X=index status, Y=worktree status
+                        parts = line.split(maxsplit=1)
+                        if len(parts) == 2:
+                            files.append(parts[1])
+                return files[:10]  # Limit to 10 files
+        except Exception:
+            pass
+        return []
 
 
 class Loops:
@@ -582,6 +602,25 @@ def say_same_family(bots, model, post=None):
         return False
 
 
+def post_state_comment(state_text, model, tokens_used, tools_count):
+    """Posts the context handover state as a comment on the job."""
+    base, job = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
+    if not (base and job):
+        return False
+    text = (f"Context handover at {tokens_used:,} tokens on {model}\n\n"
+            f"{state_text}\n\n"
+            f"Tools used this session: {tools_count}\n\n"
+            f"<!-- botyard-script: free-runner -->")
+    note(f'Context handover state posted to job: {tokens_used:,} tokens, {tools_count} tools')
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST', data=json.dumps({'body': text}).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
+        urllib.request.urlopen(req, timeout=20).close()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def list_again(bots, run=subprocess.run, now=None):
     """Asks the tool which models it has when the kept listing is older than LIST_AGAIN, so a name that
     left the offer is not handed a run. A tool that does not answer changes nothing."""
@@ -902,6 +941,8 @@ def main():
         if handover_done:
             # Context handover: restart with fresh session (no --session) and state comment as prompt
             state_comment = context_tracker.state_comment or f"State: done {context_tracker.total_tokens:,} tokens used; left: continue; files: check git status"
+            # Post state comment to job before starting fresh session
+            post_state_comment(state_comment, model, context_tracker.total_tokens, loops.tools)
             note(f'Context handover: starting fresh session with state on {model}')
             args, model, session = with_model(without_session(args), model, None), model, None
             claim(model)
@@ -989,6 +1030,8 @@ def main():
             state = context_tracker.state_comment if context_tracker.handover_done else None
             if state is None:
                 state = f"Note: previous session hit context limit ({context_tracker.total_tokens:,} tokens). Original task: {first_prompt[:200]}"
+            # Post state comment to job
+            post_state_comment(state, model, context_tracker.total_tokens, loops.tools)
             note(f'Context error on {model}; starting fresh session with state')
             sys.stderr.write(f'Context limit exceeded; continuing in fresh session.\n')
             args, model, session = with_model(without_session(args), model, None), model, None
