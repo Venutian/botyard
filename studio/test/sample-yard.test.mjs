@@ -134,7 +134,9 @@ test('the sample yard remembers a last run for every helper of the tree, and a l
   assert.equal(timers.length, made.helpers)
   assert.ok(timers.length >= 3)
   for (const job of timers) {
-    assert.ok(job.lastOk === true && job.lastStart < NOW && job.lastEnd > job.lastStart && NOW - job.lastStart < 24 * 3_600_000, `${job.name} last ran within the day`)
+    // A helper on a day of the week (Mon 07:00) last ran within the week; every other one within the day.
+    const period = /^(Sun|Mon|Tue|Wednes|Thurs|Fri|Satur)days at /.test(job.when || '') ? 7 * 24 * 3_600_000 : 24 * 3_600_000
+    assert.ok(job.lastOk === true && job.lastStart < NOW && job.lastEnd > job.lastStart && NOW - job.lastStart < period, `${job.name} last ran within its period`)
     if (job.on) assert.ok(job.nextAt > NOW, `${job.name} says when it would next run`)
   }
   table.tick()

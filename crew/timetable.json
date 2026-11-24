@@ -199,6 +199,19 @@
       "first": "10m",
       "limit": "2m",
       "on": true
+    },
+    {
+      "name": "store-rules-watch",
+      "kind": "timer",
+      "what": "Once a week, asks the lead to read Apple's, Google's and the EU's change pages and keep the store rules current. Uses no AI itself.",
+      "command": [
+        "{python}",
+        "{scripts}/store-rules-watch.py"
+      ],
+      "at": "Mon 07:00",
+      "catchUp": true,
+      "limit": "5m",
+      "on": true
     }
   ]
 }

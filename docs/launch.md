@@ -80,27 +80,15 @@ checks and what is on the testing lanes, and says everything its yes does:
   above a line the rollout halts by itself and the release goes to the ruler;
 - it states what the store-rules register asks the owner to state, and confirms the console steps only the owner
   can fill (data safety, privacy and age-rating answers, agreements). The statements are kept per app in
-  `config/store-attestations.json` and are not asked again until a rule changes or a year passes.
+  `config/store-statements.json` and are not asked again until a rule changes or a year passes.
 
 ## Store rules
 
-Before the store checks, the release is scanned against what Apple and Google reject, with the
-[App Store Compliance Playbook](https://github.com/mjmirza/app-store-compliance)'s guard and fleet sweep
-(`studio/server/lib/store-rules.mjs`). The playbook is not part of Botyard and is not copied into it: its licence is
-the OpenRoots Agent License 2.3 (free for individuals, nonprofits and companies under USD 20 million a year in
-revenue; AI training needs a separate licence), not Botyard's. Each yard fetches it once into
-`~/.botyard/tools/app-store-compliance` at one pinned commit (`RULES_PIN`), and refuses any other commit; a new pin is a
-Botyard change, reviewed like any other.
-
-- The scan reads a copy of the built app without dependencies, build output, other worktrees or built packages.
-- A **critical** or **high** finding blocks: the release goes back to the builder with each finding, its file and its
-  fix. A scan that did not see the whole app blocks too.
-- The crew may waive a **high** finding it has proven false, in the app's `store/waivers.json` (the playbook's waiver
-  form: finding id, severity and file as printed, a reason, evidence, a reviewer and an expiry within 180 days). A
-  **critical** finding is fixed, never waived. Waivers are listed on the owner's card.
-- **Medium** findings are listed to look at; they do not block.
-- The countries come from the product's `regions` in the plan (US, GB, DE and SE when none are named), and what the
-  app does that laws name from its `features` (`personal_data`, `subscriptions`, `kids`, ...).
+Before the store checks, the release is scanned with Botyard's own store rules: what Apple and Google turn an app
+away for, from purpose strings and privacy files to restricted permissions, payments, account deletion and target
+levels. A **stop** or **fix** goes back to the builder with its fix; a proven-false **fix** may be waived by the crew
+with evidence, a **stop** never. Every rule, the waivers and what the owner states are in
+[store-rules.md](store-rules.md).
 
 ## Readiness checklist
 

@@ -2,11 +2,11 @@
 /**
  * Release step "Send for review", after the owner's yes: the listing text goes onto each store, then Google Play gets
  * a production release (a staged rollout, which Google reviews first) and the App Store version is set to go live by
- * itself once approved, as a phased release, and sent to Apple. The same yes states what the card listed from the
- * store-rules register; it is recorded first, so the next release does not ask again.
+ * itself once approved, as a phased release, and sent to Apple. The same yes states what the card listed for the owner
+ * to state; it is recorded first, so the next release does not ask again.
  */
 import { parseListing } from '../../lib/release-checks.mjs'
-import { recordAttestations } from '../../lib/store-attestations.mjs'
+import { keep } from '../../lib/store-scan/kept.mjs'
 import { done, input, storeTool, storesOf } from './release-lib.mjs'
 
 const stores = storesOf()
@@ -14,8 +14,8 @@ const listing = parseListing(input('listing')) || {}
 const share = Math.min(1, Math.max(0.01, Number(input('rollout')) || 0.2))
 const said = []
 try {
-  const attest = JSON.parse(input('attest') || '{}')
-  const stated = recordAttestations(attest, { ref: process.env.BOTYARD_REQUEST_JOB || '' })
+  const told = JSON.parse(input('statements') || '{}')
+  const stated = keep(told.app, told.state, { ref: process.env.BOTYARD_REQUEST_JOB || '' })
   if (stated.length) said.push(`Recorded your statements: ${stated.join(', ')}.`)
 } catch { /* nothing to record */ }
 try {

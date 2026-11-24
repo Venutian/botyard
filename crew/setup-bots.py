@@ -682,11 +682,15 @@ def safe_folder():
                 if os.path.islink(f'{safe}/skills/{skill}'):
                     os.unlink(f'{safe}/skills/{skill}')
                 shutil.copytree(f'{folder}/{skill}', f'{safe}/skills/{skill}', dirs_exist_ok=True)
-    # Claude Code finds a skill by name in the owner's own skills folder: the job skill is linked there
-    # when that folder exists and holds nothing of that name, and never written over.
+                # A copy names the repository, so a skill's script still finds Botyard's tools from it.
+                with open(f'{safe}/skills/{skill}/.repo', 'w', encoding='utf8') as f:
+                    f.write(botyard_home.repo())
+    # Claude Code finds a skill by name in the owner's own skills folder: each skill Botyard ships (the job skill,
+    # the store rules, ...) is linked there when that folder exists and holds nothing of that name, and never written over.
     mine = f'{HOME}/.claude/skills'
-    if os.path.isdir(mine) and not os.path.lexists(f'{mine}/botyard'):
-        os.symlink(f'{skills}/botyard', f'{mine}/botyard')
+    for skill in (sorted(os.listdir(skills)) if os.path.isdir(mine) and os.path.isdir(skills) else []):
+        if os.path.isfile(f'{skills}/{skill}/SKILL.md') and not os.path.lexists(f'{mine}/{skill}'):
+            os.symlink(f'{skills}/{skill}', f'{mine}/{skill}')
 
 
 def put_lane(bot, existing, boss, dry=False):
