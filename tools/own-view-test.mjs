@@ -46,3 +46,34 @@ assert.equal(viewPath({}), '/phone')
 assert.equal(viewPath({ month: '2026-10', review: 'weekly', 'bad key': 'x', empty: '' }), '/phone?month=2026-10&review=weekly')
 assert.equal(viewPath({ q: 'a&b' }), '/phone?q=a%26b')
 console.log('own view: ok')
+
+// Taps that open a view: `open` holds a few choices, names a view may use only; an empty value takes one away.
+import { withOpen } from '../src/ownView.ts'
+const drill = readView({
+  blocks: [
+    { kind: 'rows', items: [{ title: 'Groceries', open: { category: 'Groceries', page: '', 'bad key!': 'x', n: 2 } }, { title: 'Plain', open: 'nope' }, { title: 'Empty', open: { '!': 'x' } }] },
+    { kind: 'bars', items: [{ label: 'Food', value: 3, open: { category: 'Food' } }] },
+    { kind: 'tiles', items: [{ label: 'Spent', value: '10 kr', open: { tab: 'spending' } }] },
+    { kind: 'chart', param: 'month', mark: 7, items: [{ label: 'Oct', value: 5, tone: 'bad', open: { month: '2026-10', category: '' } }] },
+    { kind: 'split', title: 'Shares', items: [{ label: 'Food', value: 60, shown: '60 kr', open: { category: 'Food' } }, { label: 'Nothing', value: 0 }, { label: 'Rent', value: 40 }] },
+    { kind: 'table', title: 'Months', columns: ['Sep', 'Oct', { x: 1 }], rows: [{ label: 'Spent', cells: ['1', '2', '3'], tones: ['', 'bad', 'pink'], open: { category: 'x' } }, { cells: ['no label'] }] },
+    { kind: 'table', columns: [], rows: [{ label: 'x' }] },
+    { kind: 'search', param: 'q', value: 'ica', placeholder: 'Search payments' },
+    { kind: 'search', param: 'bad param!' },
+  ],
+})
+assert.deepEqual(drill.blocks.map((b) => b.kind), ['rows', 'bars', 'tiles', 'chart', 'split', 'table', 'search'])
+assert.deepEqual(drill.blocks[0].items.map((i) => i.open), [{ category: 'Groceries', page: '', n: '2' }, null, null], 'only names a view may use, at most four')
+assert.deepEqual(drill.blocks[1].items[0].open, { category: 'Food' })
+assert.deepEqual(drill.blocks[2].items[0].open, { tab: 'spending' })
+assert.equal(drill.blocks[3].mark, 7)
+assert.equal(drill.blocks[3].items[0].tone, 'bad')
+assert.deepEqual(drill.blocks[4].items.map((i) => i.label), ['Food', 'Rent'], 'a share of nothing is left out')
+assert.deepEqual(drill.blocks[5].columns, ['Sep', 'Oct'], 'a column is words or a number')
+assert.equal(drill.blocks[5].rows.length, 1, 'a row needs a label')
+assert.deepEqual(drill.blocks[5].rows[0].cells, ['1', '2'], 'a row has a cell per column, no more')
+assert.deepEqual(drill.blocks[5].rows[0].tones, ['', 'bad'])
+assert.deepEqual(drill.blocks[6], { kind: 'search', param: 'q', value: 'ica', placeholder: 'Search payments' })
+assert.deepEqual(withOpen({ month: '2026-10', category: 'Food', page: '2' }, { category: 'Rent', page: '' }), { month: '2026-10', category: 'Rent' })
+assert.equal(viewPath(withOpen({}, { category: 'Eating out', q: '' })), '/phone?category=Eating%20out')
+console.log('own view taps: ok')

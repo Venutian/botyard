@@ -41,11 +41,14 @@ export function useLoad<T>(read: () => Promise<T>, deps: unknown[], every = 0) {
   return { data, error, load, setData };
 }
 
-export function Page({ title, note, onBack, onRefresh, error, loading, right, children }: {
+export function Page({ title, note, onBack, onRefresh, error, loading, right, children, top }: {
   title: string; note?: string; onBack: () => void; onRefresh?: () => Promise<void>; error?: string; loading?: boolean; right?: ReactNode; children?: ReactNode;
+  /** When this changes, the page scrolls back to its top (a new view in the same screen). */ top?: string;
 }) {
   const { t } = useLook();
   const insets = useSafeAreaInsets();
+  const scroller = useRef<ScrollView>(null);
+  useEffect(() => { if (top !== undefined) scroller.current?.scrollTo({ y: 0, animated: false }); }, [top]);
   const [refreshing, setRefreshing] = useState(false);
   const refresh = onRefresh ? async () => {
     setRefreshing(true);
@@ -54,6 +57,7 @@ export function Page({ title, note, onBack, onRefresh, error, loading, right, ch
   } : undefined;
   return (
     <ScrollView
+      ref={scroller}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.page, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 28 }]}
       refreshControl={refresh ? <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.accent} colors={[t.accent]} progressBackgroundColor={t.card} /> : undefined}
