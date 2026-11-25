@@ -644,6 +644,7 @@ export function sample(path: string, method: string, _body?: unknown) {
   const shaped = shaping(route, method, (_body ?? {}) as Record<string, any>);
   if (shaped !== undefined) return shaped;
   if (route === '/marks/sources') return reviewSample;
+  if (route === '/digest') return { cards: [], applied: [], waiting: 0, must: 0, folded: 0, more: 0, notes: '', at: new Date().toISOString() };
   if (route === '/tray' && method === 'GET') return { items: [] };
   if (route === '/tray' && method === 'POST') return { items: [], sent: 0, failed: 0 };
   if (route === '/tray/questions') return { jobId: 'j1', job: 'HAR-15 Checkout: one page instead of three', questions: [{ id: 'q1', kind: 'choice', title: 'How should a buyer pay on the one page?', items: [{ id: 'pay', prompt: 'Which payment form goes on the checkout page?', multiple: false, required: true, options: [{ id: 'in', label: 'The provider\'s form, in the page', hint: 'Fewer steps.' }, { id: 'out', label: 'Send the buyer to the provider\'s page', hint: 'One more step.' }] }] }] };

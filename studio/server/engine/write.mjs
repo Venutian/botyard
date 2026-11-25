@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { ownerOnly } from './caller.mjs'
+import { askText, ownerOf } from './card-kind.mjs'
 
 export class Refused extends Error {
   constructor(status, message) {
@@ -279,6 +280,14 @@ export function createCard(store, jobId, body = {}, { now = Date.now(), actor } 
     const before = store.objects('SELECT raw FROM cards WHERE job_id = ?', job.id).find((c) => c.idempotencyKey === body.idempotencyKey)
     if (before) return before
   }
+  // The same question asked again on a job while it still waits is the card already there, counted, not a second one.
+  const asking = askText({ kind: body.kind, title: text(body.title, 500), summary: text(body.summary, 4000), payload })
+  const open = asking ? store.objects("SELECT raw FROM cards WHERE job_id = ? AND status = 'pending'", job.id).find((c) => c.kind === body.kind && askText(c) === asking) : null
+  if (open) {
+    const again = { ...open, asked: (open.asked || 1) + 1, lastAskedAt: iso(now), updatedAt: iso(now) }
+    store.put('cards', again, { position: store.row('SELECT position FROM cards WHERE id = ?', open.id).position })
+    return again
+  }
   const position = store.row('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM cards WHERE job_id = ?', job.id).n
   const card = {
     id: randomUUID(), companyId: job.companyId, issueId: job.id, kind: body.kind, status: 'pending',
@@ -287,7 +296,10 @@ export function createCard(store, jobId, body = {}, { now = Date.now(), actor } 
     createdByAgentId: actor?.agent || null, createdByUserId: actor?.agent ? null : actor?.user || 'local-board', sourceRunId: actor?.run || null,
     addresseeUserId: 'local-board', payload, result: null,
     resolvedByUserId: null, resolvedByAgentId: null, resolvedAt: null, createdAt: iso(now), updatedAt: iso(now),
+    asked: 1, ...(body.ownerKind === 'must' ? { ownerKind: 'must', mustWhy: text(body.mustWhy, 200) } : {}),
   }
+  // Its kind (must or default), the default answer and when that applies: card-kind.mjs.
+  card.owner = ownerOf(card, now)
   store.put('cards', card, { position })
   note(store, 'issue.interaction_created', { type: 'issue', id: job.id }, actor, { kind: card.kind }, now)
   return card

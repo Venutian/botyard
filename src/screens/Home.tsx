@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
+import { Connection, Digest, DigestCard, FeedItem, Flow, FlowWindow, getDigest, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
 import { portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
+import { DigestCards } from '../ui/Digest';
 import { PcLoadCard } from '../ui/PcLoad';
 import { Icon, IconName, isIcon } from '../ui/Icon';
 import { DESCRIBE } from '../ui/describe';
@@ -127,6 +128,7 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<Manager | null>(null);
   const [tray, setTray] = useState<TrayItem[]>([]);
+  const [digest, setDigest] = useState<Digest | null>(null);
   const [traySaid, setTraySaid] = useState('');
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -157,6 +159,8 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
       getFlow(connection, windowRef.current).then(setFlow);
       // The answers held in the tray, the same ones the PC map holds.
       getTray(connection).then((tray) => setTray(tray.items)).catch(() => undefined);
+      // The decision digest; an older door has none and nothing is shown.
+      getDigest(connection).then(setDigest).catch(() => undefined);
       AsyncStorage.setItem(STORE_KEY, JSON.stringify(next)).catch(() => undefined);
     } catch (err) {
       setError((err as Error).message);
@@ -220,6 +224,12 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
     return () => { live = false; };
   }, [connection]);
 
+  // A digest card opens where it is answered: the lead's chat, or the job it was asked on.
+  const openDigest = useCallback((card: DigestCard) => {
+    if (card.chat && card.botId === leadId) nav.push({ name: 'chat', botId: card.botId });
+    else nav.push({ name: 'job', id: card.jobId });
+  }, [nav, leadId]);
+
   const openNeed = useCallback((item: NeedsYou) => {
     if (!item.read) mark([item], { read: true });
     if (item.botId && item.botId === leadId) nav.push({ name: 'chat', botId: item.botId });
@@ -278,6 +288,9 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
         <ViewButton icon="sparkle" label="Engram" onPress={() => nav.push({ name: 'engram' })} />
         {ownPages.map((page) => <ViewButton key={page.name} icon={isIcon(page.icon) ? page.icon : 'book'} label={page.title} onPress={() => nav.push({ name: 'own', page: page.name, title: page.title })} />)}
       </View>
+
+      {/* The decisions first: five at most, the ones only the owner may answer on top (ui/Digest.tsx). */}
+      <DigestCards digest={digest} connection={connection} onOpen={openDigest} onChange={(next) => { setDigest(next); load(); }} />
 
       <View onLayout={(e) => { needsAt.current = e.nativeEvent.layout.y; }}>
         <Label style={styles.firstLabel}>{`Needs you (${waiting})`}</Label>

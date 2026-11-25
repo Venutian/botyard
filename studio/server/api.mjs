@@ -29,6 +29,7 @@ import { pageBuild } from './lib/built-page.mjs'
 import { crewFlow, dropFlow, needsList, withWeek } from './lib/flow.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
+import { digestView, takeBackDefault } from './lib/digest.mjs'
 import { guidedChange } from './lib/chapters.mjs'
 import { openLook, pageShot } from './lib/look.mjs'
 import { tracksPage, tripAct, tripPage } from './lib/tracks.mjs'
@@ -103,6 +104,8 @@ async function studioRoute(req, res, url) {
     // Kept ten seconds and worked out again as soon as a job, a comment or a card moves: it took about 340 ms.
     // The owner's notes (lib/brain.mjs): never for a bot.
     if (await brainRoute(req, res, { pathname: url.pathname, query: url.searchParams, base: '/api/studio/brain', send, readBody: (r) => readJsonBody(r, 300 * 1024), local: fromThisMachine(req), botBehind })) return
+    // The decision digest at the top of Needs you: five cards at most, the owner's own first (lib/digest.mjs).
+    if (url.pathname === '/api/studio/digest' && read) return send(res, 200, await digestView())
     if (url.pathname === '/api/studio/needs' && read) return send(res, 200, { needs: withCardState(await needsNow()) })
     // The crew map: who tells whom, from the store (lib/flow.mjs).
     if (url.pathname === '/api/studio/flow' && read) return send(res, 200, await crewFlow({ window: url.searchParams.get('window') || '24h', needs: async () => withCardState(await needsNow()) }))
@@ -229,6 +232,10 @@ async function studioRoute(req, res, url) {
       const bytes = await pageShot(body.url, { width: body.width, height: body.height, scrollX: body.scrollX, scrollY: body.scrollY })
       const host = new URL(body.url).host.replace(/[^\w.-]+/g, '-')
       return send(res, 201, await uploadAttachment(String(body.job || ''), { name: `page-${host}-${Date.now()}.png`, type: 'image/png', bytes }))
+    }
+    if (url.pathname === '/api/studio/digest' && req.method === 'POST') {
+      if (body.action === 'take-back') return changed(res, 200, await takeBackDefault({ jobId: body.jobId, cardId: body.cardId }))
+      return send(res, 400, { error: 'Take back' })
     }
     if (url.pathname === '/api/studio/tray' && req.method === 'POST') {
       if (body.action === 'hold') return send(res, 200, holdItem(body.item || {}))

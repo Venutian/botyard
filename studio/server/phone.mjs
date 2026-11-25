@@ -48,6 +48,7 @@ import { liveSessions as readLiveSessions } from './lib/sessions.mjs'
 import { OWN_PATH, ownPagesRequest } from './lib/own-pages.mjs'
 import { reviewRecord, reviewSources, sendMarks } from './lib/marks.mjs'
 import { dropItem, holdItem, readTray, sendTray, waitingQuestions } from './lib/tray.mjs'
+import { digestView, takeBackDefault } from './lib/digest.mjs'
 import { brainRoute } from './lib/brain.mjs'
 
 const MIN_TOKEN = 32
@@ -577,6 +578,14 @@ export function phoneHandler({ token, faces = {}, connectors = {}, engine = {}, 
       // Reviews: what can be marked on a job or in a chat, the send (the owner's only), and the kept record (lib/marks.mjs).
       if (pathname === '/v1/marks/sources' && req.method === 'GET') return send(res, 200, await reviewSources({ job: q('job'), bot: q('bot') }, { picture: (id) => `/v1/proof/${id}`, ...options }))
       if (pathname === '/v1/marks' && req.method === 'GET') return send(res, 200, await reviewRecord({ job: q('job'), project: q('project'), id: q('id') }, options))
+      // The decision digest at the top of the home screen, the same one the map shows (lib/digest.mjs).
+      if (pathname === '/v1/digest' && req.method === 'GET') return send(res, 200, await digestView(options))
+      if (pathname === '/v1/digest' && req.method === 'POST') {
+        if (process.env.BOTYARD_REFUSE_BOTS !== 'off' && botBehind(req)) return send(res, 403, { error: 'This is the owner\'s, not a bot\'s' })
+        const body = await readBody(req)
+        if (body.action === 'take-back') return send(res, 200, await takeBackDefault({ jobId: body.jobId, cardId: body.cardId }, options))
+        return send(res, 400, { error: 'Take back' })
+      }
       // The answer tray beside Needs you, the same one the map holds (lib/tray.mjs).
       if (pathname === '/v1/tray' && req.method === 'GET') return send(res, 200, { items: readTray() })
       if (pathname === '/v1/tray/questions' && req.method === 'GET') return send(res, 200, await waitingQuestions({ job: q('job'), bot: q('bot') }, options))

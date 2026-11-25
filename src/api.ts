@@ -362,7 +362,7 @@ export const launchAction = (c: Connection, body: { action: 'check' } | { action
 export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
 export type TrackLine = { from: string; to: string; on: 'pass' | 'fail' | 'always'; rounds?: number; then?: string };
 export type TrackInfo = { id: string; key: string; title: string; description: string; version: number; builtIn: boolean; steps: TrackStep[]; lines: TrackLine[]; delivers: string };
-export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; costUsd: number; cost: string; updatedAt: string };
+export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; refused?: string; costUsd: number; cost: string; updatedAt: string };
 export type TripStep = TrackStep & {
   state: string; tries: number; current: boolean; verdict: string; findings: string; summary: string; leftNames: string[]; left: Record<string, unknown>;
   numbers: Record<string, unknown>; job: string; jobId: string; note: string; handedFindings: string; costUsd: number; cost: string; startedAt: string; finishedAt: string;
@@ -372,6 +372,8 @@ export type Trip = {
   track: { key: string; version: number; title: string; delivers: string; main: string }; lines: TrackLine[]; steps: TripStep[]; cost: string; costUsd: number;
   request: RequestRow; gate: { step: string; title: string; ask?: { prompt: string; accept: string; reject: string } | null; backTo: { id: string; title: string }[] } | null;
   can: { pause: boolean; resume: boolean; stop: boolean; rerun: string[] };
+  /** Not landed, and why; and what a ruling waived for work that did land. */
+  refusal?: { reason: string; detail: string; why: string; at: string } | null; waivers?: { by: string; reason: string; waived: string; at: string }[];
 };
 export type TripAction = 'approve' | 'back' | 'context' | 'rerun' | 'pause' | 'resume' | 'stop';
 export const getTracks = (c: Connection) => call<{ tracks: TrackInfo[]; requests: RequestRow[] }>(c, '/tracks');
@@ -732,6 +734,15 @@ export type TrayItem = {
   answers?: TrayAnswer[]; said?: string; reason?: string; review?: ReviewSend; heldAt: number; error?: string;
 };
 export type TrayHold = Omit<TrayItem, 'key' | 'heldAt' | 'error'>;
+// ── the decision digest: five cards at most, the owner's own first ───────────────────
+/** A card that waits: `must` is the owner's alone; `default` carries its answer and when that applies by itself. */
+export type DigestCard = { id: string; jobId: string; job: string; chat: boolean; botId: string; bot: string; title: string; question: string; kind: 'must' | 'default'; why: string; default: string; appliesAt: string | null; count: number; line: string; tripId?: string };
+/** An answer the engine applied by default, and whether it can still be taken back. */
+export type DigestApplied = { id: string; jobId: string; job: string; title: string; answer: string; appliedAt: string; reverseUntil: string; canReverse: boolean; line: string };
+export type Digest = { cards: DigestCard[]; applied: DigestApplied[]; waiting: number; must: number; folded: number; more: number; notes: string; at: string };
+export const getDigest = (c: Connection) => call<Digest>(c, '/digest');
+export const takeBackDefault = (c: Connection, jobId: string, cardId: string) => call<Digest>(c, '/digest', 'POST', { action: 'take-back', jobId, cardId });
+
 export const getTray = (c: Connection) => call<{ items: TrayItem[] }>(c, '/tray');
 export const getTrayQuestions = (c: Connection, which: { job?: string; bot?: string }) =>
   call<{ jobId: string; job: string; questions: TrayQuestion[] }>(c, `/tray/questions?${which.bot ? `bot=${encodeURIComponent(which.bot)}` : `job=${encodeURIComponent(which.job || '')}`}`);

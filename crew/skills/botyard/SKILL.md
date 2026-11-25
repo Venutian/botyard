@@ -78,6 +78,13 @@ yourself, the shape is `{"kind": "ask_user_questions", "title": "...", "payload"
 "choice", "prompt": "...", "selectionMode": "single", "options": [{"id": "a", "label": "...",
 "description": "..."}]}]}}`; Botyard answers 400, saying what to send, when there is nothing to answer.
 
+Mark the option you would choose with `(recommended)`: that is the card's default. The owner has a
+day to answer; after that Botyard applies your default by itself and wakes you with it (the result says
+`appliedByDefault`). The owner can still take it back for seven days, and you are told if they do. A
+card with no recommended option, or one about money, deleting work that is not merged, a store release,
+final art or a sign-in, is never answered for the owner: ask those only when you must. The same
+question asked again while it waits is counted on the first card, not shown twice.
+
 Then set your job to `in_review` and end your run: you are woken with the answer. Withdraw a card that
 went stale (`POST $api/api/issues/$job/interactions/<card id>/withdraw`), and do not repeat an open
 question in later messages.

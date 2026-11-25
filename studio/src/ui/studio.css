@@ -969,6 +969,14 @@
 .studio-body .line.done .ref { color: var(--green); }
 .studio-body .line.done .title { color: var(--muted); }
 
+/* The decision digest above the cards: five at most, each one line of what happens if nothing is said. */
+.col-a .digest { margin: 0 0 12px; }
+.col-a .digest .digest-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+.col-a .digest .digest-head small { color: var(--muted); font-weight: 400; }
+.col-a .digest button.digest-card { cursor: pointer; }
+.col-a .digest button.digest-card:hover { border-color: var(--accent); }
+.col-a .digest .digest-card small { color: var(--muted); }
+
 /* What waits on the owner's word, at the top of Needs you. */
 .col-a .ask {
   display: grid;

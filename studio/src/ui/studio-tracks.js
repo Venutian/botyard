@@ -66,7 +66,7 @@ export function trackDiagram(steps, lines, { states = {}, current = '', title = 
 const requestRowHtml = (r) => `<tr class="go-row" data-act="open-trip" data-id="${esc(r.tripId)}" tabindex="0">
   <td class="nowrap"><b>${esc(r.job)}</b></td>
   <td class="job">${esc(r.title)}<small>${esc(r.track)}</small></td>
-  <td><span class="state ${r.waitsForOwner ? 'warn' : TRIP_CLASS[r.tripStatus] || ''}">${esc(r.waitsForOwner ? 'Waits for you' : r.state)}</span>${r.at && r.status === 'working' ? `<small>${esc(r.at)}</small>` : ''}${r.reason && r.tripStatus === 'stuck' ? `<small>${esc(r.reason)}</small>` : ''}</td>
+  <td><span class="state ${r.waitsForOwner ? 'warn' : TRIP_CLASS[r.tripStatus] || ''}">${esc(r.waitsForOwner ? 'Waits for you' : r.state)}</span>${r.at && r.status === 'working' ? `<small>${esc(r.at)}</small>` : ''}${r.reason && r.tripStatus === 'stuck' ? `<small>${esc(r.reason)}</small>` : r.refused && r.status === 'working' ? `<small>${esc(r.refused)}</small>` : ''}</td>
   <td class="n">${esc(r.cost)}</td>
 </tr>`
 
@@ -157,6 +157,8 @@ export function tripScreen(t) {
     <span class="cost" title="Every step, round and rerun of this request">${esc(r.cost)} for the request</span>
   </div>
   ${t.reason ? `<p class="${t.status === 'stuck' ? 'bad' : 'hint'}">${esc(t.reason)}</p>` : ''}
+  ${t.refusal && t.refusal.reason !== t.reason ? `<p class="bad">${esc(t.refusal.reason)}</p>` : ''}
+  ${(t.waivers || []).map((w) => `<p class="hint">Landed on a waiver${w.by ? ` by ${esc(w.by)}` : ''}: ${esc(w.reason)}</p>`).join('')}
   ${t.status === 'not-in-main' ? `<p class="hint">The steps are done. It is finished when commit <code>${esc(String(t.commit).slice(0, 10))}</code> is in ${esc(t.track.main)}; the engine looks again every minute.</p>` : ''}`
   const controls = `<form class="fields trip-controls" data-part="trip-rerun">
     <div class="gate-acts">
