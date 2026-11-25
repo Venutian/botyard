@@ -664,22 +664,7 @@ test('a fix round after a build that said NOT MET still starts from that build\'
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'eee5555')
 })
 
-test('the land step refuses work whose last check failed unless the trip is run again from it with a written reason', async () => {
-  const { landRefusal } = await import('../server/engine/tracks.mjs')
-  const { store } = yard()
-  const version = { steps: [{ id: 'check' }, { id: 'rule' }, { id: 'land' }] }
-  const step = { id: 'land', command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"' }
-  const put = (id, stepId, status, at) => store.put('trip_steps', { id, tripId: 't1', requestId: 'r1', stepId, kind: 'bot', title: stepId === 'check' ? 'Check' : 'Ruling', try: 1, status, snapshot: { verdict: status === 'passed' ? 'pass' : 'fail', findings: 'row 2 wrong' }, createdAt: at, finishedAt: at })
-  put('a', 'check', 'failed', '2026-11-20T10:00:00Z')
-  assert.match(landRefusal(store, { id: 't1' }, version, step, {}), /^Not landed: the last check failed/)
-  // A written reason on a rerun from the land step lets it through.
-  assert.equal(landRefusal(store, { id: 't1' }, version, step, { inputs: { note: 'Land it: the row is fixed by hand' } }), '')
-  // A ruler's later PASS is the last word.
-  put('b', 'rule', 'passed', '2026-11-20T11:00:00Z')
-  assert.equal(landRefusal(store, { id: 't1' }, version, step, {}), '')
-  // Only the land script is guarded.
-  assert.equal(landRefusal(store, { id: 't1' }, version, { id: 'x', command: 'echo' }, {}), '')
-})
+// The land step's guard (nothing lands without its passes) has its own tests: engine-land-guard.test.mjs.
 
 test('every scored review is kept in the reviews table with its piece kind and verdict; a skipped one is not', async () => {
   const { store, dataDir } = yard()

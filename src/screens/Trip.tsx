@@ -46,6 +46,8 @@ export function TripScreen({ id, connection, nav }: { id: string; connection: Co
           <View style={styles.head}>
             <Tag text={trip.state} color={trip.status === 'stuck' ? t.bad : trip.status === 'done' ? t.good : t.warn} />
             {trip.reason ? <Txt size={14} color={trip.status === 'stuck' ? t.bad : t.ink2}>{trip.reason}</Txt> : null}
+            {trip.refusal && trip.refusal.reason !== trip.reason ? <Txt size={14} color={t.bad}>{trip.refusal.reason}</Txt> : null}
+            {(trip.waivers ?? []).map((w) => <Txt key={w.at} size={14} color={t.ink2}>{`Landed on a waiver${w.by ? ` by ${w.by}` : ''}: ${w.reason}`}</Txt>)}
             {trip.status === 'not-in-main' ? <Txt size={14} color={t.ink2}>{`The steps are done. It is finished when commit ${trip.commit.slice(0, 10)} is in ${trip.track.main}.`}</Txt> : null}
           </View>
 

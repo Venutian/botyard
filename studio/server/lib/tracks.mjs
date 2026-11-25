@@ -20,13 +20,15 @@ const STATE_WORDS = {
 }
 const REQUEST_WORDS = { working: 'Moving', 'not-in-main': 'Done, not in main', done: 'Finished', stopped: 'Stopped' }
 
+const firstLine = (text) => String(text || '').split('\n')[0].slice(0, 300)
+
 /** One request as a row: what was asked, its track, where its trip stands, what it cost. */
 export function requestRow(r) {
   const trip = r.trip || {}
   const at = trip.status === 'running' && trip.currentTitle ? `${trip.currentTitle}${trip.currentKind === 'gate' ? ' (waits for you)' : ''}` : STATE_WORDS[trip.status] || ''
   return {
     id: r.id, job: r.jobCode || '', jobId: r.jobId, title: r.title, track: r.trackKey, status: r.status, state: REQUEST_WORDS[r.status] || r.status,
-    at, tripId: trip.id || '', tripStatus: trip.status || '', waitsForOwner: trip.status === 'running' && trip.currentKind === 'gate', reason: trip.reason || '',
+    at, tripId: trip.id || '', tripStatus: trip.status || '', waitsForOwner: trip.status === 'running' && trip.currentKind === 'gate', reason: trip.reason || '', refused: firstLine(trip.refusal?.reason),
     costUsd: Number(r.cost?.usd) || 0, cost: dollars(r.cost?.usd), tokens: (r.cost?.inputTokens || 0) + (r.cost?.outputTokens || 0), updatedAt: r.updatedAt,
   }
 }
@@ -59,6 +61,9 @@ export async function tripPage(id, options) {
     id: trip.id, status: trip.status, state: STATE_WORDS[trip.status] || trip.status, reason: trip.reason || '', current: trip.current, rounds: trip.rounds || {},
     track: trip.track, lines: trip.track.lines, steps, cost: dollars(trip.cost?.usd), costUsd: Number(trip.cost?.usd) || 0,
     request: requestRow(request), commit: trip.commit || '',
+    // Not landed, and why (the land step's guard); and what a ruling waived for the work that did land.
+    refusal: trip.refusal ? { reason: firstLine(trip.refusal.reason), detail: String(trip.refusal.reason || '').slice(0, 2000), why: trip.refusal.why || '', at: trip.refusal.at || '' } : null,
+    waivers: (trip.waivers || []).map((w) => ({ by: w.by || '', reason: String(w.reason || '').slice(0, 1000), waived: String(w.waived || '').slice(0, 500), at: w.at || '' })),
     gate: gate ? { step: gate.id, title: gate.title, ask: gate.ask, backTo: steps.slice(0, steps.indexOf(gate)).map((s) => ({ id: s.id, title: s.title })) } : null,
     can: { pause: trip.status === 'running', resume: trip.status === 'paused', stop: !['done', 'stopped'].includes(trip.status), rerun: steps.map((s) => s.id) },
   }
