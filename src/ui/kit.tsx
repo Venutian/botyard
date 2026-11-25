@@ -60,7 +60,7 @@ export function Label({ children, style }: { children: ReactNode; style?: StyleP
 }
 
 /** An icon on its own: its label names it, its hint says what pressing it does. */
-export function GlassButton({ icon, label, onPress, size = 44, hint }: { icon: IconName; label: string; onPress: () => void; size?: number; hint?: string }) {
+export function GlassButton({ icon, label, onPress, size = 44, hint, dot }: { icon: IconName; label: string; onPress: () => void; size?: number; hint?: string; /** A small mark in the corner: something new behind it. */ dot?: boolean }) {
   const { t } = useLook();
   const tap = useTap();
   return (
@@ -80,13 +80,14 @@ export function GlassButton({ icon, label, onPress, size = 44, hint }: { icon: I
       ]}
     >
       <Icon name={icon} size={Math.round(size * 0.48)} color={t.ink} />
+      {dot ? <View style={[styles.dot, { backgroundColor: t.accent, borderColor: t.card }]} /> : null}
     </Pressable>
   );
 }
 
 /** A button. `hint` is a short line that says what pressing it does, written under it so a phone shows it too. */
 export function Button({ label, onPress, kind = 'primary', busy, disabled, icon, hint }: { label: string; onPress: () => void; kind?: 'primary' | 'quiet' | 'danger'; busy?: boolean; disabled?: boolean; icon?: IconName; hint?: string }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
   const tap = useTap();
   const ink = kind === 'primary' ? t.accentInk : kind === 'danger' ? t.bad : t.ink;
   const press = (
@@ -120,7 +121,7 @@ export function Button({ label, onPress, kind = 'primary', busy, disabled, icon,
       )}
     </Pressable>
   );
-  return hint ? <View style={styles.hinted}>{press}<Txt size={13} color={t.ink2}>{hint}</Txt></View> : press;
+  return hint && p.explain ? <View style={styles.hinted}>{press}<Txt size={13} color={t.ink2}>{hint}</Txt></View> : press;
 }
 
 /** A grouped card of settings rows, with a line between them. */
@@ -203,9 +204,9 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
  * the row, so a phone (which has no hover) never leaves a filter unexplained.
  */
 export function Chips<T extends string>({ value, options, onChange, styleFor, hints }: { value: T; options: { id: T; name: string }[]; onChange: (next: T) => void; styleFor?: (id: T) => object; hints?: Partial<Record<T, string>> }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
   const tap = useTap();
-  const said = hints?.[value];
+  const said = p.explain ? hints?.[value] : undefined;
   const row = (
     <View style={styles.chips}>
       {options.map((option) => {
@@ -234,7 +235,8 @@ export function Chips<T extends string>({ value, options, onChange, styleFor, hi
 
 /** Anything pressable with its description written under it: a phone has no hover, so the words stay on screen. */
 export function Hinted({ hint, children }: { hint: string; children: ReactNode }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
+  if (!p.explain) return <>{children}</>;
   return (
     <View style={styles.hintedFit}>
       {children}
@@ -438,7 +440,8 @@ export const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   pressed: { transform: [{ scale: 0.93 }] },
   down: { transform: [{ translateY: 2 }] },
-  keyDown: { boxShadow: 'none', transform: [{ translateY: 3 }] },
+  dot: { borderRadius: 6, borderWidth: 2, height: 12, position: 'absolute', right: -2, top: -2, width: 12 },
+  keyDown: { transform: [{ scale: 0.97 }] },
   signTitle: { lineHeight: 42 },
   hazard: { borderBottomWidth: 2, height: 9, left: 0, position: 'absolute', right: 0, top: 0 },
   dim: { opacity: 0.6 },

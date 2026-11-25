@@ -229,7 +229,8 @@ export function StyleScreen({ crew, nav, onForget }: { crew: Crew; nav: Nav; onF
           {Platform.OS !== 'web' ? <Row title="Tell me when bots need me" detail="Checks about every 15 minutes" right={<Toggle label="Tell me when bots need me" value={p.notify} onChange={(notify) => update({ notify })} />} /> : null}
           <Row title="Devices" detail="See and cut off what can reach your studio" onPress={() => nav.push({ name: 'devices' })} right={<Icon name="shield" size={20} color={t.ink3} />} />
           <Row title="Vibrate on taps" detail={DESCRIBE.style.vibrate} right={<Toggle label="Vibrate on taps" value={p.haptics} onChange={(haptics) => update({ haptics })} />} />
-          <Row title="Tab names" detail={DESCRIBE.style.tabNames} last right={<Toggle label="Tab names" value={p.tabLabels} onChange={(tabLabels) => update({ tabLabels })} />} />
+          <Row title="Tab names" detail={DESCRIBE.style.tabNames} right={<Toggle label="Tab names" value={p.tabLabels} onChange={(tabLabels) => update({ tabLabels })} />} />
+          <Row title="Explain buttons" detail="Writes what each button and filter does under it" last right={<Toggle label="Explain buttons" value={p.explain} onChange={(explain) => update({ explain })} />} />
         </Group>
 
         <View style={styles.footer}>

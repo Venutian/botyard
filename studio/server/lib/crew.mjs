@@ -14,6 +14,7 @@ import path from 'node:path'
 import { ALL_JOBS, EngineError, call, companyId, crewOf, orElse, plainTitle, refOf, withRefs } from './engine.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { crewLooks } from './looks.mjs'
+import { copyGroups, runningCopy } from './copies.mjs'
 import { runFeed, scrub, toolLine } from './run-feed.mjs'
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -210,7 +211,7 @@ export function runRow(run, names, jobs) {
   const job = jobs.get(run.issueId)
   const start = stamp(run.startedAt || run.createdAt)
   const end = stamp(run.finishedAt)
-  const failed = FAILED.has(run.status)
+  const failed = FAILED.has(run.status) && run.errorCode !== 'pace_hold'
   return {
     id: run.id,
     bot: names.get(run.agentId) || 'A bot',
@@ -251,20 +252,34 @@ export async function botList({ folder = crewFolder(), now = Date.now(), ...opti
   const liveIds = new Set(live.map((r) => r.agentId))
   const day = new Map(dayCost.map((r) => [r.agentId, tokensOf(r)]))
   const wk = new Map(weekCost.map((r) => [r.agentId, tokensOf(r)]))
-  const shown = new Set(agents.map((a) => a.id))
+  // A bot's copies on other AIs are one card: its look, name and files; the tag says which copy runs now.
+  const fold = copyGroups(agents)
+  const shown = new Set(fold.top.map((a) => a.id))
   const order = { running: 0, error: 1, idle: 2, paused: 3 }
   const looks = crewLooks(agents)
-  const bots = agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    title: agent.title || '',
-    ...looks.get(agent.id),
-    ...stateOf(agent, liveIds, files.rested),
-    ...engineOf(agent, files, now),
-    tokensToday: day.get(agent.id) || 0,
-    tokensWeek: wk.get(agent.id) || 0,
-    waste: files.waste.bots[agent.name] || null,
-  })).sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || a.name.localeCompare(b.name))
+  const bots = fold.top.map((agent) => {
+    const family = fold.family(agent)
+    const on = runningCopy(agent, fold, { liveIds })
+    const sum = (m) => family.reduce((n, a) => n + (m.get(a.id) || 0), 0)
+    const mine = live.filter((r) => family.some((a) => a.id === r.agentId))
+    const state = stateOf(agent, liveIds, files.rested)
+    return {
+      id: agent.id,
+      name: agent.name,
+      title: agent.title || '',
+      ...looks.get(agent.id),
+      ...state,
+      ...(family.length > 1 && family.some((a) => liveIds.has(a.id)) ? { status: 'running', state: 'Working' } : {}),
+      ...engineOf(on, files, now),
+      ...(family.length > 1 ? { copies: family.map((a) => ({ id: a.id, name: a.name, ...engineOf(a, files, now), running: a.id === on.id })), on: ENGINE[on.adapterType] || 'Other' } : {}),
+      // The runs going now, across its copies: "checking 3".
+      running: mine.length,
+      jobIds: [...new Set(mine.map((r) => r.issueId).filter(Boolean))],
+      tokensToday: sum(day),
+      tokensWeek: sum(wk),
+      waste: files.waste.bots[agent.name] || null,
+    }
+  }).sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || a.name.localeCompare(b.name))
   // Who reports to whom, as the engine's org chart has it, without the retired.
   const tree = (nodes) => nodes.filter((n) => shown.has(n.id)).map((n) => ({ id: n.id, name: n.name, reports: tree(n.reports || []) }))
   return { bots, org: tree(org), wasteAt: files.waste.at, wasteStale: files.waste.stale, at: now }
@@ -384,7 +399,7 @@ export async function runList({ bot = '', status = '', page = 0, ...options } = 
   ])
   const nameOf = new Map(agents.map((a) => [a.id, a.name]))
   const rows = runs.filter((r) => nameOf.has(r.agentId))
-    .filter((r) => !status || (status === 'failed' ? FAILED.has(r.status) : status === 'running' ? ['running', 'queued'].includes(r.status) : r.status === status))
+    .filter((r) => !status || (status === 'failed' ? FAILED.has(r.status) && r.errorCode !== 'pace_hold' : status === 'running' ? ['running', 'queued'].includes(r.status) : r.status === status))
   const from = Math.max(0, Number(page) || 0) * RUNS_PAGE
   return {
     runs: rows.slice(from, from + RUNS_PAGE).map((r) => runRow(r, nameOf, names.jobs)),
@@ -466,7 +481,7 @@ export async function runDetail(runId, options = {}) {
   const feed = log ? runFeed(content, { fromStart: from === 0, cwd: run.contextSnapshot?.cwd || '' }) : { items: [], cut: 0 }
   return {
     ...row,
-    model: usage.model ? modelLabel(usage.model) : '',
+    model: (usage.models?.length > 1 ? usage.models : usage.model ? [usage.model] : []).map(modelLabel).join(', then '),
     started: { assignment: 'Given a job', automation: 'Woken by the crew', on_demand: 'Started by hand', timer: 'On a timer' }[run.invocationSource] || '',
     trimmed: from + shortFrom > 0,
     log: lines,
@@ -504,6 +519,7 @@ export async function activityPage({ page = 0, bot = '', ...options } = {}) {
   }
   for (const span of timeline?.spans || []) {
     if (!FAILED.has(span.status) || (bot && span.actorId !== `agent:${bot}`)) continue
+    if (span.errorCode === 'pace_hold') continue
     const job = names.jobs.get(span.issueId)
     items.push({ at: stamp(span.end || span.start), who: actors.get(span.actorId) || 'A bot', what: span.status === 'cancelled' ? 'had a run stopped on' : 'had a run fail on', to: '', job: job ? { id: job.id, ref: job.ref, title: job.title } : { id: span.issueId, ref: withRefs(span.issueIdentifier || ''), title: cut(plainTitle(withRefs(span.issueTitle || '')), 90) }, actor: span.actorId, issue: span.issueId, kind: 'failed', run: span.runId, times: 1 })
   }

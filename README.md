@@ -5,6 +5,10 @@
   You give the crew jobs. A bot builds each one, a second bot checks it, and you get a commit you can read.
 </p>
 
+> **New here?** Download the app from the [latest release](https://github.com/Venutian/botyard/releases/latest),
+> open it, and follow its first-run guide. Free models work with no account and no subscription.
+> Step by step for Windows, macOS and Linux: [Getting started](docs/getting-started.md).
+
 Botyard is not a viewer of your coding-agent sessions. It is the thing that runs the work: an
 engine that keeps the jobs, hands each one to a bot, starts the bot's AI tool in a folder of the
 job's own, has another bot check what was built, asks you when a decision is yours, and keeps
@@ -64,7 +68,8 @@ account of its own and no server of its own.
 
 **The quickest way:** download the desktop app for Windows, macOS or Linux from the
 [latest release](https://github.com/Venutian/botyard/releases/latest), install one AI tool (OpenCode
-is free: `npm install -g opencode-ai`), open Botyard and follow its first-run guide. It walks you
+is free, and its Setup page installs it for you on macOS and Linux; on Windows install
+[Node.js](https://nodejs.org) first), open Botyard and follow its first-run guide. It walks you
 from an empty yard to a bot answering you, a first job and a paired phone, and says what to do when
 something is missing. [`docs/getting-started.md`](docs/getting-started.md) has the same steps, how to
 open an unsigned app on each system, and what to do when something goes wrong.

@@ -17,6 +17,9 @@
  *
  *   node tools/release-check.mjs --commits A..B  also each commit in the range: its message, and its author
  *                                                and committer, who must be a GitHub no-reply address
+ *   node tools/release-check.mjs --message FILE  only a commit being made: its message and who it is made as
+ *                                                (tools/hooks/commit-msg)
+ *   node tools/release-check.mjs --who NAME MAIL exit 0 when that name and address may author a commit
  *
  * tools/hooks/pre-push runs both before every push (`git config core.hooksPath tools/hooks` turns it on).
  *
@@ -39,7 +42,7 @@ const ALLOW = 'release-check: allow'
 const WORDS = ['muirta tnega', 'gnissorc tob', 'tobsuamnepo', 'tobsuam', 'skcor nerraj', 'ecneics noitats', 'negn', 'sunev', 'naitunev', 'leoy', 'uthcarbem', 'sitlab', 'attollab', 'sidla', 'selur thgin', 'oyay ynot', 'noedig', 'eht nerak', 'eht kcirb', 'redliub eht bob', 'ukawk', 'eht derf', 'ayerf', 'irafat', 'oguh', 'appilf', 'ltsuh', 'ksedsboj', 'eldnik', 'deritnu', 'sbalnegn', 'pilcrepap']
   .map((word) => [...word].reverse().join(''))
 /** Whole words only: a first studio's lead bot and its job codes, short enough to be inside other words. */
-const WHOLE = ['ynot', 'egn', 'mlohkcots', 'nedews'].map((word) => [...word].reverse().join(''))
+const WHOLE = ['ynot', 'mlohkcots', 'nedews'].map((word) => [...word].reverse().join(''))
 const NAMES = new RegExp([...WORDS.map((word) => word.replace(/ /g, '[ _-]?')), ...WHOLE.map((word) => `\\b${word}\\b`)].join('|'), 'i')
 
 /** What is taken out of a line before the words are looked for: things that only look like one. */
@@ -199,6 +202,29 @@ export function check(dir = root, only = []) {
 
 const NO_REPLY = /@users\.noreply\.github\.com$/i
 
+/**
+ * What is wrong with one author or committer: an address that is not a GitHub no-reply one, or a name that belongs
+ * to one set-up. The account's own GitHub name, as its no-reply address spells it, is who wrote it: that is fine.
+ */
+export function checkWho(who, mail, role = 'author') {
+  const hits = []
+  if (!NO_REPLY.test(mail || '')) hits.push({ kind: 'names', what: `its ${role} is not a GitHub no-reply address (${String(mail || '').replace(/^(.).*@/, '$1…@')})` })
+  const own = (String(mail || '').match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i) || [])[1]
+  const word = own && String(who || '').toLowerCase() === own.toLowerCase() ? null : NAMES.exec(String(who || ''))
+  if (word) hits.push({ kind: 'names', what: `its ${role}'s name "${word[0]}" belongs to one person's set-up` })
+  return hits
+}
+
+/** What is wrong with a commit message, line by line. A message still being written leaves out git's comment lines. */
+export function checkMessage(body, { writing = false } = {}) {
+  const hits = []
+  String(body || '').split('\n').forEach((text, index) => {
+    if (writing && text.startsWith('#')) return
+    for (const hit of checkLine('COMMIT_EDITMSG', text)) hits.push({ line: index + 1, ...hit })
+  })
+  return hits
+}
+
 /** Each commit in `range` (git's A..B): its message read like a file's lines, and who wrote and committed it. */
 export function checkCommits(dir, range) {
   const out = execFileSync('git', ['log', '--format=%H%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e', range], { cwd: dir, encoding: 'utf8' })
@@ -207,21 +233,32 @@ export function checkCommits(dir, range) {
     const [sha, an, ae, cn, ce, body] = record.split('\x1f')
     const file = `commit ${sha.slice(0, 7)}`
     for (const [who, mail, role] of [[an, ae, 'author'], [cn, ce, 'committer']]) {
-      if (!NO_REPLY.test(mail)) hits.push({ file, line: 0, kind: 'names', what: `its ${role} is not a GitHub no-reply address (${mail.replace(/^(.).*@/, '$1…@')})` })
-      // The account's own GitHub name, as its no-reply address spells it, is who wrote it: that is the point.
-      const own = (mail.match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i) || [])[1]
-      const word = own && who.toLowerCase() === own.toLowerCase() ? null : NAMES.exec(who)
-      if (word) hits.push({ file, line: 0, kind: 'names', what: `its ${role}'s name "${word[0]}" belongs to one person's set-up` })
+      for (const hit of checkWho(who, mail, role)) hits.push({ file, line: 0, ...hit })
     }
-    String(body || '').split('\n').forEach((text, index) => {
-      for (const hit of checkLine('COMMIT_EDITMSG', text)) hits.push({ file, line: index + 1, ...hit })
-    })
+    for (const hit of checkMessage(body)) hits.push({ file, ...hit })
   }
   return hits
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
+  // A commit being made (tools/hooks/commit-msg): its message and who it is made as, so a word the push would refuse
+  // is refused here, before it sits under every commit after it (18 and 20 Nov 2026: one such commit held back
+  // every push of main for days).
+  if (args[0] === '--message') {
+    const ident = (name) => { try { return execFileSync('git', ['var', name], { encoding: 'utf8' }).trim() } catch { return '' } }
+    const split = (line) => { const m = line.match(/^(.*?) <([^>]*)>/); return m ? [m[1], m[2]] : ['', ''] }
+    const hits = [...checkMessage(fs.readFileSync(args[1], 'utf8'), { writing: true }).map((hit) => ({ file: 'message', ...hit }))]
+    for (const [name, role] of [['GIT_AUTHOR_IDENT', 'author'], ['GIT_COMMITTER_IDENT', 'committer']]) {
+      const [who, mail] = split(ident(name))
+      for (const hit of checkWho(who, mail, role)) hits.push({ file: 'commit', line: 0, ...hit })
+    }
+    for (const hit of hits) console.error(`  ${hit.file}${hit.line ? `:${hit.line}` : ''}  ${hit.what}`)
+    if (hits.length) console.error('commit refused: the push check would refuse this commit, and every push after it. Reword the message (no job codes, no names of one set-up).')
+    process.exit(hits.length ? 1 : 0)
+  }
+  // Would this name and address pass as a commit's author? (the bots' git asks before it commits here)
+  if (args[0] === '--who') process.exit(checkWho(args[1], args[2]).length ? 1 : 0)
   const at = args.indexOf('--commits')
   const range = at >= 0 ? args[at + 1] : ''
   const only = args.filter((arg, i) => !arg.startsWith('--') && !(at >= 0 && i === at + 1))

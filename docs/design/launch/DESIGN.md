@@ -197,4 +197,4 @@ each value with no transition. The sheet's own slide-in stays as the studio has 
 
 - The product page (opened from a row) keeps today's design; it was not part of this brief.
 - The shell in the mock-ups (top sign, rail, map) is a plain stand-in drawn only to show the sheet's place.
-- Nothing is scored here: Karen scores the built page.
+- Nothing is scored here: the reviewer bot scores the built page.

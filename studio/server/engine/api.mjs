@@ -23,6 +23,8 @@ import { addTrigger, createRoutine, patchRoutine, patchTrigger, removeRoutine, r
 import { createCompany, isSetUp, patchCompany } from './studio.mjs'
 import { cancelRun, whoHolds } from './runner.mjs'
 import { TRACK_WRITES, readTracks } from './tracks.mjs'
+import { SIGNAL_WRITES, readSignals } from './signals.mjs'
+import { DIGEST_WRITES, readDigest } from './digest.mjs'
 import { MARK_WRITES, readMarks } from './marks.mjs'
 import { Refused, addComment, createCard, createJob, openChat, patchJob, patchProject, putAgent, resetSessions, putDocument, restoreDocument, setPaused, settleCard, wake } from './write.mjs'
 import { runLogsDir } from './names.mjs'
@@ -89,6 +91,9 @@ const WRITES = [
   }),
   // Tracks: saved ways for work to move, requests on them and their trips (docs/tracks.md).
   ...TRACK_WRITES,
+  ...SIGNAL_WRITES,
+  // The owner takes back an answer the engine applied by default (digest.mjs).
+  ...DIGEST_WRITES,
   // Reviews: the owner's marks on a piece of work, sent as one message (marks.mjs).
   ...MARK_WRITES,
 ]
@@ -166,6 +171,10 @@ function answerOne(store, { method = 'GET', url = '/', headers = {}, body = {}, 
       if (log) return { status: 200, body: runLog(store, log[1], at.searchParams, ctx) }
       const track = readTracks(store, where, Object.fromEntries(at.searchParams))
       if (track) return track
+      const signals = readSignals(store, where, Object.fromEntries(at.searchParams))
+      if (signals) return signals
+      const digested = readDigest(store, where, ctx)
+      if (digested) return digested
       const marked = readMarks(store, where, Object.fromEntries(at.searchParams))
       if (marked) return marked
       const extra = more(store, where, Object.fromEntries(at.searchParams), ctx)

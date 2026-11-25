@@ -7,9 +7,8 @@ subscription's real weekly limit, which Claude reports in every run. That keeps 
 own Claude Code sessions, and keeps the bots out of paid extra usage. It only resumes bots it paused
 itself, so a bot the owner paused by hand stays paused.
 
-The engine's own 7-day total is too high: a run that resumes a session is logged with that session's
-running total, and the total adds those up, so earlier runs count again. This takes from each run
-only what it added.
+The engine books each run with its own share of a resumed session (studio/server/engine/run-usage.mjs),
+so the runs are added up as they are.
 """
 import importlib.util
 import json
@@ -104,18 +103,8 @@ def claude_tokens():
     runs = [run for agent in call('GET', f'/companies/{COMPANY}/agents') if agent.get('adapterType') == 'claude_local'
             for run in call('GET', f"/companies/{COMPANY}/heartbeat-runs?agentId={agent['id']}&limit=1000")]
     since = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() - 7 * 86400))
-    used, so_far = 0, {}
-    for run in sorted(runs, key=lambda r: r['createdAt']):
-        if run.get('inputTokens') is None:
-            continue
-        total = int(run['inputTokens']) + int(run.get('outputTokens') or 0)
-        session = run.get('sessionIdAfter')
-        before = so_far.get(session, 0) if session and run.get('sessionIdBefore') == session else 0
-        if session:
-            so_far[session] = total
-        if run['createdAt'] >= since:
-            used += max(0, total - before)
-    return used
+    return sum(int(run.get('inputTokens') or 0) + int(run.get('outputTokens') or 0)
+               for run in runs if run['createdAt'] >= since)
 
 
 def read(path):

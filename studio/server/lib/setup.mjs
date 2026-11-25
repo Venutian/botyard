@@ -70,13 +70,24 @@ const TOOLS = [
   },
 ]
 
-/** Optional keys. A key is there when it was pasted here, set where the service started, or added to OpenCode itself. */
-const KEYS = [
-  { id: 'openrouter', name: 'OpenRouter key', env: 'OPENROUTER_API_KEY', opencode: /openrouter/i, url: 'https://openrouter.ai/keys',
-    what: 'Optional. Adds OpenRouter\'s free models to the ones your free bots can use.' },
-  { id: 'nvidia', name: 'NVIDIA key', env: 'NVIDIA_API_KEY', opencode: /nvidia/i, url: 'https://build.nvidia.com',
-    what: 'Optional. Adds NVIDIA\'s free hosted models to the ones your free bots can use.' },
-]
+/**
+ * Optional keys: one for each free AI provider the free bots can use (crew/free-providers.json, which the crew's scripts read too:
+ * the variable each key is given as, and which of a provider's models cost nothing). A key is there when it was pasted here, set
+ * where the service started, or added to OpenCode itself. A provider that needs no key has no box.
+ */
+const PROVIDERS_FILE = path.join(studioRoot(), '..', 'crew', 'free-providers.json')
+export function freeProviderKeys(file = PROVIDERS_FILE) {
+  let list = []
+  try { list = JSON.parse(fs.readFileSync(file, 'utf8')).providers || [] } catch { list = [] }
+  const keyed = list.filter((p) => p && /^[a-z0-9-]+$/.test(p.id || '') && /^[A-Z][A-Z0-9_]*$/.test(p.env || '') && /^https:\/\//.test(p.signup || ''))
+  if (!keyed.length) {
+    keyed.push({ id: 'openrouter', name: 'OpenRouter', env: 'OPENROUTER_API_KEY', signup: 'https://openrouter.ai/keys', free: 'Free models ending in :free.' },
+      { id: 'nvidia', name: 'NVIDIA', env: 'NVIDIA_API_KEY', signup: 'https://build.nvidia.com', free: 'Free hosted models.' })
+  }
+  return keyed.map((p) => ({ id: p.id, name: `${p.name} key`, env: p.env, opencode: new RegExp(`\\b${p.name.replace(/\W+/g, '\\W*')}\\b`, 'i'), url: p.signup,
+    what: `Optional. Adds ${p.name}'s free models to the ones your free bots can use. ${p.free || ''}`.trim() }))
+}
+const KEYS = freeProviderKeys()
 
 const keyFile = (dir, id) => path.join(dir, `${id}.key`)
 const version = (text) => /\d+\.\d+(\.\d+)?/.exec(String(text || ''))?.[0] || ''
@@ -91,7 +102,10 @@ export function probes({ env = process.env } = {}) {
     studio: studioRoot(),
     nodeVersion: process.versions.node,
     desktop: Boolean(process.versions.electron),
-    which: (name) => findCommand(name, env),
+    // OpenCode's own installer puts it in ~/.opencode/bin and adds that to the shell's PATH only for new
+    // terminals, so a Botyard already running finds it there too (the crew's scripts look there as well).
+    which: (name) => findCommand(name, env) || (name === 'opencode' ? findCommand(path.join(env.HOME || env.USERPROFILE || os.homedir(), '.opencode', 'bin', 'opencode'), env) : null),
+    platform: process.platform,
     exists: (file) => fs.existsSync(file),
     /** Run a tool for its own answer. `code` is null when it could not be run or did not answer in time. */
     run: (name, args) => new Promise((resolve) => {
@@ -108,12 +122,19 @@ export function probes({ env = process.env } = {}) {
   }
 }
 
+/** OpenCode's own installer, from its site: it puts opencode in ~/.opencode/bin. */
+const OPENCODE_SCRIPT = 'curl -fsSL https://opencode.ai/install | bash'
 const item = (id, name, group, needed, what, state, detail, fix = null) => ({ id, name, group, needed, state, what, detail, fix })
 const command = (label, line) => ({ kind: 'command', label, command: line })
 
 async function checkTool(tool, p) {
   if (!p.which(tool.command)) {
-    const fix = tool.install ? command(`Install ${tool.name}`, tool.install) : { kind: 'link', label: `Get ${tool.name}`, url: tool.installLink }
+    let fix = tool.install ? command(`Install ${tool.name}`, tool.install) : { kind: 'link', label: `Get ${tool.name}`, url: tool.installLink }
+    // With no npm on a Mac or Linux computer, OpenCode's own installer needs no Node.js: a beginner with only
+    // the desktop app gets free models in one click. Windows has no such installer, so npm stays the way there.
+    if (tool.id === 'opencode' && !p.which('npm') && (p.platform || process.platform) !== 'win32' && p.which('curl')) {
+      fix = { ...command(`Install ${tool.name}`, OPENCODE_SCRIPT), argv: ['bash', '-c', OPENCODE_SCRIPT] }
+    }
     return item(tool.id, tool.name, 'ai', false, tool.what, 'missing', 'Not installed on this computer.', fix)
   }
   const [about, signed] = await Promise.all([p.run(tool.command, ['--version']), tool.signedIn(p).catch(() => null)])
@@ -144,7 +165,7 @@ async function check(p) {
   const items = [
     p.desktop
       ? item('node', 'Node.js', 'other', false, 'The AI tools are installed with npm and run on Node.js. Botyard itself brings its own.', nodeOk ? 'ok' : 'missing',
-        nodeOk ? `Version ${own}.` : own ? `Version ${own} is old: get ${NODE_NEEDED.join('.')} or newer before installing the AI tools.` : 'Not installed on this computer. Install it before the AI tools below: their install commands use npm, which comes with it.',
+        nodeOk ? `Version ${own}.` : own ? `Version ${own} is old: get ${NODE_NEEDED.join('.')} or newer before installing the AI tools.` : ((p.platform || process.platform) === 'win32' ? 'Not installed on this computer. Install it before the AI tools below: their install commands use npm, which comes with it.' : 'Not installed on this computer. OpenCode (free models) installs without it; Claude, Codex and Gemini install with npm, which comes with Node.js.'),
         nodeOk ? null : { kind: 'link', label: 'Get Node.js', url: 'https://nodejs.org' })
       : item('node', 'Node.js', 'needed', true, 'Botyard itself runs on it.', nodeOk ? 'ok' : 'missing',
         nodeOk ? `Version ${p.nodeVersion}.` : `Version ${p.nodeVersion} is too old: Botyard needs ${NODE_NEEDED.join('.')} or newer.`,
@@ -243,7 +264,7 @@ export async function setupAct(body = {}, { probe = null, open = null } = {}) {
     if (!entry) return [404, { error: 'Setup has no item by that name' }]
     if (entry.fix?.kind !== 'command') return [400, { error: entry.fix ? 'This one is not fixed by a command' : `${entry.name} needs nothing done` }]
     const line = entry.fix.command
-    const [name, ...args] = line.split(' ')
+    const [name, ...args] = entry.fix.argv || line.split(' ')
     const file = p.which(name)
     const note = entry.fix.note || ''
     if (!file) return [200, { ok: true, opened: false, command: line, note: `${name} is not on this computer, so Botyard cannot start it. Install it, then run the command.` }]

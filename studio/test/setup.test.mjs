@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { probes, setupAct, setupState } from '../server/lib/setup.mjs'
+import { freeProviderKeys, probes, setupAct, setupState } from '../server/lib/setup.mjs'
 
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'studio-setup-'))
 
@@ -188,10 +188,26 @@ test('"start" is refused for what needs nothing, what is fixed another way, and 
   assert.equal((await setupAct({ action: 'start', id: 'nobody' }, { probe: pc.probe, open }))[0], 404)
 })
 
+test('the key boxes come from the free providers file: a keyless provider has none, a bad entry is left out', () => {
+  const dir = temp()
+  const file = path.join(dir, 'free-providers.json')
+  fs.writeFileSync(file, JSON.stringify({ providers: [
+    { id: 'acme', name: 'Acme AI', env: 'ACME_API_KEY', signup: 'https://acme.example/keys', free: 'Free daily.' },
+    { id: 'open', name: 'Open', env: '', signup: 'https://open.example' },
+    { id: 'bad id', name: 'Bad', env: 'BAD_KEY', signup: 'https://bad.example' },
+    { id: 'plain', name: 'Plain', env: 'PLAIN_KEY', signup: 'http://not-https.example' },
+  ] }))
+  const keys = freeProviderKeys(file)
+  assert.deepEqual(keys.map((k) => [k.id, k.env, k.url]), [['acme', 'ACME_API_KEY', 'https://acme.example/keys']])
+  assert.match(keys[0].what, /Acme AI's free models.*Free daily\./)
+  assert.ok(keys[0].opencode.test('●  Acme AI api'), 'found in OpenCode\'s own sign-ins by its name')
+  assert.deepEqual(freeProviderKeys(path.join(dir, 'none.json')).map((k) => k.id), ['openrouter', 'nvidia'], 'no file: the two it always had')
+})
+
 test('on this computer the real checks answer in the same shape', async () => {
   const root = temp()
   const state = await setupState({ probe: probes({ env: { ...process.env, BOTYARD_HOME: root } }) })
-  assert.deepEqual(state.items.map((item) => item.id), ['node', 'git', 'map', 'opencode', 'claude', 'codex', 'gemini', 'antigravity', 'github', 'python', 'openrouter', 'nvidia'])
+  assert.deepEqual(state.items.map((item) => item.id), ['node', 'git', 'map', 'opencode', 'claude', 'codex', 'gemini', 'antigravity', 'github', 'python', 'openrouter', 'nvidia', 'google', 'mistral', 'sambanova', 'cohere'], 'a key box for every keyed provider in crew/free-providers.json')
   assert.equal(by(state, 'node').state, 'ok')
   assert.equal(by(state, 'git').state, 'ok')
   assert.equal(typeof state.ready, 'boolean')
@@ -203,7 +219,7 @@ test('pictures of the demo get a made-up computer: the real page, nothing of the
   const state = await setupState({ probe: sampleProbe() })
   assert.equal(state.ready, true)
   assert.deepEqual(Object.fromEntries(state.items.map((item) => [item.id, item.state])), {
-    node: 'ok', git: 'ok', map: 'ok', opencode: 'ok', claude: 'signed-out', codex: 'missing', gemini: 'missing', antigravity: 'missing', github: 'ok', python: 'ok', openrouter: 'missing', nvidia: 'missing',
+    node: 'ok', git: 'ok', map: 'ok', opencode: 'ok', claude: 'signed-out', codex: 'missing', gemini: 'missing', antigravity: 'missing', github: 'ok', python: 'ok', openrouter: 'missing', nvidia: 'missing', google: 'missing', mistral: 'missing', sambanova: 'missing', cohere: 'missing',
   })
   process.env.BOTYARD_SETUP = 'sample'
   try {
@@ -213,4 +229,32 @@ test('pictures of the demo get a made-up computer: the real page, nothing of the
     assert.match(body.error, /sample yard/)
     assert.equal((await setupAct({ action: 'check' }))[0], 200)
   } finally { delete process.env.BOTYARD_SETUP }
+})
+
+test('a Mac or Linux computer with no npm gets OpenCode from its own installer, no Node.js needed', async () => {
+  const mac = computer({ tools: { git: {}, curl: {} } })
+  mac.probe.platform = 'darwin'
+  const fix = by(await setupState({ probe: mac.probe }), 'opencode').fix
+  assert.equal(fix.command, 'curl -fsSL https://opencode.ai/install | bash')
+  assert.deepEqual(fix.argv, ['bash', '-c', 'curl -fsSL https://opencode.ai/install | bash'])
+  mac.probe.which = (name) => (['git', 'curl', 'bash'].includes(name) ? `/usr/bin/${name}` : null)
+  let opened = null
+  const [, answer] = await setupAct({ action: 'start', id: 'opencode' }, { probe: mac.probe, open: async (argv) => { opened = argv; return { ok: true } } })
+  assert.equal(answer.opened, true)
+  assert.deepEqual(opened, ['/usr/bin/bash', '-c', 'curl -fsSL https://opencode.ai/install | bash'])
+
+  const windows = computer({ tools: { git: {}, curl: {} } })
+  windows.probe.platform = 'win32'
+  assert.equal(by(await setupState({ probe: windows.probe }), 'opencode').fix.command, 'npm install -g opencode-ai')
+  const withNpm = computer({ tools: { git: {}, curl: {}, npm: {} } })
+  withNpm.probe.platform = 'linux'
+  assert.equal(by(await setupState({ probe: withNpm.probe }), 'opencode').fix.command, 'npm install -g opencode-ai')
+})
+
+test('OpenCode put in ~/.opencode/bin by its installer is found by a Botyard already running', () => {
+  const home = temp()
+  fs.mkdirSync(path.join(home, '.opencode', 'bin'), { recursive: true })
+  const file = path.join(home, '.opencode', 'bin', 'opencode')
+  fs.writeFileSync(file, '#!/bin/sh\n', { mode: 0o755 })
+  assert.equal(probes({ env: { HOME: home, PATH: '' } }).which('opencode'), file)
 })

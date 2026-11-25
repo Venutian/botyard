@@ -2,16 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Connection, FeedItem, Flow, FlowWindow, getFlow, getManager, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
-import { portraitOf } from '../mascot/look';
+import { Connection, Digest, DigestCard, FeedItem, Flow, FlowWindow, getDigest, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
+import { BotBadge } from '../mascot/BotBadge';
+import { Portrait, portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
-import { pileName } from './Jobs';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
 import { ConnectionBadge } from '../ui/ConnectionBadge';
 import { CrewTree } from '../ui/CrewTree';
+import { DigestCards } from '../ui/Digest';
 import { PcLoadCard } from '../ui/PcLoad';
-import { Icon } from '../ui/Icon';
+import { Icon, IconName, isIcon } from '../ui/Icon';
 import { DESCRIBE } from '../ui/describe';
 import { Button, Chips, GlassButton, Group, Hinted, Label, Sign, styles as kit, Txt, Words } from '../ui/kit';
 import { Tag } from '../ui/page';
@@ -22,8 +23,32 @@ import { TrayBar } from './Tray';
 const REFRESH_MS = 15_000;
 /** The last answer, kept on the phone so the screen is full the moment the app opens. */
 const STORE_KEY = 'manager:last';
-const SHOWN_FEED = 12;
+const SHOWN_FEED = 8;
+/** Waiting work shown before "Show all": what is being worked on is never cut. */
+const SHOWN_WAITING = 3;
+const SHOWN_PROJECTS = 6;
+/** Open work with nothing done for this many hours is folded away as not moving. */
+const STALL_HOURS = 3;
+
+/** The top line, short: who is working and what needs a look, without the list of jobs ("7 bots are working: Fred on ...  and more."). */
+export const headline = (state: string) => state.replace(/:[^.]*(?:\.\.\.|…)?[^.]*\./, '.').replace(/\s+/g, ' ').trim();
+
+/** The jobs pile a problem line opens, when it names one. */
+const troublePile = (text: string): JobPile | undefined => (/blocked/i.test(text) ? 'blocked' : /in progress/i.test(text) ? 'inhand' : undefined);
+
+/** A view of the owner's own (Engram, a page), as a small button with its icon. */
+function ViewButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const { t } = useLook();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+      style={({ pressed }) => [styles.viewButton, { backgroundColor: t.card, borderColor: t.line, borderRadius: t.r.button }, pressed && kit.dim]}>
+      <Icon name={icon} size={18} color={t.accentText} />
+      <Txt size={14} weight={600}>{label}</Txt>
+    </Pressable>
+  );
+}
 const STEP_NAMES = ['Build', 'Check', 'Final check', 'Merge', 'Push'];
+const STEP_SHORT = ['Build', 'Check', 'Final', 'Merge', 'Push'];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Everything but the time it was made, so an answer that says nothing new redraws nothing. */
@@ -33,40 +58,66 @@ function stepColor(state: StepState, t: Theme) {
   if (state === 'done') return t.good;
   if (state === 'now') return t.accent;
   if (state === 'failed') return t.bad;
-  if (state === 'queued') return t.warn;
+  // Waiting is grey, a shade above not started: orange is kept for the step a run is on.
+  if (state === 'queued') return t.ink3;
   return t.edge;
 }
 
+/** The five steps a piece of work goes through, each a short bar with its name under it: done, now, waiting or failed. */
 const Steps = memo(function Steps({ steps }: { steps: StepState[] }) {
   const { t } = useLook();
-  const at = steps.findIndex((s) => s === 'now' || s === 'failed' || s === 'queued');
   const label = steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', ');
   return (
     <View accessible accessibilityLabel={label} style={styles.steps}>
-      {steps.map((state, index) => (
-        <View key={index} style={[styles.step, { backgroundColor: stepColor(state, t), opacity: state === 'skipped' ? 0.35 : 1 }]} />
-      ))}
-      {at >= 0 ? <Txt size={12} color={t.ink3} style={styles.stepName}>{STEP_NAMES[at]}</Txt> : null}
+      {steps.map((state, index) => {
+        const active = state === 'now' || state === 'failed' || state === 'queued';
+        return (
+          <View key={index} style={styles.stepBox}>
+            <View style={[styles.step, { backgroundColor: stepColor(state, t), opacity: state === 'skipped' ? 0.35 : 1 }]} />
+            <Txt size={10} weight={active ? 700 : 400} color={active ? t.ink : t.ink3} numberOfLines={1}>{STEP_SHORT[index]}</Txt>
+          </View>
+        );
+      })}
     </View>
   );
 });
 
-/** A line of work wears the colour of the bot on it, as on the PC page; one nobody is on has a plain edge. */
-const LineRow = memo(function LineRow({ line, colour, onOpen }: { line: WorkLine; colour: string; onOpen: (id: string) => void }) {
+/** What is happening on a line of work, in one word: a run is going, it waits for a bot, it failed, or nobody has touched it. */
+function lineState(line: WorkLine, stalled: boolean, t: Theme): { word: string; color: string; fill: boolean } {
+  if (line.steps.includes('failed')) return { word: 'Stopped', color: t.bad, fill: true };
+  if (stalled) return { word: 'Not moving', color: t.warn, fill: false };
+  if (line.steps.includes('now')) return { word: 'Working', color: t.good, fill: true };
+  if (line.steps.includes('queued')) return { word: line.late ? 'Waiting long' : 'Waiting', color: line.late ? t.warn : t.ink3, fill: false };
+  return { word: 'Open', color: t.ink3, fill: false };
+}
+
+/**
+ * A line of work: the bot on it with its face, name and colour, what is happening in a word, the job, and the five
+ * steps by name. One nobody is on says so.
+ */
+const LineRow = memo(function LineRow({ line, who, stalled, onOpen }: { line: WorkLine; who: Portrait | null; stalled?: boolean; onOpen: (id: string) => void }) {
   const { t } = useLook();
-  const tone = line.steps.includes('failed') ? t.bad : line.late ? t.warn : t.ink2;
+  const state = lineState(line, Boolean(stalled), t);
+  const colour = who?.colour ? readable(who.colour, [t.card], 3, t.ink) : t.line;
+  const tone = state.word === 'Stopped' ? t.bad : line.late || stalled ? t.warn : t.ink2;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${line.bot || 'No bot'}, ${state.word}. ${line.ref} ${line.title}. ${line.note}`}
       onPress={() => onOpen(line.id)}
-      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderLeftWidth: 5, borderLeftColor: colour ? readable(colour, [t.card], 3, t.ink) : t.line, borderRadius: t.r.card, boxShadow: t.shadow }, pressed && kit.dim]}
+      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderLeftWidth: 5, borderLeftColor: colour, borderRadius: t.r.card }, pressed && kit.dim]}
     >
       <View style={styles.lineHead}>
-        {t.plates ? <Sign size={18}>{line.ref}</Sign> : <Txt size={12} weight={700} color={t.accentText}>{line.ref}</Txt>}
-        <Txt size={12} color={t.ink3} numberOfLines={1} style={styles.shrink}>{line.project}</Txt>
+        {who ? <BotBadge who={who} size={26} tag={false} state={state.word === 'Working' ? 'working' : undefined} /> : <View style={[styles.noBot, { borderColor: t.line }]} />}
+        <Txt size={13} weight={700} color={who ? colour : t.ink3} numberOfLines={1} style={styles.shrink}>{line.bot || 'No bot on it'}</Txt>
+        <View style={kit.flex} />
+        <View style={[styles.stateChip, state.fill ? { backgroundColor: state.color } : { borderColor: state.color, borderWidth: 1 }]}>
+          <Txt size={11} weight={700} color={state.fill ? t.app : state.color}>{state.word}</Txt>
+        </View>
       </View>
       <Txt size={15} weight={600} numberOfLines={2}>{line.title}</Txt>
-      <Txt size={13} color={tone} numberOfLines={2}>{line.note}{line.fixes ? `, ${plural(line.fixes, 'fix', 'fixes')} so far` : ''}</Txt>
+      <Txt size={12} color={t.ink3} numberOfLines={1}>{line.ref} · {line.project}</Txt>
+      {line.note ? <Txt size={13} color={tone} numberOfLines={2}>{line.note}{line.fixes ? `, ${plural(line.fixes, 'fix', 'fixes')} so far` : ''}</Txt> : null}
       <Steps steps={line.steps} />
     </Pressable>
   );
@@ -101,15 +152,19 @@ const FeedRow = memo(function FeedRow({ item, last, onOpen }: { item: FeedItem; 
 });
 
 /** The manager's home: what is going on in the studio right now, on one screen. */
-export function HomeScreen({ connection, crew, nav }: { connection: Connection; crew: Crew; nav: Nav }) {
+export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread }: { connection: Connection; crew: Crew; nav: Nav; /** Opens the lead's chat. */ onTalk: () => void; leadName?: string; /** The lead said something not yet read. */ leadUnread?: boolean }) {
   const { p, t } = useLook();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<Manager | null>(null);
   const [tray, setTray] = useState<TrayItem[]>([]);
+  const [digest, setDigest] = useState<Digest | null>(null);
   const [traySaid, setTraySaid] = useState('');
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [allFeed, setAllFeed] = useState(false);
+  const [allWork, setAllWork] = useState(false);
+  const [showStalled, setShowStalled] = useState(false);
+  const [showCrew, setShowCrew] = useState(false);
   const shown = useRef<Manager | null>(null);
   const [flow, setFlow] = useState<Flow | null>(null);
   const [flowWindow, setFlowWindow] = useState<FlowWindow>('now');
@@ -133,6 +188,8 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
       getFlow(connection, windowRef.current).then(setFlow);
       // The answers held in the tray, the same ones the PC map holds.
       getTray(connection).then((tray) => setTray(tray.items)).catch(() => undefined);
+      // The decision digest; an older door has none and nothing is shown.
+      getDigest(connection).then(setDigest).catch(() => undefined);
       AsyncStorage.setItem(STORE_KEY, JSON.stringify(next)).catch(() => undefined);
     } catch (err) {
       setError((err as Error).message);
@@ -188,6 +245,20 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
     });
   }, [connection]);
 
+  // The owner's own pages that have a phone view, beside Engram. An older door, or none, is simply none.
+  const [ownPages, setOwnPages] = useState<OwnPage[]>([]);
+  useEffect(() => {
+    let live = true;
+    getOwnPages(connection).then((r) => { if (live) setOwnPages((r?.pages ?? []).filter((p) => p.phone)); }).catch(() => { if (live) setOwnPages([]); });
+    return () => { live = false; };
+  }, [connection]);
+
+  // A digest card opens where it is answered: the lead's chat, or the job it was asked on.
+  const openDigest = useCallback((card: DigestCard) => {
+    if (card.chat && card.botId === leadId) nav.push({ name: 'chat', botId: card.botId });
+    else nav.push({ name: 'job', id: card.jobId });
+  }, [nav, leadId]);
+
   const openNeed = useCallback((item: NeedsYou) => {
     if (!item.read) mark([item], { read: true });
     if (item.botId && item.botId === leadId) nav.push({ name: 'chat', botId: item.botId });
@@ -204,8 +275,17 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
   }
 
   const open = view.lines.filter((line) => line.open);
+  // Work nobody has touched for hours is not work going on: it is shown apart, folded, so what moves is on top.
+  const isStalled = (line: WorkLine) => ['build', 'check', 'fix', 'ruling'].includes(line.stage) && view.at - line.at >= STALL_HOURS * 3_600_000;
+  const moving = open.filter((line) => !isStalled(line));
+  const stalled = open.filter(isStalled);
   // Each bot's colour by its name, the one its robot wears: a line is coloured by the bot on it.
-  const colours = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id]).colour]));
+  const faces = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id])]));
+  // A run is going on these; the rest of what moves waits for a bot. Working first, so the top of the list is what is happening.
+  const isWorking = (line: WorkLine) => line.steps.includes('now') && !line.steps.includes('failed');
+  const working = moving.filter(isWorking);
+  const stoppedLines = moving.filter((line) => line.steps.includes('failed'));
+  const waitingLines = moving.filter((line) => !isWorking(line) && !line.steps.includes('failed'));
   const feed = allFeed ? view.feed : view.feed.slice(0, SHOWN_FEED);
   const cards = view.needsYou.map((item) => ({ ...item, ...(item.key ? marks[item.key] : undefined) }));
   // New first, then read; archived ones fold away at the bottom.
@@ -226,15 +306,25 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
     >
       <View style={styles.head}>
         <View style={kit.flex}>
-          {t.plates ? <Sign size={30} accessibilityRole="header">{view.state}</Sign> : <Txt size={22} weight={700} accessibilityRole="header" style={styles.state}>{view.state}</Txt>}
+          {t.plates ? <Sign size={28} accessibilityRole="header">{headline(view.state)}</Sign> : <Txt size={22} weight={700} accessibilityRole="header" style={styles.state}>{headline(view.state)}</Txt>}
           <Txt size={12} color={t.ink3}>As of {clock(new Date(view.at).toISOString())}</Txt>
           <ConnectionBadge connection={connection} />
         </View>
         <View style={styles.headButtons}>
+          <GlassButton icon="chat" label={leadName ? `Talk to ${leadName}` : 'Talk to the crew'} dot={leadUnread} onPress={onTalk} />
           <GlassButton icon="plus" label="New job" hint={DESCRIBE.icon.newJob} onPress={() => nav.push({ name: 'new' })} />
         </View>
       </View>
       {error ? <Txt size={14} color={t.bad} accessibilityLiveRegion="polite">Showing the last update. {error}</Txt> : null}
+
+      {/* The owner's other views, one tap from the top: Engram (the notes) and the owner's own pages on screens of their own. */}
+      <View style={styles.views}>
+        <ViewButton icon="sparkle" label="Engram" onPress={() => nav.push({ name: 'engram' })} />
+        {ownPages.map((page) => <ViewButton key={page.name} icon={isIcon(page.icon) ? page.icon : 'book'} label={page.title} onPress={() => nav.push({ name: 'own', page: page.name, title: page.title })} />)}
+      </View>
+
+      {/* The decisions first: five at most, the ones only the owner may answer on top (ui/Digest.tsx). */}
+      <DigestCards digest={digest} connection={connection} onOpen={openDigest} onChange={(next) => { setDigest(next); load(); }} />
 
       <View onLayout={(e) => { needsAt.current = e.nativeEvent.layout.y; }}>
         <Label style={styles.firstLabel}>{`Needs you (${waiting})`}</Label>
@@ -254,14 +344,26 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
         {decisions.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
       </View>
 
-      {others.length || view.trouble.length ? <Label>Also going on</Label> : null}
+      {view.trouble.length ? <Label>{`Problems (${view.trouble.length})`}</Label> : null}
+      {view.trouble.length ? (
+        <Group>
+          {view.trouble.map((item, index) => {
+            const pile = troublePile(item.text);
+            const row = (
+              <View style={[styles.trouble, index < view.trouble.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+                <View style={[styles.troubleDot, { backgroundColor: item.level === 'bad' ? t.bad : item.level === 'warn' ? t.warn : t.ink3 }]} />
+                <Txt size={14} style={kit.flex} numberOfLines={2}>{item.text}</Txt>
+                {pile ? <Icon name="chevron" size={16} color={t.ink3} /> : null}
+              </View>
+            );
+            return pile ? <Pressable key={item.text} accessibilityRole="button" onPress={() => nav.push({ name: 'jobs', pile })} style={({ pressed }) => pressed && kit.dim}>{row}</Pressable> : <View key={item.text}>{row}</View>;
+          })}
+        </Group>
+      ) : null}
+
+      {others.length ? <Label>Also going on</Label> : null}
       <View style={styles.stack}>
         {others.map((item) => <NeedsYouCard key={item.key || `${item.kind}-${item.id}`} item={item} connection={connection} onDone={load} onOpen={openNeed} onMark={(i, change) => mark([i], change)} />)}
-        {view.trouble.map((item) => (
-          <View key={item.text} style={[styles.trouble, { backgroundColor: t.card, borderLeftColor: item.level === 'bad' ? t.bad : t.warn }, t.plates && { borderRadius: t.r.card }]}>
-            <Txt size={14}>{item.text}</Txt>
-          </View>
-        ))}
       </View>
 
       {archivedCards.length ? (
@@ -277,25 +379,63 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
         </View>
       ) : null}
 
-      <PcLoadCard connection={connection} />
-
-      {/* The home views: the crew map here, Engram (the owner's notes) on its own screen. The phone has no yard. */}
-      <Chips value={'crew' as string} options={[{ id: 'crew', name: 'Crew map' }, { id: 'engram', name: 'Engram' }]} onChange={(v) => { if (v === 'engram') nav.push({ name: 'engram' }); }} hints={{ crew: DESCRIBE.home.crew, engram: DESCRIBE.home.engram }} />
-      <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} />
-
       <Label>Work in hand</Label>
-      {view.piles?.length ? <Chips value={'' as string} options={view.piles.map((pile) => ({ id: pile.id as string, name: pileName(pile) }))} onChange={(pile) => nav.push({ name: 'jobs', pile: pile as JobPile })} hints={Object.fromEntries(view.piles.map((pile) => [pile.id as string, (DESCRIBE.pile as Record<string, string>)[pile.name]]).filter(([, text]) => text))} /> : null}
-      {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
+      {/* The piles in one row that scrolls sideways: each opens its jobs. */}
+      {view.piles?.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.piles} style={styles.pileRow}>
+          {view.piles.map((pile) => (
+            <Pressable key={pile.id} accessibilityRole="button" accessibilityLabel={`${pile.name}: ${pile.count}`} onPress={() => nav.push({ name: 'jobs', pile: pile.id })}
+              style={({ pressed }) => [styles.pile, { backgroundColor: t.card, borderColor: pile.id === 'blocked' && pile.count ? t.bad : t.line, borderRadius: t.r.chip }, pressed && kit.dim]}>
+              <Txt size={18} weight={700} color={pile.id === 'blocked' && pile.count ? t.bad : t.ink}>{pile.count}</Txt>
+              <Txt size={12} color={t.ink2} numberOfLines={1}>{pile.name}</Txt>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}
+      {working.length ? <Txt size={12} weight={700} color={t.good} style={styles.groupName}>{`WORKING NOW · ${working.length}`}</Txt> : null}
       <View style={styles.stack}>
-        {open.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
+        {working.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
       </View>
+      {stoppedLines.length ? <Txt size={12} weight={700} color={t.bad} style={styles.groupName}>{`STOPPED · ${stoppedLines.length}`}</Txt> : null}
+      <View style={styles.stack}>
+        {stoppedLines.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
+      </View>
+      {waitingLines.length ? <Txt size={12} weight={700} color={t.ink3} style={styles.groupName}>{`WAITING FOR A BOT · ${waitingLines.length}`}</Txt> : null}
+      <View style={styles.stack}>
+        {(allWork ? waitingLines : waitingLines.slice(0, SHOWN_WAITING)).map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
+      </View>
+      {waitingLines.length > SHOWN_WAITING && !allWork ? (
+        <Pressable accessibilityRole="button" onPress={() => setAllWork(true)} style={styles.more}>
+          <Txt size={14} weight={600} color={t.accentText}>Show all {waitingLines.length} waiting</Txt>
+          <Icon name="chevron" size={16} color={t.accentText} />
+        </Pressable>
+      ) : null}
+      {stalled.length ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: showStalled }} onPress={() => setShowStalled((v) => !v)} style={({ pressed }) => [styles.fold, { borderColor: t.line }, pressed && kit.dim]}>
+          <View style={[styles.troubleDot, { backgroundColor: t.warn }]} />
+          <Txt size={14} weight={600} style={kit.flex}>{`${stalled.length} not moving: nothing done for ${STALL_HOURS} hours or more`}</Txt>
+          <Icon name={showStalled ? 'up' : 'down'} size={16} color={t.ink2} />
+        </Pressable>
+      ) : null}
+      {showStalled ? <View style={styles.stack}>{stalled.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} stalled onOpen={openJob} />)}</View> : null}
+      {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
+
+      {/* The crew: the pace, and who works on what. The tree is long, so it waits to be opened. */}
+      <Label>Crew</Label>
+      <PcLoadCard connection={connection} />
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCrew }} onPress={() => setShowCrew((v) => !v)} style={({ pressed }) => [styles.fold, { borderColor: t.line }, pressed && kit.dim]}>
+        <Icon name="people" size={18} color={t.accentText} />
+        <Txt size={14} weight={600} color={t.accentText} style={kit.flex}>{showCrew ? 'Hide the crew map' : 'Show the crew map: who works on what'}</Txt>
+        <Icon name={showCrew ? 'up' : 'down'} size={16} color={t.accentText} />
+      </Pressable>
+      {showCrew ? <CrewTree flow={flow} fallback={view} waiting={waiting} window={flowWindow} onWindow={chooseWindow} onOpenBot={openBot} onOwner={() => scroller.current?.scrollTo({ y: Math.max(0, needsAt.current - 8), animated: true })} /> : null}
 
       <Label>Projects</Label>
       <Group>
-        {view.projects.map((project, index) => (
+        {view.projects.slice(0, SHOWN_PROJECTS).map((project, index, list) => (
           <Pressable key={project.id} accessibilityRole="button" onPress={() => nav.push({ name: 'project', id: project.id })}
-            style={({ pressed }) => [styles.project, index < view.projects.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}>
+            style={({ pressed }) => [styles.project, index < list.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}>
             <View style={kit.flex}>
               {t.plates ? <Sign size={20}>{project.name}</Sign> : <Txt size={15} weight={600}>{project.name}</Txt>}
               <Txt size={13} color={project.blocked ? t.bad : t.ink2}>{projectLine(project)}</Txt>
@@ -304,6 +444,13 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
           </Pressable>
         ))}
       </Group>
+
+      {view.projects.length > SHOWN_PROJECTS ? (
+        <Pressable accessibilityRole="button" onPress={() => nav.push({ name: 'projects' })} style={styles.more}>
+          <Txt size={14} weight={600} color={t.accentText}>All {view.projects.length} projects</Txt>
+          <Icon name="chevron" size={16} color={t.accentText} />
+        </Pressable>
+      ) : null}
 
       <Label>Lately</Label>
       {feed.length === 0 ? <Txt color={t.ink2} style={styles.indent}>Nothing has happened today yet.</Txt> : null}
@@ -323,7 +470,7 @@ export function HomeScreen({ connection, crew, nav }: { connection: Connection; 
 }
 
 const styles = StyleSheet.create({
-  headButtons: { alignItems: 'flex-end', gap: 8 },
+  headButtons: { flexDirection: 'row', gap: 8 },
   allRead: { alignSelf: 'flex-end', justifyContent: 'center', minHeight: 44, paddingHorizontal: 4 },
   waiting: { alignItems: 'center', flex: 1, gap: 14, justifyContent: 'center', padding: 24 },
   centerText: { textAlign: 'center' },
@@ -333,17 +480,27 @@ const styles = StyleSheet.create({
   indent: { marginLeft: 4 },
   stack: { gap: 8 },
   shrink: { flexShrink: 1 },
-  trouble: { borderLeftWidth: 4, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
+  trouble: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  troubleDot: { borderRadius: 4, height: 8, width: 8 },
   bot: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 64, paddingHorizontal: 12, paddingVertical: 9 },
   botHead: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   card: { borderRadius: 18, gap: 3, padding: 14 },
   lineHead: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  steps: { alignItems: 'center', flexDirection: 'row', gap: 4, marginTop: 7 },
-  step: { borderRadius: 3, height: 6, width: 28 },
-  stepName: { marginLeft: 6 },
+  steps: { flexDirection: 'row', gap: 4, marginTop: 8 },
+  stepBox: { alignItems: 'center', flex: 1, gap: 3 },
+  step: { alignSelf: 'stretch', borderRadius: 3, height: 5 },
+  noBot: { borderRadius: 13, borderStyle: 'dashed', borderWidth: 1, height: 26, width: 26 },
+  stateChip: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3 },
+  groupName: { letterSpacing: 0.5, marginBottom: 6, marginLeft: 6, marginTop: 10 },
   project: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 56, paddingHorizontal: 14, paddingVertical: 11 },
   feed: { alignItems: 'flex-start', flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 14, paddingVertical: 11 },
   dot: { borderRadius: 4, height: 8, marginTop: 6, width: 8 },
   feedTime: { marginTop: 1, width: 38 },
   more: { alignItems: 'center', flexDirection: 'row', gap: 4, justifyContent: 'center', minHeight: 48 },
+  fold: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 10, minHeight: 48 },
+  pileRow: { marginHorizontal: -18 },
+  piles: { gap: 8, paddingHorizontal: 18 },
+  pile: { borderWidth: StyleSheet.hairlineWidth, gap: 1, minHeight: 56, minWidth: 84, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  views: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  viewButton: { alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 14 },
 });

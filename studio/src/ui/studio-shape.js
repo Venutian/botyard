@@ -270,7 +270,8 @@ function setupRow(r, open) {
   // A thing that is optional and missing is not an alarm: only what Botyard cannot work without is red.
   const tone = r.state === 'missing' && !r.needed ? 'dim' : STATE_TAG[r.state] || 'dim'
   let act = ''
-  if (a?.kind === 'key') act = `<button class="btn ${r.state === 'ok' ? '' : 'primary'}" data-act="setup-key" data-id="${esc(r.id)}" aria-expanded="${open === r.id}">${esc(a.label)}</button>`
+  // A key not there yet: where to make one free, beside the box to paste it (two steps, both in sight).
+  if (a?.kind === 'key') act = `${r.state !== 'ok' && a.keysPage ? `<a class="btn" href="${esc(a.keysPage)}" target="_blank" rel="noopener noreferrer">Get a free key</a>` : ''}<button class="btn ${r.state === 'ok' ? '' : 'primary'}" data-act="setup-key" data-id="${esc(r.id)}" aria-expanded="${open === r.id}">${esc(a.label)}</button>`
   else if (a?.kind === 'start') act = a.here === false ? '' : `<button class="btn primary" data-act="setup-start" data-id="${esc(r.id)}">${esc(a.label)}</button>`
   else if (a?.kind === 'link') act = `<a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${esc(a.label)}</a>`
   const keyForm = a?.kind === 'key' && open === r.id ? `<form class="fields key-form" data-part="setup-key" data-id="${esc(r.id)}" autocomplete="off">

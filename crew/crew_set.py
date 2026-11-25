@@ -73,6 +73,14 @@ DEFAULTS = {'role': 'general', 'tier': 'strong', 'look': {}, 'title': '', 'does'
             'variables': [], 'on': True}
 
 
+LANE_LABEL = {'claude': 'Claude', 'codex': 'Codex', 'gemini': 'Gemini'}
+
+
+def lane_name(name, ai):
+    """The agent that takes a free checker's checks on a paid AI: 'Checker on Codex'."""
+    return f'{name} on {LANE_LABEL.get(ai, ai)}'
+
+
 def slug_of(name):
     return re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
@@ -168,8 +176,10 @@ class CrewSet:
         if not base and not over:
             raise SystemExit(f'There is no bot "{slug}" in {self.dir} or {self.own}.')
         spec = {**DEFAULTS, **base, **over}
+        # The order the file gives is kept: a checker's "fallbacks" are the order it moves down (check_order).
+        names = [*(base.get('fallbacks') or {}), *(ai for ai in (over.get('fallbacks') or {}) if ai not in (base.get('fallbacks') or {}))]
         spec['fallbacks'] = {ai: {**(base.get('fallbacks') or {}).get(ai, {}), **(over.get('fallbacks') or {}).get(ai, {})}
-                             for ai in {*(base.get('fallbacks') or {}), *(over.get('fallbacks') or {})}}
+                             for ai in names}
         spec['slug'] = slug
         if not spec.get('name') or spec.get('ai') not in AIS:
             raise SystemExit(f'{slug}.json needs a "name" and an "ai" that is one of: {", ".join(AIS)}.')
@@ -220,7 +230,30 @@ class CrewSet:
     # ── a bot on an AI ───────────────────────────────────────────────────────────────
     # STANDARDS.md rule 22: a bot whose file says "ai": "free" never falls back to a paid engine (Antigravity,
     # Codex, Claude) for its work: build() refuses, and its "fallbacks" are for a person to ask for on purpose.
+    # The one exception is the owner's own word in the bot's file: a fallback marked "for": "backup" may be used by a
+    # script when no free model answers, so a free bot is never idle for days.
     paid_by_hand = False
+
+    def backups(self, slug):
+        """The paid AIs a script may move a free bot to when no free model answers: its fallbacks marked
+        "for": "backup", in the order its file gives. Empty for a bot on a paid AI (its own chain moves it)."""
+        spec = self.spec(slug)
+        if spec['ai'] != 'free':
+            return []
+        return [ai for ai, f in spec['fallbacks'].items() if ai in AIS and ai != 'free' and (f or {}).get('for') == 'backup']
+
+    def check_order(self, slug):
+        """The AIs a checker's checks move down, in the order its file gives: its own, then each of its "fallbacks"
+        that says "for": "checks" (a bot that runs on a paid AI lists them all). A free bot's other fallbacks are
+        for a person to ask for and are left out."""
+        spec = self.spec(slug)
+        lanes = [ai for ai, f in spec['fallbacks'].items() if ai in AIS and ai != spec['ai']
+                 and (spec['ai'] != 'free' or f.get('for') == 'checks')]
+        return [spec['ai']] + lanes
+
+    def check_lanes(self, slug):
+        """The AIs of a free checker that checks may be given to besides its own: the ones its file lets (\"for\": \"checks\")."""
+        return [ai for ai in self.check_order(slug)[1:] if self.spec(slug)['ai'] == 'free']
 
     def on(self, slug, ai=None):
         """The bot's settings as they hold on `ai`: its own AI when none is given, else its "fallbacks"."""
@@ -323,6 +356,8 @@ class CrewSet:
         seconds = int(spec['minutes']) * 60
         path_env = {'PATH': plain(p.path)}
         guarded = {'PATH': plain(f"{p.crew}/agy-bin:{p.path}")}
+        # Claude and Codex bots keep their own git rules; the crew's git adds only that a main checkout never moves.
+        main_only = {'PATH': plain(f"{p.crew}/agy-bin:{p.path}"), 'BOTYARD_GIT_MAIN_ONLY': plain('1')}
         may_not = spec.get('mayNot') or []
         ai = spec['ai']
         if ai == 'claude':
@@ -331,13 +366,13 @@ class CrewSet:
                       'maxTurnsPerRun': spec['turns'] or 150, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslySkipPermissions': True,
                       'extraArgs': self.claude_tools(spec, may_not),
-                      'env': {**self.no_push(), **path_env}}
+                      'env': {**self.no_push(), **main_only}}
         elif ai == 'codex':
             # CODEX_HOME is the bots' own: connected apps (mail, GitHub, calendar) are off in its config.toml.
             config = {'engine': 'cli', 'cwd': cwd, 'model': spec['model'], 'modelReasoningEffort': spec['effort'],
                       'command': p.codex, 'timeoutSec': seconds, 'graceSec': 15,
                       'dangerouslyBypassApprovalsAndSandbox': False, 'extraArgs': CODEX_ARGS,
-                      'env': {**self.no_push(), **self.git_id(spec), **path_env, 'CODEX_HOME': plain(p.safe)}}
+                      'env': {**self.no_push(), **self.git_id(spec), **main_only, 'CODEX_HOME': plain(p.safe)}}
         elif ai == 'gemini':
             # Over ACP the prompt goes through a pipe: on the command line a long job thread is too big for Linux.
             # agy-acp.py sets the model and answers agy's permission requests within the bots' rules; agy-bin
@@ -363,6 +398,12 @@ class CrewSet:
             if spec.get('freeModels') == 'light':
                 # A scout takes the light free models first, leaving the strong ones to builds and checks.
                 config['env']['BOTYARD_FREE_TIER'] = plain('light')
+            elif spec.get('freeModels') == 'best':
+                # The strongest free model answering, by measured pass rate, even one another run is on.
+                config['env']['BOTYARD_FREE_TIER'] = plain('best')
+            if spec.get('pace') in ('build', 'check', 'scout'):
+                # How the day's free pace counts this bot's starts, set by its role, not by the models it takes.
+                config['env']['BOTYARD_PACE_KIND'] = plain(spec['pace'])
         for name in spec.get('variables') or []:
             value = (self.crew.get('variables') or {}).get(name)
             if value is not None:
@@ -380,16 +421,24 @@ class CrewSet:
             return {**HEARTBEAT, 'maxConcurrentRuns': spec['atOnce']}
         return dict(HEARTBEAT)
 
-    def build(self, slug, ai=None, free_model=None):
-        """Everything the seeder needs for one bot on an AI."""
+    def build(self, slug, ai=None, free_model=None, lane=False):
+        """Everything the seeder needs for one bot on an AI. A free bot is never moved to a paid one, except as a
+        lane: a second agent of its own that takes only its checks, when its file lists that AI "for": "checks"."""
         own = self.spec(slug)
-        if ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand:
+        lane = bool(lane and ai and ai != own['ai'])
+        if lane and ai not in self.check_lanes(slug):
+            raise PaidEngine(f"{own['name']} has no lane on {ai}: its file lists none with \"for\": \"checks\".")
+        if (ai and ai != own['ai'] and own['ai'] == 'free' and not self.paid_by_hand and not lane
+                and ai not in self.backups(slug)):
             raise PaidEngine(f"{own['name']} runs on free models only: it is never moved to {ai} by a script (STANDARDS.md rule 22).")
         spec = self.on(slug, ai)
+        if lane:
+            spec = {**spec, 'name': lane_name(own['name'], ai), 'on': True}
         return {'slug': slug, 'name': spec['name'], 'role': ROLES[spec['role']], 'title': spec['title'], 'caps': spec['does'],
                 'ai': spec['ai'], 'adapter': AIS[spec['ai']], 'config': self.config(spec, free_model),
                 'heartbeat': self.heartbeat(spec), 'reportsTo': spec.get('reportsTo'),
-                'rulesFile': spec.get('rulesFile') or slug, 'spec': spec}
+                'rulesFile': (f'{slug}-{ai}' if lane else spec.get('rulesFile') or slug), 'spec': spec,
+                **({'lane': ai, 'laneOf': own['name']} if lane else {})}
 
     def listing(self):
         """The set as data, for Botyard's editor: every bot with its settings and where its files are."""

@@ -42,9 +42,21 @@ PC_LOAD_TOLD = ('Refused: the PC load setting is the owner\'s. The level is set 
                 'or phone; a run never changes it or the tool it names.')
 
 
+def run_bot():
+    """The bot this Claude run is for, as its slug, from its own settings file (`<slug>.claude.json`, skill_sets.write_for); '' when
+    the run has none. Only a Claude run has one: a run on any other AI is never one of a folder's readers."""
+    name = os.path.basename(os.environ.get('BOTYARD_BOT_SETTINGS') or '')
+    return name[:-len('.claude.json')] if name.endswith('.claude.json') else ''
+
+
+def _slug(name):
+    return str(name).lower().replace(' ', '-')
+
+
 def closed_folders():
-    """Folders no bot may touch, each with what a bot is told: Botyard's keys folder, and the ones a studio
-    names itself in its crew/own/guard.json, {"closed": [{"folder": "name-or-path", "told": "why"}]}."""
+    """Folders no bot may touch, each with what a bot is told and the bots that may read it all the same (on Claude only): Botyard's
+    keys folder, and the ones a studio names itself in its crew/own/guard.json,
+    {"closed": [{"folder": "name-or-path", "told": "why", "readers": ["Bot Name"]}]}."""
     places = botyard_home.places()
     keys = places['keys']
     out = [(mark, KEYS_TOLD) for mark in {keys, botyard_home.short(keys), os.path.join(os.path.basename(places['home']), 'keys')}]
@@ -54,7 +66,7 @@ def closed_folders():
         with open(os.path.join(places['crew'], 'own', 'guard.json'), encoding='utf8') as f:
             for row in json.load(f).get('closed') or []:
                 if row.get('folder'):
-                    out.append((str(row['folder']), row.get('told') or CLOSED_TOLD))
+                    out.append((str(row['folder']), row.get('told') or CLOSED_TOLD, [r for r in row.get('readers') or [] if isinstance(r, str)]))
     except (OSError, ValueError, AttributeError):
         pass
     return out
@@ -132,21 +144,79 @@ def worktree_at_root(command, cwd=None, root=None, depth=0):
     return False
 
 
+MAIN_TOLD = ('Refused: that file is in a repository\'s main checkout, which the service runs from. Work in your job\'s '
+             'worktree (it is your working folder); the change reaches main through the landing, with its tests.')
+# Shell writes the hook can see: a redirect, tee, sed -i.
+WRITES = re.compile(r"""(?:>>?|\btee\s+(?:-a\s+)?)\s*(["']?)([^\s|;&<>"']+)\1""")
+
+
+def main_checkout_of(path, root=None):
+    """The main checkout a file is in (a repository directly in the projects folder whose .git is a folder), or ''.
+    A job worktree (its .git is a file) and anything outside the projects folder are free."""
+    root = os.path.realpath(root or botyard_home.projects())
+    here = os.path.realpath(path)
+    while True:
+        dot = os.path.join(here, '.git')
+        if os.path.exists(dot):
+            return here if os.path.isdir(dot) and os.path.dirname(here) == root else ''
+        up = os.path.dirname(here)
+        if up == here:
+            return ''
+        here = up
+
+
+def written_paths(command, cwd=None):
+    """The files a shell command visibly writes (redirects, tee, sed -i), as absolute paths."""
+    here = cwd or os.getcwd()
+    out = []
+    for part in re.split(r'&&|\|\||;|\n', command):
+        words = part.split()
+        if words[:1] == ['cd'] and len(words) > 1:
+            here = os.path.join(here, os.path.expanduser(os.path.expandvars(words[1])))
+            continue
+        targets = []
+        for piece in part.split('|'):
+            try:
+                w = shlex.split(piece)
+            except ValueError:
+                w = piece.split()
+            if w[:1] == ['sed'] and any(x.startswith('-i') or x.startswith('--in-place') or (x.startswith('-') and not x.startswith('--') and 'i' in x[1:]) for x in w[1:]):
+                targets.append(w[-1])
+        for m in WRITES.finditer(part):
+            targets.append(m.group(2))
+        for target in targets:
+            if target.startswith('&') or target in ('/dev/null', '/dev/stderr', '/dev/stdout') or target.isdigit():
+                continue
+            out.append(os.path.normpath(os.path.join(here, os.path.expanduser(os.path.expandvars(target)))))
+    return out
+
+
 def check(event):
     """The refusal text for this tool call, or None."""
     tool = event.get('tool_name') or ''
     given = event.get('tool_input') or {}
     # Where a tool points, not what it writes: the script's own source names the folder and may be edited.
     aimed = [given.get('command')] if tool == 'Bash' else [given.get(k) for k in ('file_path', 'path', 'pattern', 'notebook_path')]
-    for folder, told in closed_folders():
+    me = run_bot()
+    for folder, told, *rest in closed_folders():
         if any(folder in str(a) for a in aimed if a):
+            readers = {_slug(r) for r in (rest[0] if rest else [])}
+            if me and me in readers:
+                continue
             return told
     if SEND_TOOLS.search(tool):
         return TOLD.format(what=tool)
+    # A bot never edits a main checkout in place (20 Nov 2026): job worktrees only.
+    if tool in ('Edit', 'Write', 'MultiEdit', 'NotebookEdit'):
+        target = given.get('file_path') or given.get('notebook_path')
+        if target and main_checkout_of(os.path.join(event.get('cwd') or os.getcwd(), os.path.expanduser(str(target)))):
+            return MAIN_TOLD
     if tool == 'Bash':
         command = str((event.get('tool_input') or {}).get('command', ''))
         if 'worktree' in command and worktree_at_root(command, event.get('cwd')):
             return WORKTREE_TOLD
+        if any(main_checkout_of(p) for p in written_paths(command, event.get('cwd'))):
+            return MAIN_TOLD
         m = SENDS.search(command)
         if m:
             return TOLD.format(what=f'"{m.group(0).strip()}"')

@@ -79,6 +79,13 @@ and wakes a job left with no run; `free-scout.py` (daily) tests new free models 
 test and adds the ones that pass; `free-limits.py` shows what each model usually gives before it stops.
 What a free model is sent may be used to train it, so put nothing secret in a job for a free bot.
 
+A check never waits on busy free models. A checker's file may list `fallbacks` marked `"for": "checks"`, in the
+order to try them (say `codex`, `gemini`, `claude`). `setup-bots.py` makes each one an agent of its own ("Checker on
+Codex"), and the checker herself stays on free models. `fallback.py` picks per check from what answers now: a free
+model first (not one whose provider is resting after a 429), then each lane in the file's order, and the Claude lane only
+when every other is out. A check that has waited four minutes moves down, and a family other than the build's is taken
+where one answers. `"freeOnly": ["Project"]` in the file keeps a project's checks on free models.
+
 ## The crew is files
 
 Every bot is two files, and Botyard's crew editor and `crew/setup-bots.py` both work from them:

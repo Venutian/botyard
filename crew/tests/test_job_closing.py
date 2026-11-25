@@ -3,8 +3,10 @@ through run-vars.sh, the one place the shell has the variables' names."""
 import http.server
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 
@@ -73,6 +75,45 @@ class Closing(unittest.TestCase):
         self.assertIn(botyard_home.var_name('JOB_ID'), out.stderr)
         out = self.run_it('--issue-id', 'j9', '--status', 'blocked', '--dry-run', env={'PATH': '/usr/bin:/bin'})
         self.assertEqual(json.loads(out.stdout), {'status': 'blocked', 'comment': 'Done.\n\n- proof: tests pass'})
+
+    def commit_repo(self):
+        """A projects folder holding one repo with branch LH-1-fix two commits long: (env, first, tip)."""
+        projects = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, projects, True)
+        repo = os.path.join(projects, 'app')
+        g = lambda *a: subprocess.run(['git', '-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', *a],
+                                      check=True, capture_output=True, text=True).stdout.strip()
+        os.makedirs(repo)
+        g('init', '-q', '-b', 'LH-1-fix')
+        g('commit', '-q', '--allow-empty', '-m', 'one')
+        first = g('rev-parse', 'HEAD')
+        g('commit', '-q', '--allow-empty', '-m', 'two')
+        return {**self.env, 'BOTYARD_PROJECTS_DIR': projects}, first, g('rev-parse', 'HEAD')
+
+    def report(self, line):
+        return f'Done.\n\nOUTCOME: MET\nCHANGE: SMALL\nCOMMIT: {line}\n'
+
+    def test_a_done_report_whose_commit_line_names_no_real_tip_is_refused_and_nothing_is_sent(self):
+        # Real reports (Nov 2026) closed done on lines like these, so their work got no check and no landing.
+        env, first, tip = self.commit_repo()
+        for line in ('$(git rev-parse HEAD) LH-1-fix', tip[:7] + ' LH-1-fix', tip + 'a LH-1-fix',
+                     tip[:8] + 'b4fc3fd1d5e1d3c1f3c0f5a8e0e6a1b2 LH-1-fix', f'{first} LH-1-fix', f'{first} (branch LH-1-fix)'):
+            out = self.run_it('--status', 'done', text=self.report(line), env=env)
+            self.assertEqual(out.returncode, 1, line)
+            self.assertIn('Not closed:', out.stderr, line)
+        self.assertEqual(Engine.seen, [])
+
+    def test_a_done_report_naming_its_branch_tip_or_no_hash_is_closed(self):
+        env, first, tip = self.commit_repo()
+        for line in (f'{tip} LH-1-fix', f'{tip} on LH-1-fix (app repo)', f'{first} an-old-branch-that-is-gone', 'none (report only)'):
+            out = self.run_it('--status', 'done', text=self.report(line), env=env)
+            self.assertEqual(out.returncode, 0, f'{line}: {out.stderr}')
+        self.assertEqual(len(Engine.seen), 4)
+
+    def test_only_a_done_report_is_held_to_its_commit_line(self):
+        env, _, _ = self.commit_repo()
+        out = self.run_it('--status', 'blocked', text=self.report('$(git rev-parse HEAD)'), env=env)
+        self.assertEqual(out.returncode, 0, out.stderr)
 
     def test_shell_and_python_name_every_run_variable_the_same(self):
         for what in botyard_home.RUN_VARS:

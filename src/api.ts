@@ -2,6 +2,7 @@
 import { AppState, Platform } from 'react-native';
 import { normalizeHost, pickWay, ways, unreachable } from './connection';
 import type { Edge, Route, Way } from './connection';
+import { readView, viewPath } from './ownView';
 
 export { normalizeHost, wayLabel, ways, unreachable } from './connection';
 export type { Edge, Route, Way } from './connection';
@@ -55,7 +56,10 @@ export type Plans = {
 } | null;
 /** What the Models screen shows: every bot's model, the free models' health, the subscriptions and the last switches. */
 export type ModelBot = Looked & { id: string; name: string; status: string; label: string; where: string; free: boolean };
+/** Where a free model stands against Claude (the service's CLAUDE_SCALE). */
+export type ClaudeChip = { chip: string; tier: 'below' | 'haiku' | 'sonnet' | 'opus' | 'unrated'; from?: 'benchmark' | 'checks'; score?: number; benchmark?: string };
 export type FreeModel = {
+  claude?: ClaudeChip;
   label: string;
   family: string;
   tier: 'strong' | 'light';
@@ -112,6 +116,8 @@ export type Summary = {
   plans?: Plans;
   needsYou: NeedsYou[];
   running: Job[];
+  /** Jobs marked in progress with no run going (an older door leaves it out). */
+  stalled?: number;
   queued: Job[];
   finished: Job[];
   sessions: Session[];
@@ -123,7 +129,10 @@ export type StepState = 'now' | 'failed' | 'queued' | 'done' | 'wait' | 'skipped
 /** One piece of work and how far it is: build, check, the lead's ruling, merged, pushed. */
 export type WorkLine = { id: string; ref: string; title: string; project: string; projectId: string; bot: string; stage: string; note: string; steps: StepState[]; fixes: number; since: number; late: boolean; open: boolean; at: number };
 export type JobRef = { id: string; ref: string; title: string };
-export type ManagerBot = Looked & { id: string; name: string; title: string; status: string; model: string; where: string; why: string; job: (JobRef & { stage: string }) | null; last: (JobRef & { at: number }) | null; projectId: string; doneToday: number };
+/** One copy of a bot on an AI, when a bot has copies: the engine keeps each as an agent, the lists show one bot. */
+export type BotCopy = { id: string; name: string; model: string; where?: string; engine?: string; running: boolean };
+export type HeldJob = JobRef & { stage: string; minutes?: number };
+export type ManagerBot = Looked & { id: string; name: string; title: string; status: string; model: string; where: string; why: string; job: (JobRef & { stage: string }) | null; jobs?: HeldJob[]; copies?: BotCopy[]; on?: string; last: (JobRef & { at: number }) | null; projectId: string; doneToday: number };
 export type ManagerProject = { id: string; name: string; running: number; queued: number; blocked: number; doneToday: number; unpushed: number; bots: string[]; at: number };
 export type FeedItem = { at: number; kind: string; id: string; text: string };
 /** The manager's view: who is on what, where each piece of work stands, what happened, what is wrong. */
@@ -305,6 +314,10 @@ export type FlowBot = {
   look: { colour: string; build: string; gear: string[]; hat: string; face: string };
   reportsTo: string | null; under: string; model: string; engine: string; status: FlowStatus; why: string;
   job: null | { id: string; ref: string; title: string; stage: string; project: string; projectId: string };
+  /** Every job it holds now (an older door sends none). */
+  jobs?: { id: string; ref: string; title: string; stage: string; project: string; projectId: string }[];
+  /** Its copies on other AIs, and the AI the running one is on (set only for a bot with copies). */
+  copies?: BotCopy[]; on?: string;
   runsToday: number; failedToday: number; week: { tokens: number; share: number | null }; met: number; notMet: number;
 };
 export type FlowScript = { id: string; kind: 'script'; name: string; role: 'script'; roleName: string; notices: number; last: number };
@@ -335,6 +348,7 @@ export const getModels = (c: Connection) => call<Models>(c, '/models');
 // ── launch: every product on every channel, read from the channels (docs/launch.md) ──
 export type LaunchCell = { state: string; tone: 'ok' | 'go' | 'look' | 'bad' | 'wait'; how: 'read' | 'told' | 'none'; version: string; detail: string; waits: string; next: string; checkedAt?: number; by?: string };
 export type LaunchRow = {
+  canRelease?: boolean; release?: { job: string; status: string; tripId: string; step: string; waits: boolean; tripStatus: string; cost: number } | null;
   name: string; project: string; kind: string; note: string; first: boolean; cells: Record<string, LaunchCell | null>;
   next: { channel: string; text: string; waits: string } | null;
   readiness: { group: string; text: string; state: 'pass' | 'fail' | 'unknown' | 'yours'; detail: string }[];
@@ -342,13 +356,13 @@ export type LaunchRow = {
 };
 export type LaunchBoard = { channels: { id: string; name: string }[]; rows: LaunchRow[]; checkedAt: number; stale: boolean; planFound: boolean; planFile: string };
 export const getLaunch = (c: Connection) => call<LaunchBoard>(c, '/launch');
-export const launchAction = (c: Connection, body: { action: 'check' } | { action: 'tell'; product: string; channel: string; state: string }) => call<LaunchBoard>(c, '/launch', 'POST', body);
+export const launchAction = (c: Connection, body: { action: 'check' } | { action: 'tell'; product: string; channel: string; state: string } | { action: 'release'; product: string }) => call<LaunchBoard>(c, '/launch', 'POST', body);
 
 // ── tracks: how each request moves, and the owner's hand on a trip (docs/tracks.md) ──
 export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
 export type TrackLine = { from: string; to: string; on: 'pass' | 'fail' | 'always'; rounds?: number; then?: string };
 export type TrackInfo = { id: string; key: string; title: string; description: string; version: number; builtIn: boolean; steps: TrackStep[]; lines: TrackLine[]; delivers: string };
-export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; costUsd: number; cost: string; updatedAt: string };
+export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; refused?: string; costUsd: number; cost: string; updatedAt: string };
 export type TripStep = TrackStep & {
   state: string; tries: number; current: boolean; verdict: string; findings: string; summary: string; leftNames: string[]; left: Record<string, unknown>;
   numbers: Record<string, unknown>; job: string; jobId: string; note: string; handedFindings: string; costUsd: number; cost: string; startedAt: string; finishedAt: string;
@@ -358,6 +372,8 @@ export type Trip = {
   track: { key: string; version: number; title: string; delivers: string; main: string }; lines: TrackLine[]; steps: TripStep[]; cost: string; costUsd: number;
   request: RequestRow; gate: { step: string; title: string; ask?: { prompt: string; accept: string; reject: string } | null; backTo: { id: string; title: string }[] } | null;
   can: { pause: boolean; resume: boolean; stop: boolean; rerun: string[] };
+  /** Not landed, and why; and what a ruling waived for work that did land. */
+  refusal?: { reason: string; detail: string; why: string; at: string } | null; waivers?: { by: string; reason: string; waived: string; at: string }[];
 };
 export type TripAction = 'approve' | 'back' | 'context' | 'rerun' | 'pause' | 'resume' | 'stop';
 export const getTracks = (c: Connection) => call<{ tracks: TrackInfo[]; requests: RequestRow[] }>(c, '/tracks');
@@ -456,13 +472,17 @@ export const requestId = () =>
 
 /** Mark "Needs you" cards read or archived; the map on the PC shows the same marks. */
 /** Pages of the owner's own on the PC (their own-pages folder): the list, and a page's own calls to its server file. */
-export type OwnPage = { name: string; title: string; does: string };
+/** `phone`: the page's server answers `GET /phone` with a view the app draws (src/ownView.ts). */
+export type OwnPage = { name: string; title: string; does: string; phone?: boolean; icon?: string };
 export const getOwnPages = (c: Connection) => call<{ pages: OwnPage[] }>(c, '/own');
 /** A call to one own page's server file, `/own/<page>/api/...`. A studio's own screens use this. */
 export const ownCall = <T>(c: Connection, path: string, method = 'GET', body?: unknown) => {
   if (!/^\/own\/[a-z0-9][a-z0-9-]{0,31}\/api(\/|$)/.test(path)) throw new Error('Not an own page\'s call');
   return call<T>(c, path, method, body);
 };
+/** A page's phone view, read through `readView` so only what the app knows is drawn. */
+export const getOwnView = async (c: Connection, page: string, choices: Record<string, string>) =>
+  readView(await ownCall<unknown>(c, `/own/${page}/api${viewPath(choices)}`));
 export const markCards = (c: Connection, keys: string[], change: { read?: boolean; archived?: boolean }) =>
   call(c, '/cards', 'POST', { keys, ...change });
 
@@ -475,7 +495,7 @@ export type JobLink = { id: string; ref: string; title: string };
 /** One run as a row: who, which job, how it ended and why in plain words, how long, and what it used. */
 export type RunRow = { id: string; bot: string; botId: string; status: string; state: string; failed: boolean; job: JobLink | null; at: number | null; seconds: number | null; tokens: number; cached: number; usd: number; why: string };
 export type Waste = { runs: number; wasted: number; share: number; flagged: boolean; causes: { text: string; count: number }[] };
-export type CrewBot = Looked & { id: string; name: string; title: string; status: string; state: string; resting: boolean; engine: string; model: string; why: string; tokensToday: number; tokensWeek: number; waste: Waste | null };
+export type CrewBot = Looked & { id: string; name: string; title: string; status: string; state: string; resting: boolean; engine: string; model: string; why: string; tokensToday: number; tokensWeek: number; waste: Waste | null; running?: number; copies?: BotCopy[]; on?: string };
 export type CrewList = { bots: CrewBot[]; wasteAt: number | null; wasteStale: boolean; at: number };
 type Spend = { tokens: number; cached: number; cents: number; runs: number };
 export type BotPage = Omit<CrewBot, 'tokensToday' | 'tokensWeek'> & {
@@ -714,6 +734,15 @@ export type TrayItem = {
   answers?: TrayAnswer[]; said?: string; reason?: string; review?: ReviewSend; heldAt: number; error?: string;
 };
 export type TrayHold = Omit<TrayItem, 'key' | 'heldAt' | 'error'>;
+// ── the decision digest: five cards at most, the owner's own first ───────────────────
+/** A card that waits: `must` is the owner's alone; `default` carries its answer and when that applies by itself. */
+export type DigestCard = { id: string; jobId: string; job: string; chat: boolean; botId: string; bot: string; title: string; question: string; kind: 'must' | 'default'; why: string; default: string; appliesAt: string | null; count: number; line: string; tripId?: string };
+/** An answer the engine applied by default, and whether it can still be taken back. */
+export type DigestApplied = { id: string; jobId: string; job: string; title: string; answer: string; appliedAt: string; reverseUntil: string; canReverse: boolean; line: string };
+export type Digest = { cards: DigestCard[]; applied: DigestApplied[]; waiting: number; must: number; folded: number; more: number; notes: string; at: string };
+export const getDigest = (c: Connection) => call<Digest>(c, '/digest');
+export const takeBackDefault = (c: Connection, jobId: string, cardId: string) => call<Digest>(c, '/digest', 'POST', { action: 'take-back', jobId, cardId });
+
 export const getTray = (c: Connection) => call<{ items: TrayItem[] }>(c, '/tray');
 export const getTrayQuestions = (c: Connection, which: { job?: string; bot?: string }) =>
   call<{ jobId: string; job: string; questions: TrayQuestion[] }>(c, `/tray/questions?${which.bot ? `bot=${encodeURIComponent(which.bot)}` : `job=${encodeURIComponent(which.job || '')}`}`);

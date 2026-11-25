@@ -99,7 +99,8 @@ def read_json(path, empty):
 
 
 # A provider's models need its key; OpenCode's own free offers need none.
-NO_KEY = ('opencode',)
+# OpenCode's own free models, and the free providers that need no key (free-providers.json, env '').
+NO_KEY = ('opencode', *(p['id'] for p in botyard_home.free_providers() if not p.get('env')))
 
 
 def reachable(model, has_key=None):
@@ -155,15 +156,81 @@ def credit_only_providers(limits=None):
     return found
 
 
+GRADES_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'studio', 'server', 'lib', 'model-grades.json')
+# Best first: the published benchmark grade against Claude (studio/server/lib/model-grades.json). A model no
+# benchmark covers sits between Haiku and -Haiku until one does.
+GRADE_RANK = {'Opus': 6, '+Sonnet': 5, 'Sonnet': 4, '+Haiku': 3, 'Haiku': 2, '-Haiku': 0}
+UNGRADED = 1
+
+
+def _slug(text):
+    return re.sub(r'[^a-z0-9]+', '', str(text).lower())
+
+
+def grade_rank(model, table=None):
+    """How a free model ranks by its published coding benchmark, the same match the page uses for its chip."""
+    if table is None:
+        table = read_json(GRADES_FILE, {})
+    name = _slug(re.sub(r'(:free|-free)$', '', model.split('/')[-1]))
+    for row in table.get('models', []):
+        if row.get('grade') in GRADE_RANK and any(_slug(m) in name for m in row.get('match', [])):
+            return GRADE_RANK[row['grade']]
+    return UNGRADED
+
+
+# A model is light when its pass rate is this far under the crew's. Until 23 Nov the line was a flat 50%, but the
+# checks fail most builds whatever the model (about 29% passed then): every free model fell under it, none was strong,
+# and the scout that runs only on strong free models waited for days.
+WEAK_BY = 0.15
+WEAK_AFTER = 3
+
+
+def crew_rate(scores):
+    """The share of all checked free builds that passed, over every model; None with nothing checked."""
+    rows = [s for s in (scores or {}).values() if isinstance(s, dict)]
+    passed = sum(s.get('pass', 0) for s in rows)
+    checked = passed + sum(s.get('fail', 0) for s in rows)
+    return passed / checked if checked else None
+
+
+def proven(score):
+    """How surely a model's real builds pass the checks: the low end of the 95% range of its pass rate (Wilson), so
+    23 passes in 49 counts above 2 in 3. 0 for a model with no checked build."""
+    passed = score.get('pass', 0) if isinstance(score, dict) else 0
+    n = passed + (score.get('fail', 0) if isinstance(score, dict) else 0)
+    if not n:
+        return 0.0
+    z, p = 1.96, passed / n
+    return (p + z * z / (2 * n) - z * ((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5) / (1 + z * z / n)
+
+
+def free_best(rows, scores):
+    """The strong models of `rows`, the best measured first (proven()); the list's own order breaks ties."""
+    return sorted([m for m, _, t in rows if t == 'strong'], key=lambda m: -proven(scores.get(m)))
+
+
+def weak(score, rate):
+    """True when a model's builds pass clearly less often than the crew's do: WEAK_BY under the crew's rate,
+    over WEAK_AFTER checks or more. A model never passing over that many is weak whatever the rate."""
+    passed = score.get('pass', 0) if isinstance(score, dict) else 0
+    checked = passed + (score.get('fail', 0) if isinstance(score, dict) else 0)
+    if checked < WEAK_AFTER:
+        return False
+    if not passed:
+        return True
+    return rate is not None and passed / checked < rate - WEAK_BY
+
+
 def free_list(has_key=None, listed=None, credit_only=None):
     """Every free model this computer can ask, with its family and tier now: the list above, then what
     free-scout.py found, less any the tool itself no longer lists (a name that left the offer would only
     fail every run handed to it). With no OpenRouter or NVIDIA key the list is just shorter. A model
-    whose real builds fail the checker's or the lead's checks at least half the time, over three or
+    whose real builds pass the checks clearly less often than the crew's builds do (weak()), over three or
     more, counts as light whatever its tier."""
     listed = tool_models() if listed is None else listed
     found = [tuple(row) for row in read_json(FREE_FOUND, []) if row[0] not in {m for m, _, _ in FREE}]
     scores = read_json(FREE_SCORES, {})
+    rate = crew_rate(scores)
     rows = []
     paid = credit_only_providers() if credit_only is None else credit_only
     for model, family, tier in FREE + found:
@@ -171,10 +238,10 @@ def free_list(has_key=None, listed=None, credit_only=None):
             continue
         if not reachable(model, has_key) or not offered(model, listed):
             continue
-        score = scores.get(model, {})
-        checked = score.get('pass', 0) + score.get('fail', 0)
-        rows.append((model, family, 'light' if checked >= 3 and score.get('pass', 0) / checked < 0.5 else tier))
-    return rows
+        rows.append((model, family, 'light' if weak(scores.get(model, {}), rate) else tier))
+    # Best first, by the benchmark grade; the list's own order breaks ties (sorted() keeps it).
+    table = read_json(GRADES_FILE, {})
+    return sorted(rows, key=lambda row: -grade_rank(row[0], table))
 
 
 def free_model(tier='strong', not_family=None):
@@ -383,11 +450,11 @@ def pc_skills():
 
 
 def skills_env(bot):
-    """Only this bot's skills of the PC's, when its file lists them; "all" hides none."""
+    """The bot's settings file for its AI: only its skills of the PC's when its file lists them ("all" hides none), and what no bot
+    may touch closed to every bot."""
     want = bot['spec'].get('skills', 'all')
-    if not isinstance(want, list):
-        return {}
-    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills(), want=set(want))
+    return skill_sets.write_for(bot['name'], bot['adapter'], pc_skills() if isinstance(want, list) else [], want=set(want) if isinstance(want, list) else None,
+                                reads=bot['spec'].get('reads'), own=(bot.get('config') or {}).get('cwd'))
 
 
 def body_for(bot, path, existing, boss, dry=False):
@@ -395,7 +462,9 @@ def body_for(bot, path, existing, boss, dry=False):
     body = {'name': bot['name'], 'role': bot['role'], 'title': bot['title'], 'capabilities': bot['caps'],
             'adapterType': bot['adapter'],
             # The role and look its settings file gives it: the map draws the bot from these, never from its name.
-            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {}},
+            # A lane copy says whose it is and on which AI, so every list shows it under its bot, not as one more.
+            'metadata': {'role': bot['spec'].get('role', 'general'), 'look': bot['spec'].get('look') or {},
+                         **({'laneOf': bot['laneOf'], 'lane': bot['lane']} if bot.get('lane') else {})},
             'runtimeConfig': {'heartbeat': bot['heartbeat']},
             'adapterConfig': {**bot['config'], 'instructionsFilePath': path,
                               'env': {**bot['config'].get('env', {}), **({} if dry else skills_env(bot))}},
@@ -561,14 +630,19 @@ def gitconfig(mail=None):
     return GITCONFIG + (IDENTITY.format(name=os.environ.get('BOTYARD_GIT_NAME') or 'Botyard bot', mail=mail) if mail else '')
 
 
-def gitconfig_ok_text(text):
-    return '@users.noreply.github.com' in text
+def gitconfig_ok_text(text, mail=None):
+    """True when the text names the studio address as its user.email."""
+    mail = git_identity.no_reply() if mail is None else mail
+    return bool(mail) and re.search(r'^\s*email\s*=\s*' + re.escape(mail) + r'\s*$', text, re.M | re.I) is not None
 
 
 def gitconfig_ok(path):
-    """True when the file's own user.email is a GitHub no-reply address."""
+    """True when the file's own user.email is the studio address (BOTYARD_GIT_NOREPLY, else the owner's global
+    user.email). Another no-reply, such as a test's t@users.noreply.github.com, is not ok."""
     done = subprocess.run(['git', 'config', '-f', path, 'user.email'], capture_output=True, text=True)
-    return bool(git_identity.SAFE.search(done.stdout.strip()))
+    return git_identity.is_studio(done.stdout.strip())
+
+
 CODEX_CONFIG = """# Home for this studio's Codex bots. No connected apps or plugins: bots never reach mail, GitHub or a calendar.
 sandbox_mode = "workspace-write"
 
@@ -588,8 +662,8 @@ def safe_folder():
     safe = crew().places.safe
     os.makedirs(f'{safe}/gh-empty', exist_ok=True)
     os.chmod(safe, 0o700)
-    # Written when missing, and again when what is there would author a commit under any address but a no-reply
-    # (an old test address, say). A good file the owner has edited is left alone.
+    # Written when missing, and again when what is there would author a commit under any address but the studio's
+    # (an old test address, a stranger's no-reply). A good file the owner has edited is left alone.
     mine = gitconfig()
     if not os.path.exists(f'{safe}/gitconfig') or (not gitconfig_ok(f'{safe}/gitconfig') and gitconfig_ok_text(mine)):
         write(f'{safe}/gitconfig', mine)
@@ -608,11 +682,47 @@ def safe_folder():
                 if os.path.islink(f'{safe}/skills/{skill}'):
                     os.unlink(f'{safe}/skills/{skill}')
                 shutil.copytree(f'{folder}/{skill}', f'{safe}/skills/{skill}', dirs_exist_ok=True)
-    # Claude Code finds a skill by name in the owner's own skills folder: the job skill is linked there
-    # when that folder exists and holds nothing of that name, and never written over.
+                # A copy names the repository, so a skill's script still finds Botyard's tools from it.
+                with open(f'{safe}/skills/{skill}/.repo', 'w', encoding='utf8') as f:
+                    f.write(botyard_home.repo())
+    # Claude Code finds a skill by name in the owner's own skills folder: each skill Botyard ships (the job skill,
+    # the store rules, ...) is linked there when that folder exists and holds nothing of that name, and never written over.
     mine = f'{HOME}/.claude/skills'
-    if os.path.isdir(mine) and not os.path.lexists(f'{mine}/botyard'):
-        os.symlink(f'{skills}/botyard', f'{mine}/botyard')
+    for skill in (sorted(os.listdir(skills)) if os.path.isdir(mine) and os.path.isdir(skills) else []):
+        if os.path.isfile(f'{skills}/{skill}/SKILL.md') and not os.path.lexists(f'{mine}/{skill}'):
+            os.symlink(f'{skills}/{skill}', f'{mine}/{skill}')
+
+
+def put_lane(bot, existing, boss, dry=False):
+    """A free checker's lane on a paid AI: an agent of its own (fallback.py hands it checks the free models cannot take
+    in time). It is made from the checker's file and follows it on every seed; nothing the owner changes in Botyard is
+    read back, because the file is the one place its order and models are set."""
+    files = crew()
+    path = f"{files.places.crew}/{bot['rulesFile']}.md"
+    text = files.render(bot['slug'], bot['lane'], crew_ids(bot, existing))
+    agent = existing.get(bot['name'])
+    if dry:
+        print(f"{bot['name']:15} {'would be updated' if agent else 'would be made'} ({bot['adapter']} {bot['config'].get('model')})")
+        return None
+    write(path, text)
+    body = body_for(bot, path, existing, boss)
+    answer = call('PATCH', f"/agents/{agent['id']}", body) if agent else call('POST', f'/companies/{botyard_home.studio_id()}/agents', body)
+    state = seeded()
+    state[f"{bot['slug']}@{bot['lane']}"] = {'id': answer.get('id'), 'text': sha(text), 'at': int(time.time())}
+    write(seeded_file(), json.dumps(state, indent=1, sort_keys=True) + '\n')
+    print(f"{bot['name']:15} {answer.get('status')} {bot['adapter']} {bot['config']['model']}  (lane)")
+    return answer
+
+
+def seed_lanes(existing, boss, dry=False):
+    """Every lane the crew's files list, after the bots themselves: a checker with "fallbacks" marked "for": "checks"."""
+    files = crew()
+    for slug in files.slugs():
+        for ai in files.check_lanes(slug):
+            bot = files.build(slug, ai, free_start, lane=True)
+            answer = put_lane(bot, existing, boss, dry)
+            if answer:
+                existing[bot['name']] = {**existing.get(bot['name'], {}), **answer}
 
 
 def move_thinkers(to, back=None, on_claude_now=()):
@@ -663,10 +773,14 @@ def main(only=None, dry=False):
         if slug == lead and agent:
             boss = agent['id']
     if dry:
+        if not only:
+            seed_lanes(existing, boss, dry=True)
         return
     if lead and set(existing) != before and not only:
         # The lead was seeded before the bots it hands work to existed: now its list of their ids is whole.
         put(build(lead), existing, boss)
+    if not only:
+        seed_lanes(existing, boss)
     for name in files.crew.get('retired') or []:
         if name in existing and existing[name].get('status') != 'paused' and not only:
             call('POST', f"/agents/{existing[name]['id']}/pause", {})

@@ -14,7 +14,7 @@ import { execFile } from 'node:child_process'
 import { BUILTINS } from './store-apis.mjs'
 import { readStore } from './connectors.mjs'
 import { places } from './home.mjs'
-import { EngineError } from './engine.mjs'
+import { EngineError, call, companyId } from './engine.mjs'
 
 const AGE_MS = 10 * 60_000
 const TOLD_OLD_MS = 7 * 24 * 60 * 60_000
@@ -47,11 +47,13 @@ function writeJson(file, value) {
 
 export const readPlan = (file = planFile()) => {
   const plan = readJson(file, null)
-  return { products: Array.isArray(plan?.products) ? plan.products.filter((p) => p?.name) : [], found: Boolean(plan) }
+  // `release.inputs` names the studio's own bots for the release track (builder, writer, artist, reviewer).
+  const release = plan?.release && typeof plan.release === 'object' ? { track: String(plan.release.track || 'release-app'), inputs: plan.release.inputs && typeof plan.release.inputs === 'object' ? plan.release.inputs : {} } : { track: 'release-app', inputs: {} }
+  return { products: Array.isArray(plan?.products) ? plan.products.filter((p) => p?.name) : [], found: Boolean(plan), release }
 }
 export const readState = (file = stateFile()) => {
   const s = readJson(file, null)
-  return { cells: s?.cells || {}, told: s?.told || {}, history: Array.isArray(s?.history) ? s.history : [], checkedAt: s?.checkedAt || 0 }
+  return { cells: s?.cells || {}, told: s?.told || {}, releases: s?.releases || {}, history: Array.isArray(s?.history) ? s.history : [], checkedAt: s?.checkedAt || 0 }
 }
 
 const keyOf = (product, channel) => `${product}|${channel}`
@@ -83,7 +85,7 @@ export function playState(tracks = []) {
   const halted = prod.find((r) => r.status === 'halted')
   if (halted) return cell(`Halted ${named(halted)}`, { tone: 'bad', version: halted.name || '', waits: 'owner', next: 'Decide: resume the rollout, or ship a fix' })
   const rolling = prod.find((r) => r.status === 'inProgress')
-  if (rolling) return cell(`Rolling out ${named(rolling)} to ${Math.round((Number(rolling.userFraction) || 0) * 100)}%`, { tone: 'go', version: rolling.name || '', waits: 'owner', next: 'Your yes to raise the rollout, once the numbers hold', detail: 'Google does not say whether a release is in review; a release it has not shown yet is probably in review.' })
+  if (rolling) return cell(`Rolling out ${named(rolling)} to ${Math.round((Number(rolling.userFraction) || 0) * 100)}%`, { tone: 'go', version: rolling.name || '', waits: 'store', next: 'A release made on the Launch page is raised by itself while crashes stay under Google\'s line', detail: 'Google does not say whether a release is in review; a release it has not shown yet is probably in review.' })
   const live = prod.find((r) => r.status === 'completed')
   if (live) return cell(`Live ${named(live)}`, { tone: 'ok', version: live.name || '' })
   for (const track of PLAY_TRACKS.slice(1)) {
@@ -214,7 +216,7 @@ export async function checkAll({ fetcher = fetch, useGh = true, now = Date.now()
       if (!before || before.state !== found.state) state.history.unshift({ at: now, product: product.name, channel, from: before?.state || '', to: found.state, how: found.how })
     }
   }
-  const next = { cells, told: state.told, history: state.history.slice(0, HISTORY), checkedAt: now }
+  const next = { cells, told: state.told, releases: state.releases, history: state.history.slice(0, HISTORY), checkedAt: now }
   writeJson(file, next)
   return next
 }
@@ -231,6 +233,63 @@ export function tellState({ product, channel, state: said, tone = 'wait', waits 
   state.cells[key] = { ...toldCell(state.told[key], {}, now), checkedAt: now }
   writeJson(file, { ...state, history: state.history.slice(0, HISTORY) })
   return state.cells[key]
+}
+
+// ── a release, started from the board ──────────────────────────────────────────────────
+
+/**
+ * Start a product's release on the built-in release track: the crew builds it, writes the listing, makes and scores the
+ * store images, the checks run and it is uploaded to the stores' testing lanes; nothing is sent for review before the
+ * owner's yes at the track's gate. One release at a time per product.
+ */
+/** A release's failures past their rounds go to the ruler, else the lead: the crew's lead is named when the plan names neither. */
+async function leadInput(co, inputs, options) {
+  if (inputs.ruler || inputs.lead) return {}
+  const bots = await call(`/companies/${co}/agents`, options).catch(() => [])
+  const lead = (Array.isArray(bots) ? bots : []).filter((b) => b.status !== 'terminated').find((b) => b.role === 'ceo') || (Array.isArray(bots) ? bots : []).find((b) => !b.reportsTo && b.status !== 'terminated')
+  return lead ? { lead: lead.name } : {}
+}
+
+export async function startRelease(name, { plan = readPlan(), file = stateFile(), now = Date.now(), ...options } = {}) {
+  const product = plan.products.find((p) => p.name === name)
+  if (!product) throw new EngineError(404, 'That product is not in the launch plan')
+  const play = product.channels?.play?.package || ''
+  const bundle = product.channels?.appstore?.bundle || ''
+  if (!play && !bundle) throw new EngineError(400, 'A release goes to Google Play or the App Store: name its package or bundle id in the launch plan first')
+  const state = readState(file)
+  const open = state.releases[name]
+  if (open?.requestId) {
+    const before = await call(`/requests/${open.requestId}`, options).catch(() => null)
+    if (before && !['done', 'stopped'].includes(before.status)) throw new EngineError(409, `A release of ${name} is already on its way (${before.jobCode})`)
+  }
+  const co = await companyId(options)
+  const projects = await call(`/companies/${co}/projects`, options)
+  const project = projects.find((p) => p.name === (product.project || product.name))
+  const request = await call(`/companies/${co}/requests`, { ...options, method: 'POST', body: {
+    track: plan.release?.track || 'release-app', title: `Release ${name}`, ...(project ? { projectId: project.id } : {}),
+    words: `Release ${name} to ${[play && 'Google Play', bundle && 'the App Store'].filter(Boolean).join(' and ')}.${product.note ? `\n\n${product.note}` : ''}`,
+    inputs: { ...(await leadInput(co, plan.release?.inputs || {}, options)), ...(plan.release?.inputs || {}), package: play, bundle,
+      // The store-rules scan checks the laws of the countries it ships to and of what it does (docs/launch.md).
+      ...(Array.isArray(product.regions) && product.regions.length ? { regions: product.regions.join(',') } : {}),
+      ...(Array.isArray(product.features) && product.features.length ? { features: product.features.join(',') } : {}) },
+  } })
+  state.releases[name] = { requestId: request.id, jobCode: request.jobCode || '', at: now }
+  state.history.unshift({ at: now, product: name, channel: play ? 'play' : 'appstore', from: '', to: `Release ${request.jobCode || ''} started`, how: 'told', by: 'owner' })
+  writeJson(file, { ...state, history: state.history.slice(0, HISTORY) })
+  return request
+}
+
+/** Where each product's latest release stands, read from its request on the engine. */
+async function releaseStates(state, options) {
+  const out = {}
+  for (const [name, r] of Object.entries(state.releases || {})) {
+    const req = await call(`/requests/${r.requestId}`, options).catch(() => null)
+    if (!req) continue
+    const trip = req.trips?.at(-1)
+    const step = trip?.steps?.find((s) => s.id === trip.current)
+    out[name] = { job: req.jobCode, status: req.status, tripId: trip?.id || '', step: step?.title || '', waits: step?.kind === 'gate' && trip?.status === 'running', tripStatus: trip?.status || '', cost: Number(req.cost?.usd) || 0 }
+  }
+  return out
 }
 
 // ── the page ────────────────────────────────────────────────────────────────────────────
@@ -255,13 +314,14 @@ function readinessOf(product, cells, keys) {
   return items
 }
 
-export function launchPage({ plan = readPlan(), state = readState(), keys = {}, now = Date.now() } = {}) {
+export function launchPage({ plan = readPlan(), state = readState(), keys = {}, releases = {}, now = Date.now() } = {}) {
   const used = CHANNELS.filter((c) => plan.products.some((p) => p.channels?.[c.id]))
   const rows = plan.products.map((p) => {
     const cells = Object.fromEntries(used.map((c) => [c.id, p.channels?.[c.id] ? state.cells[keyOf(p.name, c.id)] || cell('Not checked yet', { how: 'none' }) : null]))
     const waiting = Object.entries(cells).filter(([, x]) => x?.next).sort(([, a], [, b]) => ORDER[a.waits || ''] - ORDER[b.waits || ''])[0]
     return {
       name: p.name, project: p.project || '', kind: p.kind || '', note: p.note || '', first: Boolean(p.first), cells,
+      canRelease: Boolean(p.channels?.play?.package || p.channels?.appstore?.bundle), release: releases[p.name] || null,
       next: waiting ? { channel: CHANNEL.get(waiting[0]).name, text: waiting[1].next, waits: WAITS[waiting[1].waits] || '' } : null,
       readiness: readinessOf(p, cells, keys),
       history: state.history.filter((h) => h.product === p.name).slice(0, 20),
@@ -279,5 +339,6 @@ export async function launchView({ now = Date.now(), force = false } = {}) {
     running ||= checkAll({ keys }).finally(() => { running = null })
     if (force || !state.checkedAt) await running
   }
-  return launchPage({ state: readState(), keys, now })
+  const state2 = readState()
+  return launchPage({ state: state2, keys, releases: await releaseStates(state2, {}).catch(() => ({})), now })
 }

@@ -28,7 +28,7 @@ function studio({ script, timeoutSec = 30, limit = 1 } = {}) {
   git('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repo, 'README.md'), 'a game\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   const tool = path.join(dir, 'tool.sh')
   fs.writeFileSync(tool, `#!/bin/sh\n${script || DONE}\n`)
   fs.chmodSync(tool, 0o755)
@@ -183,6 +183,24 @@ test('a free-model bot is started the way OpenCode wants, its rules inside the p
   ])
   assert.equal(read.session, 'ses_abc')
   assert.deepEqual([read.inputTokens, read.cachedInputTokens, read.outputTokens], [43702, 39456, 227])
+})
+
+test('a free-model run that got past an error and ended its turn is not failed; one that ended on the error is', () => {
+  const overflow = '{"type":"error","sessionID":"s","error":{"name":"ContextOverflowError","data":{"message":"Requested token count exceeds the model\'s maximum context length"}}}'
+  const past = readOutput('opencode_local', ['{"type":"step_finish","sessionID":"s","part":{"reason":"tool-calls","tokens":{}}}', overflow, '{"type":"text","sessionID":"s","part":{"text":"Done."}}', '{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}'])
+  assert.deepEqual([past.failed, past.why, past.said], [false, '', 'Done.'])
+  const ended = readOutput('opencode_local', ['{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}', overflow])
+  assert.equal(ended.failed, true)
+  assert.match(ended.why, /maximum context length/)
+})
+
+test('a free-model run is booked on the model the runner says it ran on, every one after a switch', () => {
+  const step = '{"type":"step_finish","sessionID":"s","part":{"reason":"stop","tokens":{}}}'
+  const one = readOutput('opencode_local', ['{"type":"model","model":"or/flint:free","sessionID":""}', step])
+  assert.deepEqual([one.model, one.models, one.session], ['or/flint:free', ['or/flint:free'], 's'])
+  const two = readOutput('opencode_local', ['{"type":"model","model":"nv/step-5","sessionID":""}', step, '{"type":"model","model":"kilo/nemotron:free","sessionID":""}', step])
+  assert.deepEqual([two.model, two.models], ['kilo/nemotron:free', ['nv/step-5', 'kilo/nemotron:free']])
+  assert.equal(readOutput('opencode_local', [step]).model, '', 'no line: the engine falls back to the set model')
 })
 
 test('a card is asked by a bot and answered by the owner, which wakes the bot; a document keeps its versions; a done job frees the one waiting on it', () => {
@@ -354,12 +372,12 @@ test('a job told a commit to start from has its branch cut there, not from the m
   git('checkout', '-q', '-b', 'LH-650-the-build')
   fs.writeFileSync(path.join(s.repo, 'built.txt'), 'the build\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'the build')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'the build')
   const built = git('rev-parse', 'HEAD')
   git('checkout', '-q', 'main')
   fs.writeFileSync(path.join(s.repo, 'later.txt'), 'main moved on\n')
   git('add', '.')
-  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'later on main')
+  git('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'later on main')
 
   // As the pipeline sends a fix round, and as a brief may name it plainly.
   const fix = createJob(s.store, COMPANY, { title: 'Fix 1 of the build', projectId: 'p-game', assigneeAgentId: 'bot-builder', executionWorkspaceSettings: { mode: 'isolated_workspace', workspaceStrategy: { type: 'git_worktree', baseRef: built } } })
@@ -490,7 +508,7 @@ test('a job moved to another project loses its workspace, and its next run works
   gitB('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
   gitB('add', '.')
-  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  gitB('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
 
   const job = createJob(s.store, COMPANY, { title: 'Move me to the other project', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
@@ -521,7 +539,7 @@ test('a run going on a job keeps its workspace when the job moves projects', asy
   gitB('init', '-q', '-b', 'main')
   fs.writeFileSync(path.join(repoB, 'README.md'), 'another game\n')
   gitB('add', '.')
-  gitB('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
+  gitB('-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'first')
   s.store.put('projects', { id: 'p-other', companyId: COMPANY, name: 'Other', primaryWorkspace: { cwd: repoB } }, { position: 1 })
 
   const job = createJob(s.store, COMPANY, { title: 'Keep working', projectId: 'p-game', assigneeAgentId: 'bot-builder' }, { now: NOW })
@@ -536,4 +554,21 @@ test('a run going on a job keeps its workspace when the job moves projects', asy
 
   const done = await until(s, (r) => r.finished.find((f) => f.id === run.id), 30000)
   assert.equal(done.status, 'succeeded')
+})
+
+test('the owner\'s message to a bot goes ahead of the jobs queued for it', async () => {
+  const s = studio({ script: 'sleep 1; echo \'{"type":"result","subtype":"success","usage":{}}\'' })
+  // A run is going, and two crew jobs queue behind it.
+  createJob(s.store, COMPANY, { title: 'Busy', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  assert.equal((await tick(s.store, s.opts())).started.length, 1)
+  createJob(s.store, COMPANY, { title: 'Queued one', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  createJob(s.store, COMPANY, { title: 'Queued two', projectId: 'p-game', assigneeAgentId: 'bot-builder' })
+  // Then the owner writes in the chat: that wake is the newest.
+  const chat = openChat(s.store, COMPANY, 'bot-builder', { actor: { user: 'local-board' } })
+  addComment(s.store, chat.id, { body: 'Why no reply?' }, { actor: { user: 'local-board' } })
+  // The first run started once the busy one ends is the chat's, though its wake came last.
+  await until(s, () => s.store.rows('SELECT id FROM runs').length >= 2, 15000)
+  const runs = s.store.objects('SELECT raw FROM runs ORDER BY created_at')
+  assert.equal(runs[1].issueId, chat.id, 'the chat runs before the queued jobs')
+  await until(s, () => s.store.rows('SELECT id FROM runs').length >= 4 && !s.store.rows("SELECT id FROM runs WHERE status = 'running'").length, 20000)
 })

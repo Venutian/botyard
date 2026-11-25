@@ -129,14 +129,24 @@ export async function pageShot(address, { width = 1280, height = 800, scrollX = 
   const w = Math.max(200, Math.min(3840, Math.round(width)))
   const h = Math.max(200, Math.min(2400, Math.round(height)))
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'botyard-look-'))
-  const child = spawn(browser, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${w},${h}`, '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
+  const child = spawn(browser, [
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${w},${h}`,
+    '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio',
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    '--disable-dev-shm-usage',
+    'about:blank',
+  ], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' })
   let err = ''
   child.stderr.on('data', (d) => { err += d })
   const stop = () => { try { if (process.platform === 'win32') child.kill('SIGKILL'); else process.kill(-child.pid, 'SIGKILL') } catch { /* gone */ } setTimeout(() => fs.rmSync(profile, { recursive: true, force: true }), 500) }
   try {
     let ws = ''
     for (let n = 0; n < 100 && !ws; n++) { ws = /DevTools listening on (ws:\/\/\S+)/.exec(err)?.[1] || ''; if (!ws) await sleep(100) }
-    if (!ws) throw new EngineError(502, 'The browser for screenshots did not start')
+    if (!ws) {
+      const tail = err.trim().split('\n').slice(-8).join('\n')
+      const hint = /sandbox|namespace/i.test(err) ? '\nThe sandbox cannot start here. On Linux with AppArmor, allow unprivileged user namespaces (kernel.apparmor_restrict_unprivileged_userns=0); the sandbox is never turned off.' : ''
+      throw new EngineError(502, `The browser for screenshots did not start:\n${tail}${hint}`)
+    }
     const socket = new WebSocket(ws)
     await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }) })
     let next = 0

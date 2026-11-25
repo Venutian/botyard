@@ -89,6 +89,11 @@ LOOPED = ('You were going round in circles: you ran {call} {times} times with no
 CONTINUE = ('The free model you were running on ran out partway through this task, so you are now on another '
             'model in the same session. Carry on from exactly where you stopped: check what is already done in '
             'the worktree (git status, the last files you changed) instead of starting over.')
+# A run that ends without one tool call did none of its work: every job is read, done and closed through tools. On
+# 22 Nov four runs of one scout on one free model wrote only "grant me read access" (the files were readable): the
+# resumed session kept repeating an old refusal. Such a model is set aside for NO_TOOLS_FOR and the job starts again
+# once on another model in a new session, so nothing the old session believed comes with it.
+NO_TOOLS_FOR = 86400
 
 
 class Loops:
@@ -101,6 +106,8 @@ class Loops:
         self.waited = 0
         # What the model is told when feed() stops the run for something that is not a circle.
         self.prompt = None
+        # Tool calls seen this start, whatever they returned.
+        self.tools = 0
 
     def feed(self, event):
         part = event.get('part') or {}
@@ -112,6 +119,7 @@ class Loops:
         state = part.get('state') or {}
         if state.get('status') not in (None, 'completed', 'error'):
             return None
+        self.tools += 1
         tool, given = part.get('tool') or '?', state.get('input') or {}
         key = (tool, json.dumps(given, sort_keys=True), self.snapshot)
         self.seen[key] += 1
@@ -181,6 +189,28 @@ PER_DAY = ('free-models-per-day', 'per day', 'daily limit', 'daily')
 # STANDARDS.md rule 22: "quota" alone may be one model's; with one of these it speaks for the whole provider.
 WIDE = ('every model', 'all models', 'all free models', 'provider', 'account', 'free tier', 'free-tier')
 BUSY_WORDS = ('too many requests', '429', 'rate limit', 'overloaded')
+# A prompt that outgrew the model's context window: the model cannot take the work, so the run hands
+# over to a model that can (same session), instead of failing the run.
+CONTEXT = ('context length', 'context window', 'context limit', 'maximum context length', 'prompt is too long', 'token count exceeds', 'exceeds the context', 'too many tokens')
+
+# A session that grows past CONTEXT_HANDOVER tokens hands over to a fresh one at the end of a step, before the model's
+# window fills (week to 24 Nov: 98 free runs died on "exceeds the model maximum context length of 262144", 49M
+# tokens spent for nothing). The size is OpenCode's own count of the last step (part.tokens.total), which is the whole
+# context sent. CONTEXT_HANDOVER_FOR moves the point for a free model whose window is known to be smaller than 262144.
+CONTEXT_HANDOVER = 200000
+CONTEXT_HANDOVER_FOR = {}
+# The session is asked once for its state before it is left; an answer that takes longer than this is not waited for.
+STATE_WAIT = 180
+ASK_STATE = ('This session is near the end of its context window ({size:,} of about 262,144 tokens), so the work goes '
+             'on in a new session that knows nothing of this one. Do not call any tool. Answer now in under 200 words of '
+             'plain text with three parts. DONE: what is finished (and committed, with the commit). LEFT: what is still '
+             'to do, in order, starting with the very next step. FILES: the files you changed.')
+RESUME = ('That is the state a previous session on this task wrote when its context filled; you go on from it in a new '
+          'session. Check it against the worktree (git status, git log) before you trust it, then carry on from where '
+          'it stopped: do not start the task again from the top. The task as it was first given:\n\n{task}')
+CONTEXT_FRESH = ('A previous session on this task ran out of context before it could write its state, so you go on in a '
+                 'new session. Look at git status, git log and the job\'s comments to see what is already done, then '
+                 'carry on from there: do not start again from the top. The task as it was first given:\n\n{task}')
 
 
 # Providers whose daily caps are one model's each (free-limits.py PUBLISHED: OpenCode's longcat has its own 100
@@ -192,6 +222,9 @@ def provider_wide(text, model=None):
     """True when an error names a cap on the whole provider (a day's count, a quota for every model), not one
     model: STANDARDS.md rule 22. Such a cap sets every model of that provider aside."""
     text = (text or '').lower()
+    if 'free usage limit' in text:
+        # OpenCode's own free allowance is for all its free models together, until its day turns over.
+        return True
     if 'free-models-per-day' in text or any(w in text for w in WIDE) and any(w in text for w in ('quota',) + PER_DAY):
         return True
     if model and model.startswith(PER_MODEL_DAY):
@@ -212,19 +245,67 @@ def said(model, got):
     return text if provider_wide(text, model) else None
 
 
-def probe(opencode, model):
+# What OpenCode logs when a provider refuses for its allowance. OpenCode then retries for minutes and prints nothing,
+# so the ask is ended as soon as one of these is logged (23 Nov 2026: a new yard's first hello waited half an hour on
+# "Free usage limit reached" while every free model was asked in turn, 30 seconds each).
+REFUSED_NOW = ('free usage limit', 'usage limit reached', 'insufficient balance', 'quota exceeded', 'rate limit exceeded')
+
+
+def probe(opencode, model, timeout=30):
     """One word from the model, never from a cache: 'ok' when it answers, 'gone' when the provider says it
-    can never serve us, else 'out' (its limit, or busy)."""
+    can never serve us, else 'out' (its limit, or busy). OpenCode's own log is read as it comes, so a refusal
+    for the provider's allowance ends the ask at once instead of at the timeout."""
     SAID.pop(model, None)
     try:
-        out = subprocess.run([opencode, 'run', '-m', model, 'Reply with exactly: pong'], capture_output=True, text=True,
-                             timeout=30, stdin=subprocess.DEVNULL, cwd='/tmp', env={**os.environ, 'PWD': '/tmp'})
-    except (OSError, subprocess.TimeoutExpired):
+        child = subprocess.Popen([opencode, 'run', '--print-logs', '-m', model, 'Reply with exactly: pong'],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL,
+                                 cwd='/tmp', env={**os.environ, 'PWD': '/tmp'}, start_new_session=True)
+    except OSError:
         return 'out'
-    if 'pong' in out.stdout.lower():
+    out, err, refused = [], [], []
+
+    def read_err():
+        for line in child.stderr:
+            if 'level=ERROR' in line or 'error' in line.lower():
+                err.append(line[-400:])
+            if any(w in line.lower() for w in REFUSED_NOW):
+                refused.append(line)
+                try:
+                    os.killpg(child.pid, signal.SIGTERM)
+                except OSError:
+                    pass
+                return
+    readers = [threading.Thread(target=read_err, daemon=True),
+               threading.Thread(target=lambda: out.extend(child.stdout), daemon=True)]
+    for reader in readers:
+        reader.start()
+    try:
+        child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        child.wait()
+    for reader in readers:
+        reader.join(1)
+    text = ''.join(out)
+    if 'pong' in text.lower() and not refused:
         return 'ok'
-    SAID[model] = (out.stdout + ' ' + out.stderr)[-300:]
-    return 'gone' if any(w in (out.stdout + out.stderr).lower() for w in GONE) else 'out'
+    said_text = (text + ' ' + ''.join(refused or err[-2:]))
+    SAID[model] = said_text[-300:]
+    return 'gone' if any(w in said_text.lower() for w in GONE) else 'out'
+
+
+def no_free_model(asked):
+    """What the owner reads when no free model answers: why, and the two ways on."""
+    why = ' '.join(SAID.get(m, '') for m in asked).lower()
+    used_up = any(w in why for w in REFUSED_NOW)
+    head = ("No free model answers now: today's free allowance is used up" if used_up
+            else 'No free model answers now: each one asked was busy or did not reply')
+    return (f"{head} ({len(asked)} asked). Free models come back by themselves, at the latest when the provider's day "
+            "turns over. To go on sooner, paste a free key on the Setup page (OpenRouter, NVIDIA, Google Gemini and "
+            "others need no card), or sign in to Claude, Codex or Gemini there.\n")
 
 
 def answers(opencode, model):
@@ -288,12 +369,158 @@ def error_of(event):
     return str((data or {}).get('message') or (err.get('name') if isinstance(err, dict) else err) or 'error')[:300]
 
 
+def context_error(text):
+    """True when an error says the prompt outgrew the model's context window. A session with history then goes on
+    in a fresh session; a new session that overflows on its first call goes on with a model that can take it."""
+    text = (text or '').lower()
+    return any(w in text for w in CONTEXT)
+
+
 def alive(pid):
     try:
         os.kill(int(pid), 0)
         return True
     except (OSError, ValueError):
         return False
+
+
+def context_size(event):
+    """The session's context size in tokens at the end of a step: OpenCode's step_finish carries part.tokens with
+    total, input, output, reasoning and cache.read / cache.write (read from opencode.db, 24 Nov 2026). Each step sends
+    the whole session, so the last step's count is the size; steps are never added up. None for any other event."""
+    if not isinstance(event, dict) or event.get('type') != 'step_finish':
+        return None
+    tokens = (event.get('part') or {}).get('tokens')
+    if not isinstance(tokens, dict):
+        return None
+    total = tokens.get('total')
+    if isinstance(total, (int, float)) and total > 0:
+        return int(total)
+    cache = tokens.get('cache') if isinstance(tokens.get('cache'), dict) else {}
+    parts = (tokens.get('input'), tokens.get('output'), tokens.get('reasoning'), cache.get('read'), cache.get('write'))
+    return int(sum(n for n in parts if isinstance(n, (int, float)))) or None
+
+
+def handover_at(model):
+    """The context size at which a session on `model` hands over to a fresh one."""
+    return CONTEXT_HANDOVER_FOR.get(model, CONTEXT_HANDOVER)
+
+
+def carries_session(args):
+    """True when the run starts in an earlier session (--session or -s), which brings that session's history along."""
+    return any(a in ('--session', '-s') or a.startswith('--session=') for a in args)
+
+
+def ask_state(opencode, args, model, session, size, out=None, wait=None):
+    """Asks the full session once, with no tools, for a short state (done, left, files) and returns its text, or None
+    when it gives none in time. Its events go on to the run's output so the engine books the tokens."""
+    out = out or sys.stdout
+    try:
+        child = subprocess.Popen([opencode, *with_model(without_session(args), model, session)], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+        got, _ = child.communicate(ASK_STATE.format(size=size), timeout=wait or STATE_WAIT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        got = child.communicate()[0] or ''
+    except OSError:
+        return None
+    said = []
+    for line in (got or '').splitlines():
+        out.write(line + '\n')
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get('type') == 'text':
+            said.append(str((event.get('part') or {}).get('text') or ''))
+    out.flush()
+    text = '\n'.join(t.strip() for t in said if t.strip()).strip()
+    return text[:3000] or None
+
+
+def changed_files(run=subprocess.run):
+    """The worktree's changed files (git status), at most 20: the state when the model gives none."""
+    try:
+        got = run(['git', 'status', '--porcelain'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line[3:] for line in (got.stdout or '').splitlines() if len(line) > 3][:20]
+
+
+def handover_comment(size, model, state, files=None):
+    """The comment the job gets at a handover: the session's size and model, then the model's own state."""
+    if not state:
+        state = ('The session did not write its state in time. Files changed in the worktree: '
+                 f"{', '.join(files) if files else 'none'}.")
+    return f"Context handover at {size:,} tokens on {model}: this session stops and a fresh one goes on.\n\n{state}"
+
+
+def post_comment(text):
+    """Posts `text` as a comment on the run's own job. False when the run has no job or the post fails."""
+    base, job = botyard_home.run_var('API_URL'), botyard_home.run_var('JOB_ID')
+    if not (base and job):
+        return False
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/api/issues/{job}/comments", method='POST',
+                                     data=json.dumps({'body': text + '\n\n<!-- botyard-script: free-runner -->'}).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {botyard_home.run_var('API_KEY', '')}"})
+        urllib.request.urlopen(req, timeout=20).close()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def stop_child(child, wait=30):
+    """Waits for a stopped OpenCode to exit, and kills it if it has not after `wait` seconds: a slow exit crashed the
+    whole run with TimeoutExpired (18 Nov, four scout runs failed that way)."""
+    try:
+        child.wait(timeout=wait)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        child.wait()
+
+
+PACE_WAIT, PACE_MOST = 300, 45 * 60
+
+
+def pace_kind(env=None):
+    env = env or os.environ
+    # The bot's role sets its pace (BOTYARD_PACE_KIND), apart from the models it takes: a scout may run on strong models.
+    kind = env.get('BOTYARD_PACE_KIND', '').strip()
+    if kind in ('build', 'check', 'scout'):
+        return kind
+    return 'check' if env.get('BOTYARD_CHECKER') else 'scout' if env.get('BOTYARD_FREE_TIER') == 'light' else 'build'
+
+
+def paced(env=None, run=subprocess.run, sleep=time.sleep, clock=time.time):
+    """Asks the studio's pace gate (BOTYARD_FREE_PACE, a command that exits 0 to go and 3 to hold) before the run's
+    first model call, so no starter can drain a daily free allowance at once. Waits while it holds, up to PACE_MOST;
+    '' when the run may go, else why it was held. No gate named: the run goes."""
+    env = env or os.environ
+    gate = env.get('BOTYARD_FREE_PACE', '').strip()
+    if not gate or not os.path.isfile(gate):
+        return ''
+    begun, told, why = clock(), False, ''
+    while True:
+        try:
+            done = run([sys.executable, gate, '--kind', pace_kind(env), '--grant'], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return ''
+        if done.returncode != 3:
+            return ''
+        why = (done.stdout or '').strip()[:200]
+        if clock() - begun >= PACE_MOST:
+            return why
+        if not told:
+            note(f"A free run waits for the day's pace: {why}")
+            told = True
+        sleep(PACE_WAIT)
 
 
 def provider_of(model):
@@ -334,6 +561,12 @@ def rest(model, seconds=REST_FOR, now=None):
 def light_first():
     """True for a run whose bot takes the light free models first (a scout), keeping the strong ones for builds and checks."""
     return os.environ.get('BOTYARD_FREE_TIER') == 'light'
+
+
+def best_first():
+    """True for a run whose bot takes the strongest free model answering, by measured pass rate, even one another run
+    is on (a money scout: its work is worth more than the share of a model's requests it takes)."""
+    return os.environ.get('BOTYARD_FREE_TIER') == 'best'
 
 
 def claim(model):
@@ -414,7 +647,9 @@ def list_again(bots, run=subprocess.run, now=None):
     if isinstance(kept, dict) and now - kept.get('at', 0) < LIST_AGAIN:
         return False
     try:
-        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        extra = botyard_home.providers_config()
+        out = run([bots.OPENCODE, 'models'], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                  env={**os.environ, **botyard_home.key_env(), **({'OPENCODE_CONFIG': extra} if extra else {})})
     except (OSError, subprocess.TimeoutExpired):
         return False
     return bots.keep_tool_models([line.strip() for line in out.stdout.splitlines() if '/' in line and ' ' not in line.strip()], now=now)
@@ -431,6 +666,10 @@ def pick(bots, avoid_family=None):
     rested = resting()
     awake = [r for r in rows if provider_of(r[0]) not in rested]
     rows = awake or rows
+    if best_first() and not NEVER:
+        best = bots.free_best(rows, bots.read_json(bots.FREE_SCORES, {}))
+        if best:
+            return best[0]
     if light_first() and not NEVER:
         light = [m for m, f, t in rows if t != 'strong']
         for choice in ([m for m in light if m not in used], light):
@@ -455,6 +694,27 @@ def pick(bots, avoid_family=None):
     return None
 
 
+def no_tools(code, tools, prompt):
+    """True when a run ended as if done (code 0) with no tool call at all on a real task: it did none of the work."""
+    return code == 0 and tools == 0 and len(prompt or '') >= 200
+
+
+def without_session(args):
+    """The run's arguments with no --session (or -s): the next start is a new session."""
+    args, out, skip = list(args), [], False
+    for i, a in enumerate(args):
+        if skip:
+            skip = False
+            continue
+        if a in ('--session', '-s'):
+            skip = True
+            continue
+        if a.startswith('--session='):
+            continue
+        out.append(a)
+    return out
+
+
 def with_model(args, model, session):
     args = list(args)
     at = args.index('--model') if '--model' in args else args.index('-m') if '-m' in args else -1
@@ -465,6 +725,18 @@ def with_model(args, model, session):
     if session and '--session' not in args:
         args += ['--session', session]
     return args
+
+
+def say_model(model, out=None):
+    """One line on the run's own output naming the model this start runs on: the engine books the run on the model
+    that actually ran (every one, after a switch), not on the bot's set model (23 Nov 2026: a run on flint was booked
+    on the set model, so the pass rates went to the wrong model)."""
+    if not model:
+        return
+    out = out or sys.stdout
+    # sessionID marks the line as OpenCode's for the engine's reader; it is filled in by the events that follow.
+    out.write(json.dumps({'type': 'model', 'model': model, 'sessionID': '', 'timestamp': int(time.time() * 1000)}) + '\n')
+    out.flush()
 
 
 def note(line):
@@ -486,7 +758,7 @@ def with_connectors(env, folder=None):
     if not own or env.get('BOTYARD_CONNECTORS') == 'off':
         return own
     folder = folder or env.get('BOTYARD_BOT_CONNECTORS') or botyard_home.state('connectors')
-    given = os.path.join(folder, os.path.basename(own))
+    given = os.path.join(folder, re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own)))
     try:
         with open(given) as f:
             mcp = json.load(f).get('mcp') or {}
@@ -494,7 +766,10 @@ def with_connectors(env, folder=None):
             return own
         with open(own) as f:
             config = json.load(f)
-        merged = os.path.join(folder, os.path.basename(own).replace('.opencode.json', '.with-connectors.opencode.json'))
+        # One merged file per bot, whatever it is started from: a run started with the merged file already in
+        # OPENCODE_CONFIG stacked ".with-connectors" on each start (19 Nov: eight files, six suffixes deep).
+        base = re.sub(r'(\.with-connectors)+\.opencode\.json$', '.opencode.json', os.path.basename(own))
+        merged = os.path.join(folder, base.replace('.opencode.json', '.with-connectors.opencode.json'))
         text = json.dumps({**config, 'mcp': {**(config.get('mcp') or {}), **mcp}}, indent=1)
         try:
             with open(merged) as f:
@@ -519,6 +794,13 @@ def main():
     # Free bots commit as themselves with the no-reply address only (git_identity.py), whatever the model runs in git.
     git_identity.apply()
     fallback = load('fallback', 'fallback.py')
+    spec = importlib.util.spec_from_file_location('identity_check', f'{HERE}/identity-check.py')
+    check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check)
+    wrong = check.faults(sandbox_only=True)
+    if wrong and sys.argv[1:2] == ['run']:
+        # The sandbox gitconfig names an address that is not the studio's: no run until it is written again.
+        sys.exit('\n'.join(wrong))
     bots = fallback.setup()
     if not bots.OPENCODE:
         sys.exit(botyard_home.INSTALL['opencode'])
@@ -527,7 +809,16 @@ def main():
         # The engine also lists models and checks the version through this command: those go straight through.
         os.execv(bots.OPENCODE, [bots.OPENCODE, *args])
     list_again(bots)
+    held = paced()
+    if held:
+        sys.stderr.write(f'Held by the free pace for {PACE_MOST // 60} minutes ({held}); the job is woken again later.\n')
+        return 1
     prompt = sys.stdin.read() if not sys.stdin.isatty() else ''
+    scratch = os.environ.get('TMPDIR') or ''
+    if prompt and 'botyard-run-' in scratch:
+        # 19 Nov: runs wrote /tmp/report.md, outside every folder they may use, and ended on the refusal.
+        prompt += (f"\n\nScratch files go in {scratch} (also in $TMPDIR), never in /tmp itself. Folders outside your job's "
+                   "folders are closed to you: a refused path is closed, so do not try it again; use this folder instead.")
     model = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ('--model', '-m')), None)
     session = None
     child = None
@@ -536,18 +827,25 @@ def main():
         NEVER.discard(None)
         NEVER.add(build_family(bots))
         NEVER.discard(None)
+    answered, asked = False, []
     for _ in range(MOST_SWITCHES):
-        chosen = pick(bots) or model
+        chosen = pick(bots) or (model if model not in asked else None)
         claim(chosen)  # before asking it, so a run starting at the same moment picks another
         if not chosen:
             break
+        asked.append(chosen)
         got = probe(bots.OPENCODE, chosen)
         if got == 'ok':
             fallback.limits().answered(chosen)
+            answered = True
             break
         if got == 'out' and fallback.outage(bots, chosen):
+            answered = True  # the line is down, not the offer: the run goes on and waits it out as before
             break
         bots = set_aside(fallback, bots, chosen, said(chosen, got))
+    if not answered:
+        sys.stderr.write(no_free_model(asked))
+        return 1
     if chosen and chosen != model:
         args, model = with_model(args, chosen, None), chosen
     claim(model)
@@ -565,9 +863,15 @@ def main():
     loops = Loops()
     looped = 0
     retried = 0
+    # The session's context size at its last step end, whether it brings history from before this start, and the last
+    # handover comment of this run (the state a fresh session after a context error starts from).
+    size, carried, handed = 0, carries_session(args), None
+    # Tool calls over the whole run (every start of it), so a short last step after a notice does not count as none.
+    first_prompt, fresh_start, ran_tools = prompt, False, 0
     started, minutes, noticed = clock(), run_minutes(), False
     looked = time.time()
     for switch in range(MOST_SWITCHES + 1 + len(guards.RETRY_WAITS)):
+        say_model(model)
         child = subprocess.Popen([bots.OPENCODE, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                  start_new_session=True)
         child.stdin.write(prompt)
@@ -575,7 +879,7 @@ def main():
         lines = queue.Queue()
         threading.Thread(target=lambda: [lines.put(line) for line in child.stdout] + [lines.put(None)], daemon=True).start()
         heard, ended, ran_out, circling, failed = time.time(), False, False, None, None
-        told = False
+        told = handing = False
         while not ended:
             try:
                 line = lines.get(timeout=10)
@@ -600,7 +904,7 @@ def main():
                     loops.prompt = guards.killed(shown, int(long[1]))
                     circling = (f'bash `{shown}`', f'ran {int(long[1])} seconds in the foreground')
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
             if line:
                 heard = time.time()
@@ -612,18 +916,25 @@ def main():
                     circling = loops.feed(event) or circling
                     failed = error_of(event) or failed
                     step_ended = event.get('type') == 'step_finish'
+                    size = context_size(event) or size
                 except ValueError:
                     step_ended = False
+                if step_ended and session and size >= handover_at(model):
+                    # Past the handover point at a step's end: stopped here, before the window fills.
+                    handing = True
+                    os.killpg(child.pid, signal.SIGTERM)
+                    stop_child(child)
+                    break
                 if not circling and session and notice_due(started, minutes, clock(), noticed, step_ended):
                     # STANDARDS.md rule 22: the model is told once at 80% of the limit. OpenCode takes its prompt
                     # once per start, so the run is stopped at a step's end and goes on in the same session with the notice.
                     told = noticed = True
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 if circling:
                     os.killpg(child.pid, signal.SIGTERM)
-                    child.wait(timeout=30)
+                    stop_child(child)
                     break
                 continue
             if time.time() - heard < QUIET:
@@ -636,9 +947,23 @@ def main():
                 continue
             ran_out = True
             os.killpg(child.pid, signal.SIGTERM)
-            child.wait(timeout=30)
+            stop_child(child)
             break
         code = child.wait()
+        ran_tools += loops.tools
+        if handing:
+            # Once per session: the full session is asked for its state, the state goes on the job, and the work
+            # goes on in a new session (no --session) whose prompt begins with that state.
+            state = ask_state(bots.OPENCODE, args, model, session, size)
+            handed = handover_comment(size, model, state, None if state else changed_files())
+            post_comment(handed)
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            note(f'The free builder handed over on {task} at {size:,} tokens on {model}; {"state written" if state else "no state"}, fresh session')
+            sys.stderr.write(f'The session reached {size:,} tokens: its state is on the job and a fresh session goes on.\n')
+            args, session, size, carried = with_model(without_session(args), model, None), None, 0, False
+            prompt = handed + '\n\n' + RESUME.format(task=first_prompt)
+            loops = Loops()
+            continue
         if told:
             used = int((clock() - started) / 60)
             note(f'The free builder was told at {used} of {minutes} minutes to write its state ({model}, same session)')
@@ -710,8 +1035,34 @@ def main():
         # A run that ended on the provider's error (403 region, 429, a daily cap) is the model failing, not
         # the work: it goes on in the same session on a model that answers, instead of failing the run.
         wide = bool(code and failed and provider_wide(failed, model))
-        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS)):
+        if code and failed and context_error(failed) and (size or carried):
+            # The session outgrew the window: every model would get the same oversized session, so the work goes on
+            # in a new one, from the last handover's state when there is one. A new session that overflows on its first
+            # call (its prompt alone is too big) still goes to another model below.
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            note(f'The free builder overflowed the context on {task} ({model}, {size:,} tokens); fresh session')
+            sys.stderr.write(f'{model} ran out of context; going on in a fresh session.\n')
+            args, session, size, carried = with_model(without_session(args), model, None), None, 0, False
+            prompt = handed + '\n\n' + RESUME.format(task=first_prompt) if handed else CONTEXT_FRESH.format(task=first_prompt)
+            loops = Loops()
+            continue
+        if code and failed and (wide or any(w in failed.lower() for w in GONE + BUSY_WORDS) or context_error(failed)):
             ran_out = True
+        if no_tools(code, ran_tools, first_prompt):
+            task = botyard_home.run_var('JOB_ID', '?')[:8]
+            fallback.set_free_aside(bots, model, 'made no tool calls on a real task', until=int(time.time() + NO_TOOLS_FOR))
+            nxt, bots = next_working(fallback, bots, avoid_family=bots.free_family(model))
+            if fresh_start or not nxt:
+                note(f'The free builder made no tool calls on {task} ({model}); {"no other model answers" if not nxt else "twice over"}, the run fails')
+                sys.stderr.write(f'{model} ended without one tool call: none of the work was done.\n')
+                return 1
+            note(f'The free builder made no tool calls on {task} ({model}); set aside a day, starting again on {nxt} in a new session')
+            sys.stderr.write(f'{model} ended without one tool call; starting the task again on {nxt} in a new session.\n')
+            args, model, session = with_model(without_session(args), nxt, None), nxt, None
+            claim(model)
+            prompt, fresh_start, ran_tools = first_prompt, True, 0
+            loops = Loops()
+            continue
         if not ran_out and (code == 0 or answers(bots.OPENCODE, model)):
             return code
         bots = set_aside(fallback, bots, model, failed)

@@ -62,6 +62,30 @@ report, a ruling) says `delivers: "nothing"` and finishes with its last step.
 Cost is added up per request: every bot step's run cost (all rounds, all reruns) and any cost a
 script reports, so the Work sheet can show what a request cost from start to main.
 
+## Nothing lands without its passes
+
+The step that merges into main (the `land.mjs` tool) has its own guard, whatever lines led to it. It
+refuses the work when:
+
+- **a check did not pass**: a check step's newest try on this work failed, or never ran;
+- **a ruling said no**: FAIL or STOP. ASK OWNER counts as a no until the owner said yes at the gate;
+- **the public will see the work and it has no scored review**: no passed try of the review step with
+  its row in the `reviews` table.
+
+A refusal is a failed try of the land step with the reason, and a state of the trip (`refusal`, shown on
+the trip's page and the Work sheet). It never becomes a card for the owner. What happens next:
+
+- Public work with no score goes to the track's review step, which **starts by itself**: the reviewer
+  gets the job and is woken. Nobody presses anything.
+- Anything else goes to the ruling step with the reason. A track with no ruling step is stuck, with the
+  reason. A step is tried at most five times, as everywhere.
+
+**The one way past is a waiver**, and only a ruling can give one: its verdict passes and carries a line
+of its own, `WAIVER: what is waived and why`. A waiver covers the checks. It covers the scored review
+only when it names it ("the review"). An owner's note on a rerun is not a waiver; an owner's yes at the
+gate counts only together with the ruling's own WAIVER line. A waiver the work lands on is kept with the
+trip (`waivers`: who, the reason, what was waived), on the land step's try, and in the activity log.
+
 ## Pause, resume, rerun
 
 - **Pause** stops new steps from starting; a step already working finishes and its snapshot is kept.
@@ -87,8 +111,9 @@ Five tables, each row with its whole object kept as JSON next to the columns tha
   demo yard runs it on start.
 - **build-check-land** — the crew's way. A brief check (the request's words, with the sections the
   studio asks for; a lead bot writes the brief when they are missing), a build, the tests, a check by
-  another bot, back to the builder with the findings when a check fails (two rounds), a ruling by the
-  lead when the rounds are used, the owner when the ruling says no, and the landing in main. Its bots
+  another bot, back to the builder with the findings when a check fails (two rounds), a ruling when the
+  rounds are used, the owner only when the ruling asks (a spend, deleting unmerged work, a final store
+  release, final art, a sign-in), and the landing in main. Its bots
   are named by role: `$builder`, `$checker` and `$lead` are inputs, which a studio fills once as the
   track's **defaults** (saved as its own copy) or a request names. A request may give `test_command`.
 
@@ -125,3 +150,13 @@ step is told the request's values as `BOTYARD_IN_<NAME>`, and `BOTYARD_PROJECT_F
 - **Timers inside a track.** Starting work on a timetable stays with routines.
 - **Moving every crew rule at once.** A project moves onto a track when it is ready; the others go on
   as before.
+
+## Limits that keep work from going round
+
+- **Five tries a step.** However many lines send work back to a step, a trip tries it at most five times
+  (`maxTries` on a track sets another number). Past that the trip is stuck, and its request's job is blocked
+  once with the reason, for a person to decide.
+- **One request a goal.** A request for a goal that already has a request moving in the same project is
+  refused, and the refusal names the one that carries it. A track is never started on one of its own steps.
+- **No job left open.** On every turn, a round that ended has its job closed with why; a stuck request's
+  job is blocked once; a stopped one is closed.

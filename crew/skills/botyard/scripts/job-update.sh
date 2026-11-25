@@ -11,7 +11,8 @@
 #
 # STATUS is one of todo, in_progress, in_review, blocked, done, cancelled. Without --issue-id it is
 # the job this run was woken for. It says plainly when the update did not land: a job is only closed
-# when this prints the job back.
+# when this prints the job back. A done report whose COMMIT line names no real commit, or not its
+# branch's tip, is refused before anything is sent (commit-line.py says why).
 set -euo pipefail
 here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 . "$here/run-vars.sh"
@@ -41,6 +42,10 @@ fi
 if ! command -v python3 >/dev/null 2>&1; then
   printf 'python3 is needed to send the update and is not installed.\n' >&2
   exit 1
+fi
+# A done report's COMMIT line must name a real commit, the tip of its branch: the review lands nothing else.
+if [[ "$status" == "done" && -n "$comment" ]]; then
+  printf '%s' "$comment" | python3 "$here/commit-line.py" || exit 1
 fi
 payload=$(STATUS="$status" COMMENT="$comment" python3 -c '
 import json, os

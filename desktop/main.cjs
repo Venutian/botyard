@@ -50,7 +50,12 @@ function carried() {
 function fullPath() {
   const sep = path.delimiter
   const have = String(process.env.PATH || '').split(sep).filter(Boolean)
-  if (process.platform === 'win32') return have.join(sep)
+  if (process.platform === 'win32') {
+    // Where npm, Node.js and OpenCode's installer put their tools, for a tool installed after Windows gave the app its PATH.
+    const home = os.homedir()
+    const usual = [process.env.APPDATA && path.join(process.env.APPDATA, 'npm'), process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs'), path.join(home, '.opencode', 'bin')].filter(Boolean)
+    return [...new Set([...have, ...usual])].join(sep)
+  }
   let fromShell = []
   try {
     const shellFile = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')

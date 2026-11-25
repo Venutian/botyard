@@ -137,6 +137,17 @@ map's own paths, so they answer the page on this computer and nobody else, and t
 (`/v1/own/<name>/api/...`) through its door, never the page's files: a studio that builds its own phone
 screen calls its page through `ownCall` in the app's `src/api.ts`.
 
+**A page on the phone.** Put `"phone": true` in `page.json` and have the server file answer
+`GET /phone` with a view: `{ "title", "note", "blocks": [...] }`. The phone app runs none of the page's
+code; it draws the blocks with its own parts, and the page gets a chip on the phone's home, beside
+Engram, and a big tile in the Studio tab (`"icon"` in `page.json` picks one of the app's icons for it). The blocks are `heading`, `text` (markdown), `tiles` (numbers side by side), `chart` (bars up;
+a bar with `pick` opens the view again with `param=pick`), `bars` (bars across, with a `mark` for a usual
+amount), `rows`, `list`, `choose` (chips that open the view again with `param=id`), `actions` (buttons
+that POST to the page's own server, then read the view again) and `fold` (shut until tapped). Each
+item's `tone` may be `good`, `bad` or `warn`. The app leaves out anything else, cuts long words and
+lists, and lets a button call only a plain path on the page's own server. The whole list, with each
+block's fields, is at the top of `src/ownView.ts`; the web preview's Sales page is an example.
+
 **An own page is code you trust.** Its server file runs with everything Botyard itself may do on
 this computer, and its script runs inside the map. Botyard loads nothing unless the folder is there,
 its name is lower-case letters, digits and dashes, `page.json` is valid, and every file it names is

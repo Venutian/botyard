@@ -22,6 +22,8 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const JOB_CODE = /^[A-Z][A-Z0-9]*-\d+$/
 const JOB_LIST_DEFAULT = 500
 const JOB_LIST_MAX = 1000
+/** A limit of this or more is the crew scripts' "every job" (STANDARDS rule 12): it is not cut to JOB_LIST_MAX. */
+const JOB_LIST_ALL = 100000
 const JOB_LIST_DESCRIPTION = 1200
 const COMMENT_LIST_MAX = 500
 const RUN_LIST_MAX = 1000
@@ -325,7 +327,7 @@ export function jobs(store, companyId, query = {}) {
   if (rawLimit !== undefined && (parsedLimit === null || parsedLimit <= 0)) throw new Refused(400, `limit must be a positive integer up to ${JOB_LIST_MAX}`)
   const parsedOffset = rawOffset !== undefined && /^\d+$/.test(rawOffset) ? Number.parseInt(rawOffset, 10) : null
   if (rawOffset !== undefined && parsedOffset === null) throw new Refused(400, 'offset must be a non-negative integer')
-  const limit = parsedLimit === null ? JOB_LIST_DEFAULT : Math.min(parsedLimit, JOB_LIST_MAX)
+  const limit = parsedLimit === null ? JOB_LIST_DEFAULT : (parsedLimit >= JOB_LIST_ALL ? Infinity : Math.min(parsedLimit, JOB_LIST_MAX))
   const offset = parsedOffset ?? 0
 
   let assignee

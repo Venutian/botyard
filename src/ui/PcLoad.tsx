@@ -24,7 +24,7 @@ export function paceRows(state: PcLoad | null): PaceAbout[] {
  * they hold. A PC that names no throttle tool answers `configured: false`, and nothing is shown.
  */
 export function PcLoadCard({ connection, every = 30_000 }: { connection: Connection; every?: number }) {
-  const { t } = useLook();
+  const { p, t } = useLook();
   const [state, setState] = useState<PcLoad | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -78,12 +78,12 @@ export function PcLoadCard({ connection, every = 30_000 }: { connection: Connect
     <View>
       <Label>{state.label || 'Pace'}</Label>
       <View style={[styles.card, { backgroundColor: t.card, borderColor: stopped ? t.bad : t.line }, t.plates && { borderRadius: t.r.card }]}>
-        {state.labelSays ? <Txt size={13} color={t.ink2}>{state.labelSays}</Txt> : null}
+        {state.labelSays && p.explain ? <Txt size={13} color={t.ink2}>{state.labelSays}</Txt> : null}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`Pace: ${here?.name || 'not known'}. Show all paces`}
           onPress={() => setOpen((v) => !v)} style={({ pressed }) => [styles.now, { borderColor: t.line }, pressed && kit.dim]}>
           <View style={kit.flex}>
             <Txt size={16} weight={700} color={stopped ? t.bad : t.ink}>{here?.name || 'Not known'}</Txt>
-            {here?.says ? <Txt size={13} color={t.ink2}>{[here.says, here.numbers].filter(Boolean).join('. ')}</Txt> : null}
+            {here?.numbers || here?.says ? <Txt size={13} color={t.ink2}>{here.numbers || here.says}</Txt> : null}
           </View>
           <Txt size={13} weight={600} color={t.accentText}>{open ? 'Close' : 'Change'}</Txt>
         </Pressable>
@@ -105,7 +105,7 @@ export function PcLoadCard({ connection, every = 30_000 }: { connection: Connect
             })}
           </View>
         ) : null}
-        <View style={styles.status}>
+        {busy || error || stopped ? <View style={styles.status}>
           {busy ? <ActivityIndicator size="small" color={t.accent} accessibilityLabel="Setting the pace" /> : null}
           <Txt size={14} weight={stopped ? 700 : 400} color={error ? t.bad : stopped ? t.bad : t.ink2} style={kit.flex} accessibilityLiveRegion="polite">
             {error || state.line || ''}
@@ -115,11 +115,11 @@ export function PcLoadCard({ connection, every = 30_000 }: { connection: Connect
               <Txt size={14} weight={700} color={t.accentText}>Resume</Txt>
             </Pressable>
           ) : null}
-        </View>
-        <Pressable accessibilityRole="button" accessibilityState={{ expanded: split }} onPress={() => setSplit((v) => !v)} style={({ pressed }) => [styles.link, pressed && kit.dim]}>
+        </View> : null}
+        {open ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: split }} onPress={() => setSplit((v) => !v)} style={({ pressed }) => [styles.link, pressed && kit.dim]}>
           <Txt size={13} weight={600} color={t.accentText}>{split ? 'Done' : `A press sets: ${SCOPES.find((s) => s.id === scope)?.name.toLowerCase()}`}</Txt>
-        </Pressable>
-        {split ? (
+        </Pressable> : null}
+        {open && split ? (
           <View style={styles.split}>
             <Txt size={13} color={t.ink2}>The PC can keep one pace by day (09:00 to 01:00) and another by night. Pick which one a press changes.</Txt>
             {state.day && state.night ? <Txt size={13} color={t.ink2}>{`Day: ${NAMES[state.day as LoadLevel]}. Night: ${NAMES[state.night as LoadLevel]}.`}</Txt> : null}

@@ -153,6 +153,10 @@
     "effort": "medium",
     "engine": "cli",
     "env": {
+     "BOTYARD_GIT_MAIN_ONLY": {
+      "type": "plain",
+      "value": "1"
+     },
      "GH_CONFIG_DIR": {
       "type": "plain",
       "value": "{{home}}/.botyard/crew/codex-safe/gh-empty"
@@ -167,7 +171,7 @@
      },
      "PATH": {
       "type": "plain",
-      "value": "{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+      "value": "{{home}}/.botyard/crew/agy-bin:{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
      }
     },
     "extraArgs": [
@@ -365,6 +369,10 @@
     "effort": "high",
     "engine": "cli",
     "env": {
+     "BOTYARD_GIT_MAIN_ONLY": {
+      "type": "plain",
+      "value": "1"
+     },
      "GH_CONFIG_DIR": {
       "type": "plain",
       "value": "{{home}}/.botyard/crew/codex-safe/gh-empty"
@@ -379,7 +387,7 @@
      },
      "PATH": {
       "type": "plain",
-      "value": "{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+      "value": "{{home}}/.botyard/crew/agy-bin:{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
      }
     },
     "extraArgs": [
@@ -433,6 +441,10 @@
     "effort": "high",
     "engine": "cli",
     "env": {
+     "BOTYARD_GIT_MAIN_ONLY": {
+      "type": "plain",
+      "value": "1"
+     },
      "GH_CONFIG_DIR": {
       "type": "plain",
       "value": "{{home}}/.botyard/crew/codex-safe/gh-empty"
@@ -447,7 +459,7 @@
      },
      "PATH": {
       "type": "plain",
-      "value": "{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+      "value": "{{home}}/.botyard/crew/agy-bin:{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
      }
     },
     "extraArgs": [
@@ -503,6 +515,10 @@
     "effort": "high",
     "engine": "cli",
     "env": {
+     "BOTYARD_GIT_MAIN_ONLY": {
+      "type": "plain",
+      "value": "1"
+     },
      "GH_CONFIG_DIR": {
       "type": "plain",
       "value": "{{home}}/.botyard/crew/codex-safe/gh-empty"
@@ -517,7 +533,7 @@
      },
      "PATH": {
       "type": "plain",
-      "value": "{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+      "value": "{{home}}/.botyard/crew/agy-bin:{{home}}/.local/bin:{{home}}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
      }
     },
     "extraArgs": [

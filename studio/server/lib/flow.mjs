@@ -27,6 +27,7 @@
  */
 import { guardFolder, readGuard } from './guard.mjs'
 import { crewLooks, roleOf } from './looks.mjs'
+import { copyGroups, foldKeys, runningCopy } from './copies.mjs'
 import { crewFolder, modelLabel } from './models.mjs'
 import { readCrewFiles, kindOf, workName } from './manager.mjs'
 import { readRested } from './crew.mjs'
@@ -105,7 +106,37 @@ const scriptId = (name) => `script:${String(name).toLowerCase().replace(/[^a-z0-
  * The flow from records in hand. `comments` is a map of job id to its comments (any order); `needs` is the
  * "Needs you" list with each card's state; `blockers` a map of job id to the jobs it waits on.
  */
-export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects = [], live = [], runs = [], comments = new Map(), needs = [], blockers = new Map(), costs = { week: [], weekStart: 0 }, guard = {}, rested = {}, window = '24h', now = Date.now() }) {
+export function buildFlow(input) {
+  const fold = copyGroups(input.agents || [])
+  if (!fold.parentOf.size) return flowOf(input, new Map())
+  // A bot's copies on other AIs are that bot: every id is put as its parent's before the flow is made, so
+  // the map has one node, one set of lines and one count for it. The copy it runs on now is told apart.
+  const to = (list, keys) => foldKeys(list, keys, fold)
+  const sums = new Map()
+  for (const row of input.costs?.week || []) {
+    const id = fold.idOf(row.agentId)
+    const sum = sums.get(id) || { ...row, agentId: id, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 }
+    for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens']) sum[key] = Number(sum[key] || 0) + Number(row[key] || 0)
+    sums.set(id, sum)
+  }
+  const liveIds = new Set((input.live || []).map((r) => r.agentId))
+  const heldIds = new Set((input.issues || []).filter((i) => i.status === 'in_progress' && i.assigneeAgentId).map((i) => i.assigneeAgentId))
+  const on = new Map(fold.top.filter((a) => fold.copiesOf.has(a.id)).map((a) => [a.id, { agent: runningCopy(a, fold, { liveIds, heldIds }), copies: fold.family(a) }]))
+  return flowOf({
+    ...input,
+    agents: fold.top,
+    issues: to(input.issues, ['assigneeAgentId', 'createdByAgentId', 'conversationAgentId']),
+    chats: to(input.chats, ['assigneeAgentId', 'createdByAgentId', 'conversationAgentId']),
+    live: to(input.live, ['agentId']),
+    runs: to(input.runs, ['agentId']),
+    comments: new Map([...(input.comments || new Map())].map(([id, list]) => [id, to(list, ['authorAgentId'])])),
+    needs: to(input.needs, ['botId']),
+    blockers: new Map([...(input.blockers || new Map())].map(([id, list]) => [id, to(list, ['assigneeAgentId'])])),
+    costs: { ...(input.costs || {}), week: [...sums.values()] },
+  }, on)
+}
+
+function flowOf({ agents = [], issues: jobs = [], chats = [], projects = [], live = [], runs = [], comments = new Map(), needs = [], blockers = new Map(), costs = { week: [], weekStart: 0 }, guard = {}, rested = {}, window = '24h', now = Date.now() }, copyOn) {
   const span = WINDOWS[window] ? window : '24h'
   // A chat with a bot is a job of its own in the engine, listed apart from the work.
   const known = new Set(jobs.map((i) => i.id))
@@ -165,7 +196,7 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
   const runFailed = new Map()
   for (const run of runs) {
     const job = run.issueId || run.jobId
-    if (job && FAILED_RUNS.has(run.status) && inWindow(stamp(run.finishedAt || run.startedAt || run.createdAt))) runFailed.set(job, true)
+    if (job && FAILED_RUNS.has(run.status) && run.errorCode !== 'pace_hold' && inWindow(stamp(run.finishedAt || run.startedAt || run.createdAt))) runFailed.set(job, true)
   }
 
   /** The bot whose work a check job checks, when it is one of the crew. */
@@ -263,7 +294,7 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
     if (stamp(run.startedAt || run.createdAt) < midnight) continue
     const row = runsToday.get(run.agentId) || { runs: 0, failed: 0 }
     row.runs += 1
-    if (FAILED_RUNS.has(run.status)) row.failed += 1
+    if (FAILED_RUNS.has(run.status) && run.errorCode !== 'pace_hold') row.failed += 1
     runsToday.set(run.agentId, row)
   }
   const tokens = (row) => Number(row.inputTokens || 0) + Number(row.outputTokens || 0) + Number(row.cachedInputTokens || 0)
@@ -300,6 +331,10 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
     const mine = issues.filter((i) => i.assigneeAgentId === agentId && !isChat(i) && (i.status === 'in_progress' || (liveJobs.has(i.id) && !['done', 'cancelled'].includes(i.status))))
     return mine.find((i) => liveJobs.has(i.id)) || mine.sort((a, b) => touched(b) - touched(a))[0] || null
   }
+  /** Every job a bot holds now, the one it is running first: "checking 3". */
+  const currentAll = (agentId) => issues.filter((i) => i.assigneeAgentId === agentId && !isChat(i) && (i.status === 'in_progress' || (liveJobs.has(i.id) && !['done', 'cancelled'].includes(i.status))))
+    .sort((a, b) => Number(liveJobs.has(b.id)) - Number(liveJobs.has(a.id)) || touched(b) - touched(a))
+  const jobView = (issue) => ({ id: issue.id, ref: refOf(issue, projectNames), title: titleOf(issue).replace(/^(Checked|Fixed|Decision): /, ''), stage: stageOf(issue), project: projectNames.get(issue.projectId) || '', projectId: issue.projectId || '' })
   const stageOf = (issue) => {
     const what = kindOf(issue.title || '')
     return what.kind === 'check' ? 'Checking' : what.kind === 'ruling' ? 'Ruling' : what.kind === 'fix' ? 'Fixing' : 'Building'
@@ -317,6 +352,9 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
       : job || blocked ? 'waiting'
       : 'free'
     const look = looks.get(agent.id)
+    const family = copyOn.get(agent.id)
+    const running = family?.agent || agent
+    const held = currentAll(agent.id)
     const runsRow = runsToday.get(agent.id) || { runs: 0, failed: 0 }
     const claude = agent.adapterType === 'claude_local'
     const own = weekTokens.get(agent.id) || 0
@@ -330,11 +368,14 @@ export function buildFlow({ agents = [], issues: jobs = [], chats = [], projects
       look: look.look,
       reportsTo: agent.reportsTo && bots.has(agent.reportsTo) ? agent.reportsTo : null,
       under: agent.reportsTo && bots.has(agent.reportsTo) ? agent.reportsTo : look.role === 'lead' || !lead || lead.id === agent.id ? 'owner' : lead.id,
-      model: modelLabel(agent.adapterConfig?.model),
-      engine: ENGINE[agent.adapterType] || 'Other',
+      model: modelLabel(running.adapterConfig?.model),
+      engine: ENGINE[running.adapterType] || 'Other',
+      // A bot with copies on other AIs is one node: the tag says which copy is running.
+      ...(family ? { copies: family.copies.map((a) => ({ id: a.id, name: a.name, engine: ENGINE[a.adapterType] || 'Other', model: modelLabel(a.adapterConfig?.model), running: a.id === running.id })), on: ENGINE[running.adapterType] || 'Other' } : {}),
       status,
       why: status === 'resting' ? rested[agent.id]?.text || '' : !job && live.some((r) => r.agentId === agent.id && isChat(byId.get(r.issueId) || {})) ? 'Talking with you in its chat' : '',
-      job: job ? { id: job.id, ref: refOf(job, projectNames), title: titleOf(job).replace(/^(Checked|Fixed|Decision): /, ''), stage: stageOf(job), project: projectNames.get(job.projectId) || '', projectId: job.projectId || '' } : null,
+      job: job ? jobView(job) : null,
+      jobs: held.map(jobView),
       runsToday: runsRow.runs,
       failedToday: runsRow.failed,
       week: { tokens: own, share: claude && claudeWeek ? own / claudeWeek : claude ? 0 : null },

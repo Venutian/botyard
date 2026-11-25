@@ -13,6 +13,12 @@ fi
 [ -r "$BOTYARD_CREW_DIR/own/claude-bot.sh" ] && . "$BOTYARD_CREW_DIR/own/claude-bot.sh"
 # Every bot commits under its own first name and the studio's GitHub no-reply address, nothing else (git_identity.py).
 eval "$(python3 "$here/git_identity.py" --export 2>/dev/null)"
+# A sandbox gitconfig that names any other address (a test's, a stranger's no-reply) stops the run here, before a
+# commit could carry it (identity-check.py; setup-bots.py writes the file again).
+if ! wrong=$(python3 "$here/identity-check.py" --sandbox 2>&1); then
+  echo "$wrong" >&2
+  exit 1
+fi
 # Every Claude bot gets the crew's loop guard through these settings. setup-bots.py
 # gives each bot its own copy (BOTYARD_BOT_SETTINGS) that also hides the PC's skills outside its job (skill_sets.py).
 # The job's own effort (job_effort.py: an EFFORT line or an effort: label on the job) replaces the bot's configured one

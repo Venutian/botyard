@@ -138,7 +138,7 @@ const whole = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.round(Number
  * own output lines (each a JSON object, or text that is skipped).
  */
 export function readOutput(adapterType, lines) {
-  const out = { session: '', model: '', inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costUsd: null, said: '', failed: false, why: '' }
+  const out = { session: '', model: '', models: [], inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costUsd: null, said: '', failed: false, why: '' }
   // Claude's tokens message by message, for a run that ends without its closing line (cut at its time
   // limit, cancelled, crashed): the closing line is the only place the tool itself adds them up.
   const perMessage = new Map()
@@ -210,10 +210,16 @@ export function readOutput(adapterType, lines) {
         out.inputTokens += whole(t.input) + whole(t.cache?.write)
         out.cachedInputTokens += whole(t.cache?.read)
         out.outputTokens += whole(t.output) + whole(t.reasoning)
+        // A turn that ends cleanly after an error is a run that got past it: the free runner hands a context overflow
+        // to a model that can take it, in the same session (21 Nov 2026: nine such runs finished their job and were
+        // still booked failed). The run is booked by how it ended.
+        if (e.part?.reason === 'stop') { out.failed = false; out.why = '' }
       }
       if (e.type === 'text' && e.part?.text) out.said = String(e.part.text).trim() || out.said
       if (e.type === 'error') { out.failed = true; out.why = String(e.error?.data?.message || e.error?.message || e.error?.name || 'The tool reported an error').slice(0, 400) }
       if (e.model || e.part?.model) out.model = e.model || e.part.model
+      // The free runner names each model it starts, so a run that switched models is booked on every one it ran on.
+      if (e.type === 'model' && e.model && out.models.at(-1) !== e.model) out.models.push(String(e.model))
     }
   }
   if (adapterType === 'claude_local' && !closed && perMessage.size) {

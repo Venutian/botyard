@@ -102,6 +102,20 @@
       "on": true
     },
     {
+      "name": "open-work",
+      "kind": "timer",
+      "what": "Settles open work that is not moving: an older try of a goal that has a newer job is closed, a job in progress with nothing done for a day is marked blocked so it is seen. Never touches a job with a run going or open jobs under it. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/open-work-check.py"
+      ],
+      "every": "2h",
+      "after": "finish",
+      "first": "15m",
+      "limit": "5m",
+      "on": true
+    },
+    {
       "name": "sandbox-roots",
       "kind": "timer",
       "what": "Takes out of the Codex bots' sandbox config any folder that no longer exists (a retired or moved repository), which would otherwise make every sandboxed shell command fail. Uses no AI.",
@@ -114,6 +128,48 @@
       "after": "finish",
       "first": "1m",
       "limit": "1m",
+      "on": true
+    },
+    {
+      "name": "identity",
+      "kind": "timer",
+      "what": "Fails when the bots' sandbox gitconfig, the runner or a worktree would sign a commit with any address but the studio's own GitHub no-reply (a test's or a stranger's no-reply included). Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/identity-check.py"
+      ],
+      "every": "10m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "2m",
+      "on": true
+    },
+    {
+      "name": "main-checkout",
+      "kind": "timer",
+      "what": "Puts a repository's main checkout back on its main branch when a run left it elsewhere and nothing would be lost; otherwise the health check says what is there. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/main-checkout.py"
+      ],
+      "every": "5m",
+      "after": "finish",
+      "first": "2m",
+      "limit": "2m",
+      "on": true
+    },
+    {
+      "name": "folder-check",
+      "kind": "timer",
+      "what": "Checks that every bot runs in a folder that exists, with access to exactly the folders its jobs need, and that no refused call goes unseen. Reports; never changes a config. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/folder-check.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "4m",
+      "limit": "2m",
       "on": true
     },
     {
@@ -142,6 +198,33 @@
       ],
       "envFile": "{config}/edge-tunnel.env",
       "restart": "10s",
+      "on": true
+    },
+    {
+      "name": "grade-new-models",
+      "kind": "timer",
+      "what": "New free models get their published coding grade (SWE-bench Verified against Claude) asked for, once: one job for the lead when any has none.",
+      "command": [
+        "{python}",
+        "{scripts}/grade-new-models.py"
+      ],
+      "every": "1h",
+      "after": "finish",
+      "first": "10m",
+      "limit": "2m",
+      "on": true
+    },
+    {
+      "name": "store-rules-watch",
+      "kind": "timer",
+      "what": "Once a week, asks the lead to read Apple's, Google's and the EU's change pages and keep the store rules current. Uses no AI itself.",
+      "command": [
+        "{python}",
+        "{scripts}/store-rules-watch.py"
+      ],
+      "at": "Mon 07:00",
+      "catchUp": true,
+      "limit": "5m",
       "on": true
     }
   ]

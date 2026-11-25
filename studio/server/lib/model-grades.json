@@ -1,0 +1,144 @@
+{
+ "benchmark": "SWE-bench Verified",
+ "checked": "2026-11-21",
+ "how": "Each model's SWE-bench Verified score set against Claude's on the same benchmark: -Haiku well below Haiku; Haiku within a few points of it; +Haiku between Haiku and Sonnet; Sonnet within a few points of Sonnet; +Sonnet between Sonnet and Opus; Opus at or above Opus. Independent runs (Vals.ai) are preferred; a maker's own claim is marked. A model with no published score is left out and graded by the crew's own checks instead.",
+ "baselines": {
+  "haiku": {
+   "model": "Claude Haiku 4.5 (no Haiku 5.5 Verified score published yet)",
+   "score": 66.6,
+   "source": "https://www.vals.ai/benchmarks/swebench"
+  },
+  "sonnet": {
+   "model": "Claude Sonnet 5 (no Sonnet 5.5 Verified score yet)",
+   "score": 79.6,
+   "source": "https://www.vals.ai/benchmarks/swebench"
+  },
+  "opus": {
+   "model": "Claude Opus 5 (no Opus 5.5 Verified score yet)",
+   "score": 97.0,
+   "source": "https://www.vals.ai/benchmarks/swebench"
+  }
+ },
+ "models": [
+  {
+   "name": "GLM 5.3 Flash",
+   "match": [
+    "glm-5.3-flash"
+   ],
+   "score": 92.0,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "+Sonnet",
+   "source": "https://www.vals.ai/benchmarks/swebench",
+   "note": "Vals run; a vendor-style 79.1 also circulates"
+  },
+  {
+   "name": "Kimi K3",
+   "match": [
+    "kimi-k3"
+   ],
+   "score": 93.4,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "+Sonnet",
+   "source": "https://www.vals.ai/models/kimi_kimi-k3",
+   "note": "Vals run"
+  },
+  {
+   "name": "Qwen 3.8 27B",
+   "match": [
+    "qwen3.8-27b"
+   ],
+   "score": 86.0,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "+Sonnet",
+   "source": "https://www.vals.ai/models/alibaba_qwen3.8-27b",
+   "note": "Vals run (Mini-SWE-agent, +-1.55); Alibaba published no Verified score, its card shows SWE-bench Pro 61.7"
+  },
+  {
+   "name": "Inkling 2 Small",
+   "match": [
+    "inkling-2-small"
+   ],
+   "score": 82.2,
+   "benchmark": "SWE-bench Verified",
+   "independent": false,
+   "grade": "Sonnet",
+   "source": "https://benchlm.ai/models/inkling-2-small",
+   "note": "maker's claim"
+  },
+  {
+   "name": "Flint 40B / V1.0",
+   "match": [
+    "flint"
+   ],
+   "score": 74.2,
+   "benchmark": "SWE-bench Verified",
+   "independent": false,
+   "grade": "+Haiku",
+   "source": "https://www.marktechpost.com/2026/10/21/recursive-flint-local-coding-model/",
+   "note": "maker's claim"
+  },
+  {
+   "name": "Nemotron 3.5 Super VL",
+   "match": [
+    "nemotron-3.5-super-vl"
+   ],
+   "score": 71.1,
+   "benchmark": "SWE-bench Verified",
+   "independent": false,
+   "grade": "+Haiku",
+   "source": "https://cellcog.ai/blog/nemotron-3-5-super-vl-bolt/",
+   "note": "maker's model card"
+  },
+  {
+   "name": "Nemotron 3 Ultra 550B A55B",
+   "match": [
+    "nemotron-3-ultra"
+   ],
+   "score": 69.0,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "Haiku",
+   "source": "https://www.vals.ai/benchmarks/swebench",
+   "note": "Vals run"
+  },
+  {
+   "name": "North Mini Code",
+   "match": [
+    "north-mini-code"
+   ],
+   "score": 67.6,
+   "benchmark": "SWE-bench Verified",
+   "independent": false,
+   "grade": "Haiku",
+   "source": "https://codersera.com/blog/cohere-north-mini-code-guide-2026/",
+   "note": "maker's claim; 61.0 in another harness"
+  },
+  {
+   "name": "Nemotron 3.5 Lightning",
+   "match": [
+    "nemotron-3.5-lightning"
+   ],
+   "score": 52.8,
+   "benchmark": "SWE-bench Verified",
+   "independent": true,
+   "grade": "-Haiku",
+   "source": "https://www.vals.ai/benchmarks/swebench",
+   "note": "Vals run"
+  }
+ ],
+ "no_published_score": [
+  "DeepSeek V4.1 Flash",
+  "Ernie 5.5 Flash Preview",
+  "Hy4 Flash",
+  "LongCat 2.5",
+  "MiMo V2.6 Flash",
+  "MiniMax M3.1 Flash",
+  "Step 5 Preview",
+  "Beam",
+  "Big Pickle",
+  "Iceman"
+ ]
+}

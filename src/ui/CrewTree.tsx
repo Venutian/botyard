@@ -5,6 +5,7 @@ import { BotBadge } from '../mascot/BotBadge';
 import { portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
 import { useLook } from '../theme/prefs';
+import { busyWords, copySentence, copyTag } from './copies';
 import { DESCRIBE } from './describe';
 import { Label, Segmented, Sign, styles as kit, Txt, Words } from './kit';
 
@@ -42,6 +43,7 @@ export function nodesFromManager(view: Manager): FlowNode[] {
     reportsTo: b.role === 'lead' ? null : lead?.id ?? null, under: b.role === 'lead' ? 'owner' : lead?.id ?? 'owner',
     model: b.model, engine: '', status: b.status === 'running' ? 'working' : b.status === 'error' ? 'error' : b.status === 'paused' ? 'paused' : 'free',
     why: b.why, job: b.job ? { ...b.job, project: '', projectId: b.projectId } : null,
+    jobs: b.jobs?.map((j) => ({ ...j, project: '', projectId: b.projectId })), copies: b.copies, on: b.on,
     runsToday: b.doneToday, failedToday: 0, week: { tokens: 0, share: null }, met: 0, notMet: 0,
   }));
 }
@@ -108,14 +110,17 @@ const BotNode = memo(function BotNode({ bot, depth, parentName, chips, ins, outs
   const { p, t } = useLook();
   const who = portraitOf({ ...bot, status: bot.status === 'working' ? 'running' : bot.status === 'error' ? 'error' : bot.status === 'paused' ? 'paused' : bot.status === 'waiting' ? 'waiting' : 'idle' }, p.bots[bot.id]);
   const status = STATUS_WORDS[bot.status] ?? bot.status;
-  const job = bot.job ? `${bot.job.title}  ${bot.job.ref}` : bot.why;
+  const many = busyWords(bot.jobs);
+  const tag = copyTag(bot);
+  const job = many ? `${many}: ${bot.jobs!.map((j) => j.ref).join(', ')}` : bot.job ? `${bot.job.title}  ${bot.job.ref}` : bot.why;
   const stats = [
     bot.runsToday ? count(bot.runsToday, bot.runsToday === 1 ? 'run today' : 'runs today') : '',
     bot.week.share !== null && bot.week.share !== undefined ? `${Math.round(bot.week.share * 100)}% of the Claude week` : '',
     bot.met || bot.notMet ? `${bot.met} met, ${bot.notMet} not met` : '',
   ].filter(Boolean).join(', ');
   const label = [
-    `${who.name}, ${bot.roleName.toLowerCase()}, ${status}${bot.job ? ` on ${bot.job.title}, ${bot.job.ref}` : bot.why ? `, ${bot.why}` : ''}.`,
+    `${who.name}, ${bot.roleName.toLowerCase()}, ${status}${many ? `, ${many}` : bot.job ? ` on ${bot.job.title}, ${bot.job.ref}` : bot.why ? `, ${bot.why}` : ''}.`,
+    copySentence(bot),
     parentName ? `Reports to ${parentName}.` : '',
     ins.length || outs.length ? `${ins.length ? `${ins.join(', ')} in` : ''}${ins.length && outs.length ? ', ' : ''}${outs.length ? `${outs.join(', ')} out` : ''}.` : '',
     stats ? `${stats}.` : '',
@@ -133,13 +138,16 @@ const BotNode = memo(function BotNode({ bot, depth, parentName, chips, ins, outs
         <View style={styles.nodeHead}>
           {t.plates ? <Sign size={19} numberOfLines={1} style={styles.shrink}>{who.name}</Sign> : <Txt size={15} weight={600} numberOfLines={1} style={styles.shrink}>{who.name}</Txt>}
           <Txt size={12} color={t.ink2} numberOfLines={1}>{bot.roleName}</Txt>
+          {tag ? <View style={[styles.copyTag, { borderColor: t.line }]}><Txt size={11} weight={700} color={t.ink2}>{tag}</Txt></View> : null}
         </View>
         <View style={styles.statusLine}>
           <Lamp status={bot.status} />
           <Txt size={12} weight={700} color={tone}>{status[0].toUpperCase() + status.slice(1)}</Txt>
           <Txt size={12} color={t.ink3} numberOfLines={1} style={styles.shrink}>{bot.model}</Txt>
         </View>
-        {job ? (
+        {many ? (
+          <Txt size={13} color={t.ink} numberOfLines={2}>{many}<Txt size={13} weight={700} color={t.ink2}>{'  '}{bot.jobs!.map((j) => j.ref).join(', ')}</Txt></Txt>
+        ) : job ? (
           <Txt size={13} color={bot.job ? t.ink : t.ink2} numberOfLines={2}>
             {bot.job ? bot.job.title : bot.why}
             {bot.job ? <Txt size={13} weight={700} color={t.ink2}>{'  '}{bot.job.ref}</Txt> : null}
@@ -252,6 +260,7 @@ const styles = StyleSheet.create({
   statusLine: { alignItems: 'center', flexDirection: 'row', gap: 6 },
   lamp: { borderRadius: 5, height: 10, width: 10 },
   shrink: { flexShrink: 1 },
+  copyTag: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   chip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
 });

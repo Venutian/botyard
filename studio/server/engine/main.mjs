@@ -21,7 +21,11 @@ import { DEFAULT_PORT, ENGINE_VARS, defaultDataDir, keysDir as keysIn, storeFile
 import { tickRoutines } from './routines.mjs'
 import { tick } from './runner.mjs'
 import { tickTracks } from './tracks.mjs'
+import { dailyBlockedSweep } from './signals.mjs'
+import { applyDefaults } from './digest.mjs'
 import { openStore } from './store.mjs'
+import { convertBookedRuns } from './run-usage.mjs'
+import { leftoverSweeper } from './leftovers.mjs'
 import { ensureStudio } from './studio.mjs'
 
 const TICK_MS = 5000
@@ -46,6 +50,8 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
   const dir = path.resolve(dataDir)
   const store = openStore(storeFile(dir))
   const made = ensureStudio(store)
+  const converted = convertBookedRuns(store)
+  if (converted) log(`[engine] ${converted} runs booked before now were set to their own share of a resumed session`)
   if (made) log(`[engine] a new studio was made in ${dir}`)
 
   /**
@@ -120,6 +126,8 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
   const address = apiUrl || (server ? `http://127.0.0.1:${server.address().port}` : '')
 
   let ticking = false
+  const sweepState = {}
+  const sweepLeftovers = leftoverSweeper()
   let stopped = false
   /** One turn of the engine's own work: routines whose time has come, runs that ended, wakes that may start. */
   const turn = async ({ bots = true } = {}) => {
@@ -133,8 +141,15 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
         for (const run of report.finished) log(`[engine] ${run.status} ${run.id}${run.error ? `: ${run.error}` : ''}`)
         for (const skip of report.skipped) log(`[engine] wake ${skip.id} not started: ${skip.why}`)
       }
+      // Default cards that waited their day are answered first, so a gate answered this way moves on this same turn.
+      for (const card of applyDefaults(store)) log(`[engine] applied by default on ${card.job}: "${String(card.title).slice(0, 80)}" → ${card.answer}`)
       // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
       for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
+      // Programs ended runs left running (leftovers.mjs): stopped ten minutes after their run.
+      const left = runs ? sweepLeftovers(store) : []
+      if (left.length) log(`[engine] stopped ${left.length} program(s) that ended runs left running: ${[...new Set(left.map((l) => l.what))].join(', ')}`)
+      const swept = dailyBlockedSweep(store, sweepState)
+      if (swept) log(`[engine] blocked-jobs sweep: ${swept.closed} closed, ${swept.found - swept.closed} left for the owner or ruler`)
     } catch (err) {
       log(`[engine] tick failed: ${err.message}`)
     }

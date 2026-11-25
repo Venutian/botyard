@@ -11,6 +11,8 @@ check = load('identity_check', 'identity-check.py')
 setup = load('setup_bots', 'setup-bots.py')
 crew_set = load('crew_set', 'crew_set.py')
 BAD = 'test@example.com'
+STRANGER = 't@users.noreply.github.com'  # GitHub's account `t`: what the sandbox held from 19 to 22 Nov
+OTHER = '9+someone@users.noreply.github.com'
 
 
 def gitconfig_file(d, mail):
@@ -43,7 +45,52 @@ class IdentityCheck(unittest.TestCase):
 
     def test_no_no_reply_anywhere_is_a_fault(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertTrue(any('no no-reply' in x for x in check.faults(env={'HOME': d, 'GIT_CONFIG_GLOBAL': '/dev/null'}, gitconfig=gitconfig_file(d, NO_REPLY))))
+            self.assertTrue(any('no studio no-reply' in x for x in check.faults(env={'HOME': d, 'GIT_CONFIG_GLOBAL': '/dev/null'}, gitconfig=gitconfig_file(d, NO_REPLY))))
+
+    def test_another_no_reply_is_not_the_studio_address(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = {'BOTYARD_GIT_NOREPLY': NO_REPLY}
+            for mail in (STRANGER, OTHER):
+                found = check.faults(env=env, gitconfig=gitconfig_file(d, mail))
+                self.assertEqual(len(found), 1, mail)
+                self.assertIn(mail, found[0])
+                self.assertTrue(any('GIT_AUTHOR_EMAIL' in x for x in check.faults(env={**env, 'GIT_AUTHOR_EMAIL': mail}, gitconfig=gitconfig_file(d, NO_REPLY))))
+
+    def test_the_launcher_check_fails_only_on_a_wrong_sandbox_address(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = {'BOTYARD_GIT_NOREPLY': NO_REPLY}
+            self.assertEqual(check.faults(env=env, gitconfig=gitconfig_file(d, NO_REPLY), sandbox_only=True), [])
+            self.assertEqual(check.faults(env=env, gitconfig=gitconfig_file(d, None), sandbox_only=True), [])  # a fresh clone runs
+            self.assertEqual(check.faults(env=env, gitconfig=os.path.join(d, 'none'), sandbox_only=True), [])
+            self.assertTrue(check.faults(env=env, gitconfig=gitconfig_file(d, STRANGER), sandbox_only=True))
+            run = lambda path: subprocess.run(['python3', os.path.join(CREW, 'identity-check.py'), '--sandbox', '--gitconfig', path],
+                                              capture_output=True, text=True, env={**os.environ, **env})
+            self.assertEqual(run(gitconfig_file(d, NO_REPLY)).returncode, 0)
+            done = run(gitconfig_file(d, STRANGER))
+            self.assertEqual(done.returncode, 1)
+            self.assertIn(STRANGER, done.stdout)
+
+    def test_the_claude_launcher_refuses_to_start_on_a_wrong_sandbox_address(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = os.path.join(d, 'claude')
+            with open(fake, 'w') as f:
+                f.write('#!/bin/sh\necho started\n')
+            os.chmod(fake, 0o755)
+            env = {**os.environ, 'BOTYARD_GIT_NOREPLY': NO_REPLY, 'BOTYARD_CLAUDE': fake, 'BOTYARD_CONNECTORS': 'off'}
+            launch = lambda path: subprocess.run(['sh', os.path.join(CREW, 'claude-bot.sh')], capture_output=True, text=True,
+                                                 env={**env, 'GIT_CONFIG_GLOBAL': path}, timeout=60)
+            self.assertIn('started', launch(gitconfig_file(d, NO_REPLY)).stdout)
+            done = launch(gitconfig_file(d, STRANGER))
+            self.assertNotEqual(done.returncode, 0)
+            self.assertNotIn('started', done.stdout)
+            self.assertIn(STRANGER, done.stderr)
+
+    def test_the_check_is_on_the_timetable(self):
+        import json
+        with open(os.path.join(CREW, 'timetable.json')) as f:
+            jobs = {j['name']: j for j in json.load(f)['jobs']}
+        self.assertIn('{scripts}/identity-check.py', jobs['identity']['command'])
+        self.assertTrue(jobs['identity']['on'])
 
 
 class RunnerPaths(unittest.TestCase):
@@ -63,6 +110,11 @@ class RunnerPaths(unittest.TestCase):
             path = gitconfig_file(d, BAD)
             self.assertFalse(setup.gitconfig_ok(path))
             self.assertTrue(setup.gitconfig_ok(gitconfig_file(d, NO_REPLY)))
+            for mail in (STRANGER, OTHER):  # a no-reply that is not the studio's is replaced too
+                self.assertFalse(setup.gitconfig_ok(gitconfig_file(d, mail)), mail)
+            self.assertTrue(setup.gitconfig_ok_text(setup.gitconfig(NO_REPLY)))
+            self.assertFalse(setup.gitconfig_ok_text(setup.gitconfig(STRANGER)))
+            self.assertFalse(setup.gitconfig_ok_text(setup.gitconfig('')))
 
     def test_claude_and_free_runners_commit_as_the_bots_first_name(self):
         with tempfile.TemporaryDirectory() as d:

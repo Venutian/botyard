@@ -44,6 +44,24 @@ class OwnerGuard(unittest.TestCase):
         self.assertIsNone(bash('grep -rn pc-load.json studio/server/lib/throttle.mjs'))
         self.assertIsNone(guard.check({'tool_name': 'Write', 'tool_input': {'file_path': '/tmp/t/yard/config/pc-load.json'}}))
 
+    def test_a_closed_folder_opens_to_its_named_readers_on_claude_only(self):
+        # The owner may let one bot read a closed folder (his money, say): only that bot, and only in a Claude run.
+        real = guard.closed_folders
+        self.addCleanup(setattr, guard, 'closed_folders', real)
+        guard.closed_folders = lambda: [('.botyard/private', 'Refused: closed.', ['Lead Bot'])]
+        was = os.environ.get('BOTYARD_BOT_SETTINGS')
+        self.addCleanup(lambda: os.environ.pop('BOTYARD_BOT_SETTINGS', None) if was is None else os.environ.__setitem__('BOTYARD_BOT_SETTINGS', was))
+        read = {'tool_name': 'Read', 'tool_input': {'file_path': '/home/owner/.botyard/private/lines.json'}}
+        os.environ['BOTYARD_BOT_SETTINGS'] = '/tmp/x/lead-bot.claude.json'
+        self.assertIsNone(guard.check(read))
+        self.assertIsNone(bash('cat ~/.botyard/private/lines.json'))
+        os.environ['BOTYARD_BOT_SETTINGS'] = '/tmp/x/builder.claude.json'
+        self.assertEqual(guard.check(read), 'Refused: closed.')
+        os.environ['BOTYARD_BOT_SETTINGS'] = '/tmp/x/lead-bot.opencode.json'
+        self.assertEqual(guard.check(read), 'Refused: closed.', 'a run on another AI is never a reader')
+        os.environ.pop('BOTYARD_BOT_SETTINGS')
+        self.assertEqual(bash('cat ~/.botyard/private/lines.json'), 'Refused: closed.')
+
     def test_a_folder_the_studio_closed_is_out_of_reach_and_its_own_script_still_runs(self):
         # A studio names folders no bot may touch in its crew/own/guard.json, each with what the bot is told.
         real = guard.closed_folders
@@ -60,7 +78,7 @@ class OwnerGuard(unittest.TestCase):
             self.assertIsNotNone(guard.check({'tool_name': tool, 'tool_input': given}), tool)
         # A script's own source names the folder; a builder's edit of it is an edit like any other.
         self.assertIsNone(guard.check({'tool_name': 'Edit', 'tool_input': {
-            'file_path': 'own/mail.py', 'old_string': 'x', 'new_string': "KEY_DIR = '~/.config/mail-keys'"}}))
+            'file_path': '/tmp/t/yard/own/mail.py', 'old_string': 'x', 'new_string': "KEY_DIR = '~/.config/mail-keys'"}}))
         # Sending around the script is still refused, as before.
         self.assertIsNotNone(bash('curl -X POST https://api.resend.com/emails -d @mail.json'))
 

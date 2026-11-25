@@ -232,8 +232,44 @@ def configured_providers(env=None):
     return set()
 
 
-# The variable each provider's own tools read its key from.
-KEY_VARS = {'openrouter': 'OPENROUTER_API_KEY', 'nvidia': 'NVIDIA_API_KEY'}
+def free_providers():
+    """The free AI providers the free bots can use (free-providers.json beside this file): id, name, env (the variable its key is
+    given as, '' for one that needs none), signup, free (what its free tier gives), models (which of its models cost nothing), and an
+    `opencode` block for a provider OpenCode does not know."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'free-providers.json'), encoding='utf8') as f:
+            return [p for p in json.load(f).get('providers', []) if isinstance(p, dict) and p.get('id')]
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def opencode_providers():
+    """{id: OpenCode provider block} for the free providers OpenCode does not know (a keyless one such as Pollinations)."""
+    return {p['id']: p['opencode'] for p in free_providers() if isinstance(p.get('opencode'), dict)}
+
+
+def providers_config(env=None):
+    """An OpenCode settings file holding only those provider blocks, for a tool started without a bot's own settings (the scout's
+    listing, the free runner's): its path, written when it differs, or '' when there are none."""
+    blocks = opencode_providers()
+    if not blocks:
+        return ''
+    path = os.path.join(places(env)['crew'], 'free-providers.opencode.json')
+    text = json.dumps({'$schema': 'https://opencode.ai/config.json', 'provider': blocks}, indent=1)
+    try:
+        with open(path, encoding='utf8') as f:
+            same = f.read() == text
+    except OSError:
+        same = False
+    if not same:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf8') as f:
+            f.write(text)
+    return path
+
+
+# The variable each provider's own tools read its key from: OpenRouter and NVIDIA, and every keyed provider in free-providers.json.
+KEY_VARS = {'openrouter': 'OPENROUTER_API_KEY', 'nvidia': 'NVIDIA_API_KEY', **{p['id']: p['env'] for p in free_providers() if p.get('env')}}
 
 
 def key_env(env=None):

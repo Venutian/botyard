@@ -255,7 +255,8 @@ export function newNote({ title, text = '' }, folder = brainFolder(), today = ne
 
 /**
  * The Brain view's answers, for the owner only: a call with a bot's pass, a script's key, or one made by a
- * process that runs for a bot is refused (BOTYARD_REFUSE_BOTS=off is for a test server only). The bots read
+ * process that runs for a bot is refused (BOTYARD_REFUSE_BOTS=off is for a test server only), except a read of the
+ * demo's own made-up vault in the demo. The bots read
  * the vault through crew/brain.py, which keeps personal notes from free models; never through here.
  *
  *   GET  <base>            the map: notes without their text, areas, date span
@@ -268,7 +269,9 @@ export function newNote({ title, text = '' }, folder = brainFolder(), today = ne
  */
 export async function brainRoute(req, res, { pathname, query, base, send, readBody, local, botBehind }) {
   if (pathname !== base && !pathname.startsWith(`${base}/`)) return false
-  const refuse = process.env.BOTYARD_REFUSE_BOTS !== 'off'
+  // The demo's own vault is made-up notes, nobody's: a bot may read it (its screenshots and probes do), never write it.
+  const demoRead = process.env.BOTYARD_DEMO === '1' && req.method === 'GET' && brainFolder() === DEMO_BRAIN()
+  const refuse = process.env.BOTYARD_REFUSE_BOTS !== 'off' && !demoRead
   if (req.headers['x-botyard-script'] || refuse && (botBehind?.(req) || /^Bearer\s/i.test(String(req.headers.authorization || '')) && base.startsWith('/api'))) {
     send(res, 403, { error: 'The notes are the owner\'s, not a bot\'s' })
     return true
