@@ -125,7 +125,7 @@ function BubbleView({ message, first, last, bot, fresh, named }: Props) {
       {named && first && !mine ? <Txt size={12} weight={700} color={bot.colour} style={styles.named}>{bot.name}</Txt> : null}
       <View style={[styles.line, mine && styles.lineMine]}>
         {!mine ? <View style={styles.avatar}>{last ? <BotBadge who={bot} size={AVATAR} /> : null}</View> : null}
-        <View style={styles.bubbleWrap}>
+        <View style={[styles.bubbleWrap, !mine && styles.bubbleWrapBot]}>
           {hook && fill ? <Tail color={fill.color} left={!mine} /> : null}
           <View style={[shape, styles.bubble, fill ? { backgroundColor: fill.color } : null, outlined, { paddingHorizontal: fill ? space.x : 2, paddingVertical: fill ? space.y : 2 }]}>
             {fill ? <BubbleFill fill={fill} id={`b${message.id}`} /> : null}
@@ -174,6 +174,8 @@ const styles = StyleSheet.create({
   lineMine: { justifyContent: 'flex-end' },
   avatar: { width: AVATAR },
   bubbleWrap: { flexShrink: 1, maxWidth: '86%' },
+  // A bot's answer is long and already gives up a column to its portrait: it may use the rest of the line.
+  bubbleWrapBot: { maxWidth: '100%' },
   bubble: { overflow: 'hidden' },
   tail: { bottom: 0, position: 'absolute' },
   tailRight: { right: -8 },

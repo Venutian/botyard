@@ -91,9 +91,22 @@ function BlockView({ block, choose, onOpen, connection, page, reload }: { block:
     case 'text':
       return (
         <View style={[styles.text, block.tone && { borderLeftColor: ink(block.tone), borderLeftWidth: 4, paddingLeft: 12 }]}>
-          <Markdown text={block.text} ink={t.ink} size={15} />
+          <Markdown text={block.text} ink={block.quiet ? t.ink3 : t.ink} size={block.quiet ? 12 : 15} />
         </View>
       );
+    case 'hero':
+      return (
+        <Tappable opened={block.open} onOpen={onOpen} label={[block.label, block.value, block.note].filter(Boolean).join('. ')} style={styles.hero}>
+          <Txt size={13} weight={600} color={t.ink2}>{block.label}</Txt>
+          <View style={styles.heroLine}>
+            <Txt size={block.value.length > 12 ? 30 : 38} weight={700} color={ink(block.tone)} numberOfLines={1} adjustsFontSizeToFit style={kit.flex}>{block.value}</Txt>
+            {block.open ? <Icon name="chevron" size={18} color={t.ink3} /> : null}
+          </View>
+          {block.note ? <Txt size={13} color={t.ink2}>{block.note}</Txt> : null}
+        </Tappable>
+      );
+    case 'alerts':
+      return <Alerts block={block} />;
     case 'tiles':
       return (
         <View style={styles.tiles}>
@@ -169,7 +182,9 @@ function BlockView({ block, choose, onOpen, connection, page, reload }: { block:
     case 'table':
       return <Table block={block} onOpen={onOpen} />;
     case 'choose':
-      return <Chips value={block.value} options={block.options} onChange={(id) => choose(block.param, id)} />;
+      return block.options.length > 4
+        ? <TabRow block={block} choose={choose} />
+        : <Chips value={block.value} options={block.options} onChange={(id) => choose(block.param, id)} />;
     case 'search':
       return <Search block={block} choose={choose} />;
     case 'actions':
@@ -216,8 +231,60 @@ function Chart({ block, choose, onOpen }: { block: Extract<Block, { kind: 'chart
             ) : <View key={`${bar.label}-${i}`} style={styles.slot} accessible accessibilityLabel={spoken}>{body}</View>;
           })}
         </View>
-        {picked?.shown ? <Txt size={13} color={t.ink2}>{picked.label}: {picked.shown}</Txt> : null}
+        {picked?.shown || block.note ? (
+          <View style={styles.chartFoot}>
+            {picked?.shown ? <Txt size={13} weight={600} style={kit.flex}>{picked.label}: {picked.shown}</Txt> : <View style={kit.flex} />}
+            {block.note ? <Txt size={12} color={t.ink3}>{block.mark !== null ? '┄ ' : ''}{block.note}</Txt> : null}
+          </View>
+        ) : null}
       </View>
+    </View>
+  );
+}
+
+/** Many choices on one row that scrolls sideways, the chosen one brought into sight: a page's tabs. */
+function TabRow({ block, choose }: { block: Extract<Block, { kind: 'choose' }>; choose: Choose }) {
+  const { t } = useLook();
+  const tap = useTap();
+  const row = useRef<ScrollView>(null);
+  return (
+    <ScrollView ref={row} horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={styles.tabRowIn} keyboardShouldPersistTaps="handled">
+      {block.options.map((o) => {
+        const on = o.id === block.value;
+        return (
+          <Pressable key={o.id} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => { tap(); choose(block.param, o.id); }}
+            onLayout={on ? (e) => row.current?.scrollTo({ x: Math.max(0, e.nativeEvent.layout.x - 24), animated: false }) : undefined}
+            style={({ pressed }) => [styles.tab, { borderBottomColor: on ? t.accent : 'transparent' }, pressed && kit.dim]}>
+            <Txt size={14} weight={on ? 700 : 400} color={on ? t.ink : t.ink2}>{o.name}</Txt>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** Things worth a look, a line each: a coloured mark and a title; a tap shows the words under it. */
+function Alerts({ block }: { block: Extract<Block, { kind: 'alerts' }> }) {
+  const { t } = useLook();
+  const ink = useTone();
+  const [open, setOpen] = useState(-1);
+  return (
+    <View style={styles.gap}>
+      {block.title ? <Label>{block.title}</Label> : null}
+      <Group>
+        {block.items.map((a, i) => (
+          <Pressable key={`${a.title}-${i}`} disabled={!a.text} accessibilityRole="button" accessibilityState={{ expanded: open === i }} accessibilityLabel={[a.title, open === i ? a.text : ''].filter(Boolean).join('. ')}
+            onPress={() => setOpen(open === i ? -1 : i)}
+            style={({ pressed }) => [styles.alert, i < block.items.length - 1 && { borderBottomColor: t.line, borderBottomWidth: StyleSheet.hairlineWidth }, pressed && kit.dim]}>
+            <View style={styles.alertHead}>
+              <View style={[styles.alertMark, { backgroundColor: ink(a.tone, t.ink3) }]} />
+              <Txt size={14} weight={600} style={kit.flex} numberOfLines={open === i ? 3 : 1}>{a.title}</Txt>
+              {a.text ? <View style={{ transform: [{ rotate: open === i ? '90deg' : '0deg' }] }}><Icon name="chevron" size={14} color={t.ink3} /></View> : null}
+            </View>
+            {open === i && a.text ? <Txt size={13} color={t.ink2} style={styles.alertText}>{a.text}</Txt> : null}
+          </Pressable>
+        ))}
+      </Group>
     </View>
   );
 }
@@ -389,6 +456,17 @@ const styles = StyleSheet.create({
   gap: { gap: 8 },
   text: { paddingVertical: 2 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hero: { gap: 2, paddingVertical: 4 },
+  heroLine: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  chartFoot: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  // The row runs to the screen's edges, past the page's own 16 px, so it reads as tabs and scrolls under them.
+  tabRow: { flexGrow: 0, marginHorizontal: -16 },
+  tabRowIn: { gap: 4, paddingHorizontal: 12 },
+  tab: { borderBottomWidth: 3, justifyContent: 'center', minHeight: 44, paddingHorizontal: 10 },
+  alert: { gap: 6, minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10 },
+  alertHead: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  alertMark: { borderRadius: 5, height: 10, width: 10 },
+  alertText: { marginLeft: 20 },
   tile: { flexBasis: '40%', flexGrow: 1, gap: 2, minWidth: 140, paddingHorizontal: 12, paddingVertical: 10 },
   tileHead: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   bar: { gap: 6, paddingHorizontal: 14, paddingVertical: 11 },

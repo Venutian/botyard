@@ -91,3 +91,18 @@ assert.deepEqual(form.fixed, { category: 'Groceries', n: '3' })
 assert.deepEqual(form.fields.map((f) => [f.name, f.kind, f.value]), [['amount', 'number', '4000'], ['note', 'text', ''], ['cat', 'choice', '']])
 assert.equal(form.submit, 'Save')
 console.log('own view forms: ok')
+
+// A hero number, compact alerts, a quiet footnote and a chart's note.
+const slim = readView({ blocks: [
+  { kind: 'hero', label: 'Safe to spend', value: '10 754 kr', note: 'a day', tone: 'good', open: { tab: 'upcoming' } },
+  { kind: 'hero', label: 'No value' },
+  { kind: 'alerts', title: 'Worth a look', items: [{ title: 'Health is high', text: 'More than usual.', tone: 'warn' }, { text: 'no title' }] },
+  { kind: 'text', text: 'small', quiet: true },
+  { kind: 'chart', note: 'usual 5 kr', items: [{ label: 'Oct', value: 1 }] },
+] })
+assert.deepEqual(slim.blocks.map((b) => b.kind), ['hero', 'alerts', 'text', 'chart'])
+assert.deepEqual(slim.blocks[0].open, { tab: 'upcoming' })
+assert.equal(slim.blocks[1].items.length, 1)
+assert.equal(slim.blocks[2].quiet, true)
+assert.equal(slim.blocks[3].note, 'usual 5 kr')
+console.log('own view slim: ok')

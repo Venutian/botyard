@@ -8,9 +8,11 @@
  *
  * The blocks, drawn top to bottom:
  *   heading  { text }
- *   text     { text, tone? }                            markdown
+ *   text     { text, tone?, quiet? }                    markdown; `quiet` is a small grey footnote
+ *   hero     { label, value, note?, tone?, open? }      the one number a screen is about, large
+ *   alerts   { title?, items: [{ title, text?, tone? }] }  one line each with a coloured mark; a tap shows its text
  *   tiles    { items: [{ label, value, note?, tone?, open? }] }  numbers side by side
- *   chart    { title?, param?, mark?, items: [{ label, value, shown?, on?, pick?, tone?, open? }] }
+ *   chart    { title?, note?, param?, mark?, items: [{ label, value, shown?, on?, pick?, tone?, open? }] }
  *            bars up from a line; a bar with `pick` opens the view again with `param=pick`;
  *            `mark` draws a dashed line across at that value (a usual amount)
  *   bars     { title?, items: [{ label, value, shown?, note?, mark?, tone?, open? }] }
@@ -21,7 +23,8 @@
  *   table    { title?, columns: [text], rows: [{ label, cells: [text], tones?: [tone], tone?, open? }] }
  *            a grid that scrolls sideways, the label column kept in place (months side by side)
  *   list     { title?, items: [text] }
- *   choose   { param, value, options: [{ id, name }] }  opens the view again with `param=id`
+ *   choose   { param, value, options: [{ id, name }] }  opens the view again with `param=id`; more than four
+ *            options sit on one row that scrolls sideways (tabs)
  *   search   { param, value?, placeholder? }            a search box: opens the view again with `param=` the words
  *   actions  { items: [{ label, call, body?, kind?, done? }] }
  *            POSTs `body` to the page's own `call` (a path like "/sync"), says `done`, and reads the view again
@@ -47,9 +50,11 @@ export type FormField = { name: string; label: string; kind: 'text' | 'number' |
 export type Action = { label: string; call: string; body: Record<string, unknown>; kind: 'primary' | 'quiet'; done: string };
 export type Block =
   | { kind: 'heading'; text: string }
-  | { kind: 'text'; text: string; tone: Tone }
+  | { kind: 'text'; text: string; tone: Tone; quiet: boolean }
+  | { kind: 'hero'; label: string; value: string; note: string; tone: Tone; open: Open | null }
+  | { kind: 'alerts'; title: string; items: { title: string; text: string; tone: Tone }[] }
   | { kind: 'tiles'; items: Tile[] }
-  | { kind: 'chart'; title: string; param: string; mark: number | null; items: ChartBar[] }
+  | { kind: 'chart'; title: string; note: string; param: string; mark: number | null; items: ChartBar[] }
   | { kind: 'bars'; title: string; items: Bar[] }
   | { kind: 'split'; title: string; items: Share[] }
   | { kind: 'rows'; title: string; items: RowItem[] }
@@ -95,7 +100,20 @@ function block(raw: unknown, inFold = false): Block | null {
     }
     case 'text': {
       const text = str(b.text, 4000);
-      return text ? { kind: 'text', text, tone: tone(b.tone) } : null;
+      return text ? { kind: 'text', text, tone: tone(b.tone), quiet: b.quiet === true } : null;
+    }
+    case 'hero': {
+      const label = str(b.label, 60);
+      const value = str(b.value, 40);
+      return label && value ? { kind: 'hero', label, value, note: str(b.note, 80), tone: tone(b.tone), open: readOpen(b.open) } : null;
+    }
+    case 'alerts': {
+      const list = items(b.items, (x) => {
+        const t = obj(x);
+        const alertTitle = str(t?.title, 80);
+        return t && alertTitle ? { title: alertTitle, text: str(t.text, 600), tone: tone(t.tone) } : null;
+      }, 12);
+      return list.length ? { kind: 'alerts', title, items: list } : null;
     }
     case 'tiles': {
       const list = items(b.items, (x) => {
@@ -115,7 +133,7 @@ function block(raw: unknown, inFold = false): Block | null {
         return t && label && value !== null ? { label, value: Math.max(0, value), shown: str(t.shown, 24), on: t.on === true, pick: param ? str(t.pick, 40) : '', tone: tone(t.tone), open: readOpen(t.open) } : null;
       }, 24);
       const mark = num(b.mark);
-      return list.length ? { kind: 'chart', title, param, mark: mark === null ? null : Math.max(0, mark), items: list } : null;
+      return list.length ? { kind: 'chart', title, note: str(b.note, 80), param, mark: mark === null ? null : Math.max(0, mark), items: list } : null;
     }
     case 'bars': {
       const list = items(b.items, (x) => {
@@ -168,7 +186,7 @@ function block(raw: unknown, inFold = false): Block | null {
         const id = str(t?.id, 40);
         const name = str(t?.name, 24);
         return t && id && name ? { id, name } : null;
-      }, 12);
+      }, 16);
       return PARAM.test(param) && options.length ? { kind: 'choose', param, value: str(b.value, 40), options } : null;
     }
     case 'search': {
