@@ -3,7 +3,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Connection, Digest, DigestCard, FeedItem, Flow, FlowWindow, getDigest, getFlow, getManager, getOwnPages, OwnPage, getTray, JobPile, Manager, markCards, ManagerBot, ManagerProject, NeedsYou, StepState, TrayItem, WorkLine } from '../api';
-import { portraitOf } from '../mascot/look';
+import { BotBadge } from '../mascot/BotBadge';
+import { Portrait, portraitOf } from '../mascot/look';
 import { readable } from '../theme/color';
 import { Crew, isDecision, leadOf, Nav, waitingCount } from '../crew';
 import { Theme, useLook } from '../theme/prefs';
@@ -23,7 +24,8 @@ const REFRESH_MS = 15_000;
 /** The last answer, kept on the phone so the screen is full the moment the app opens. */
 const STORE_KEY = 'manager:last';
 const SHOWN_FEED = 8;
-const SHOWN_WORK = 8;
+/** Waiting work shown before "Show all": what is being worked on is never cut. */
+const SHOWN_WAITING = 3;
 const SHOWN_PROJECTS = 6;
 /** Open work with nothing done for this many hours is folded away as not moving. */
 const STALL_HOURS = 3;
@@ -46,6 +48,7 @@ function ViewButton({ icon, label, onPress }: { icon: IconName; label: string; o
   );
 }
 const STEP_NAMES = ['Build', 'Check', 'Final check', 'Merge', 'Push'];
+const STEP_SHORT = ['Build', 'Check', 'Final', 'Merge', 'Push'];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Everything but the time it was made, so an answer that says nothing new redraws nothing. */
@@ -55,40 +58,66 @@ function stepColor(state: StepState, t: Theme) {
   if (state === 'done') return t.good;
   if (state === 'now') return t.accent;
   if (state === 'failed') return t.bad;
-  if (state === 'queued') return t.warn;
+  // Waiting is grey, a shade above not started: orange is kept for the step a run is on.
+  if (state === 'queued') return t.ink3;
   return t.edge;
 }
 
+/** The five steps a piece of work goes through, each a short bar with its name under it: done, now, waiting or failed. */
 const Steps = memo(function Steps({ steps }: { steps: StepState[] }) {
   const { t } = useLook();
-  const at = steps.findIndex((s) => s === 'now' || s === 'failed' || s === 'queued');
   const label = steps.map((s, i) => `${STEP_NAMES[i]}: ${s}`).join(', ');
   return (
     <View accessible accessibilityLabel={label} style={styles.steps}>
-      {steps.map((state, index) => (
-        <View key={index} style={[styles.step, { backgroundColor: stepColor(state, t), opacity: state === 'skipped' ? 0.35 : 1 }]} />
-      ))}
-      {at >= 0 ? <Txt size={12} color={t.ink3} style={styles.stepName}>{STEP_NAMES[at]}</Txt> : null}
+      {steps.map((state, index) => {
+        const active = state === 'now' || state === 'failed' || state === 'queued';
+        return (
+          <View key={index} style={styles.stepBox}>
+            <View style={[styles.step, { backgroundColor: stepColor(state, t), opacity: state === 'skipped' ? 0.35 : 1 }]} />
+            <Txt size={10} weight={active ? 700 : 400} color={active ? t.ink : t.ink3} numberOfLines={1}>{STEP_SHORT[index]}</Txt>
+          </View>
+        );
+      })}
     </View>
   );
 });
 
-/** A line of work wears the colour of the bot on it, as on the PC page; one nobody is on has a plain edge. */
-const LineRow = memo(function LineRow({ line, colour, onOpen }: { line: WorkLine; colour: string; onOpen: (id: string) => void }) {
+/** What is happening on a line of work, in one word: a run is going, it waits for a bot, it failed, or nobody has touched it. */
+function lineState(line: WorkLine, stalled: boolean, t: Theme): { word: string; color: string; fill: boolean } {
+  if (line.steps.includes('failed')) return { word: 'Stopped', color: t.bad, fill: true };
+  if (stalled) return { word: 'Not moving', color: t.warn, fill: false };
+  if (line.steps.includes('now')) return { word: 'Working', color: t.good, fill: true };
+  if (line.steps.includes('queued')) return { word: line.late ? 'Waiting long' : 'Waiting', color: line.late ? t.warn : t.ink3, fill: false };
+  return { word: 'Open', color: t.ink3, fill: false };
+}
+
+/**
+ * A line of work: the bot on it with its face, name and colour, what is happening in a word, the job, and the five
+ * steps by name. One nobody is on says so.
+ */
+const LineRow = memo(function LineRow({ line, who, stalled, onOpen }: { line: WorkLine; who: Portrait | null; stalled?: boolean; onOpen: (id: string) => void }) {
   const { t } = useLook();
-  const tone = line.steps.includes('failed') ? t.bad : line.late ? t.warn : t.ink2;
+  const state = lineState(line, Boolean(stalled), t);
+  const colour = who?.colour ? readable(who.colour, [t.card], 3, t.ink) : t.line;
+  const tone = state.word === 'Stopped' ? t.bad : line.late || stalled ? t.warn : t.ink2;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${line.bot || 'No bot'}, ${state.word}. ${line.ref} ${line.title}. ${line.note}`}
       onPress={() => onOpen(line.id)}
-      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderLeftWidth: 5, borderLeftColor: colour ? readable(colour, [t.card], 3, t.ink) : t.line, borderRadius: t.r.card, boxShadow: t.shadow }, pressed && kit.dim]}
+      style={({ pressed }) => [styles.card, { backgroundColor: t.card, borderColor: t.ink, borderWidth: t.outline ? 2 : 0, borderLeftWidth: 5, borderLeftColor: colour, borderRadius: t.r.card }, pressed && kit.dim]}
     >
       <View style={styles.lineHead}>
-        {t.plates ? <Sign size={18}>{line.ref}</Sign> : <Txt size={12} weight={700} color={t.accentText}>{line.ref}</Txt>}
-        <Txt size={12} color={t.ink3} numberOfLines={1} style={styles.shrink}>{line.project}</Txt>
+        {who ? <BotBadge who={who} size={26} tag={false} state={state.word === 'Working' ? 'working' : undefined} /> : <View style={[styles.noBot, { borderColor: t.line }]} />}
+        <Txt size={13} weight={700} color={who ? colour : t.ink3} numberOfLines={1} style={styles.shrink}>{line.bot || 'No bot on it'}</Txt>
+        <View style={kit.flex} />
+        <View style={[styles.stateChip, state.fill ? { backgroundColor: state.color } : { borderColor: state.color, borderWidth: 1 }]}>
+          <Txt size={11} weight={700} color={state.fill ? t.app : state.color}>{state.word}</Txt>
+        </View>
       </View>
       <Txt size={15} weight={600} numberOfLines={2}>{line.title}</Txt>
-      <Txt size={13} color={tone} numberOfLines={2}>{line.note}{line.fixes ? `, ${plural(line.fixes, 'fix', 'fixes')} so far` : ''}</Txt>
+      <Txt size={12} color={t.ink3} numberOfLines={1}>{line.ref} · {line.project}</Txt>
+      {line.note ? <Txt size={13} color={tone} numberOfLines={2}>{line.note}{line.fixes ? `, ${plural(line.fixes, 'fix', 'fixes')} so far` : ''}</Txt> : null}
       <Steps steps={line.steps} />
     </Pressable>
   );
@@ -251,7 +280,12 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
   const moving = open.filter((line) => !isStalled(line));
   const stalled = open.filter(isStalled);
   // Each bot's colour by its name, the one its robot wears: a line is coloured by the bot on it.
-  const colours = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id]).colour]));
+  const faces = new Map(view.bots.map((b) => [b.name, portraitOf(b, p.bots[b.id])]));
+  // A run is going on these; the rest of what moves waits for a bot. Working first, so the top of the list is what is happening.
+  const isWorking = (line: WorkLine) => line.steps.includes('now') && !line.steps.includes('failed');
+  const working = moving.filter(isWorking);
+  const stoppedLines = moving.filter((line) => line.steps.includes('failed'));
+  const waitingLines = moving.filter((line) => !isWorking(line) && !line.steps.includes('failed'));
   const feed = allFeed ? view.feed : view.feed.slice(0, SHOWN_FEED);
   const cards = view.needsYou.map((item) => ({ ...item, ...(item.key ? marks[item.key] : undefined) }));
   // New first, then read; archived ones fold away at the bottom.
@@ -359,12 +393,21 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
         </ScrollView>
       ) : null}
       {open.length === 0 ? <Txt color={t.ink2} style={styles.indent}>No open work.</Txt> : null}
+      {working.length ? <Txt size={12} weight={700} color={t.good} style={styles.groupName}>{`WORKING NOW · ${working.length}`}</Txt> : null}
       <View style={styles.stack}>
-        {(allWork ? moving : moving.slice(0, SHOWN_WORK)).map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}
+        {working.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
       </View>
-      {moving.length > SHOWN_WORK && !allWork ? (
+      {stoppedLines.length ? <Txt size={12} weight={700} color={t.bad} style={styles.groupName}>{`STOPPED · ${stoppedLines.length}`}</Txt> : null}
+      <View style={styles.stack}>
+        {stoppedLines.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
+      </View>
+      {waitingLines.length ? <Txt size={12} weight={700} color={t.ink3} style={styles.groupName}>{`WAITING FOR A BOT · ${waitingLines.length}`}</Txt> : null}
+      <View style={styles.stack}>
+        {(allWork ? waitingLines : waitingLines.slice(0, SHOWN_WAITING)).map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} onOpen={openJob} />)}
+      </View>
+      {waitingLines.length > SHOWN_WAITING && !allWork ? (
         <Pressable accessibilityRole="button" onPress={() => setAllWork(true)} style={styles.more}>
-          <Txt size={14} weight={600} color={t.accentText}>Show all {moving.length}</Txt>
+          <Txt size={14} weight={600} color={t.accentText}>Show all {waitingLines.length} waiting</Txt>
           <Icon name="chevron" size={16} color={t.accentText} />
         </Pressable>
       ) : null}
@@ -375,7 +418,7 @@ export function HomeScreen({ connection, crew, nav, onTalk, leadName, leadUnread
           <Icon name={showStalled ? 'up' : 'down'} size={16} color={t.ink2} />
         </Pressable>
       ) : null}
-      {showStalled ? <View style={styles.stack}>{stalled.map((line) => <LineRow key={line.id} line={line} colour={colours.get(line.bot) ?? ''} onOpen={openJob} />)}</View> : null}
+      {showStalled ? <View style={styles.stack}>{stalled.map((line) => <LineRow key={line.id} line={line} who={faces.get(line.bot) ?? null} stalled onOpen={openJob} />)}</View> : null}
       {view.piles?.length ? <Words title="What the piles and dots mean" from={{ ...DESCRIBE.pile, Dots: DESCRIBE.home.dots }} words={[...view.piles.map((pile) => pile.name), ...(open.length ? ['Dots'] : [])]} /> : null}
 
       {/* The crew: the pace, and who works on what. The tree is long, so it waits to be opened. */}
@@ -443,9 +486,12 @@ const styles = StyleSheet.create({
   botHead: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   card: { borderRadius: 18, gap: 3, padding: 14 },
   lineHead: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  steps: { alignItems: 'center', flexDirection: 'row', gap: 4, marginTop: 7 },
-  step: { borderRadius: 3, height: 6, width: 28 },
-  stepName: { marginLeft: 6 },
+  steps: { flexDirection: 'row', gap: 4, marginTop: 8 },
+  stepBox: { alignItems: 'center', flex: 1, gap: 3 },
+  step: { alignSelf: 'stretch', borderRadius: 3, height: 5 },
+  noBot: { borderRadius: 13, borderStyle: 'dashed', borderWidth: 1, height: 26, width: 26 },
+  stateChip: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3 },
+  groupName: { letterSpacing: 0.5, marginBottom: 6, marginLeft: 6, marginTop: 10 },
   project: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 56, paddingHorizontal: 14, paddingVertical: 11 },
   feed: { alignItems: 'flex-start', flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 14, paddingVertical: 11 },
   dot: { borderRadius: 4, height: 8, marginTop: 6, width: 8 },

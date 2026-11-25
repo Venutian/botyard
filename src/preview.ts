@@ -608,11 +608,32 @@ const brainSample = {
 };
 
 /** A page of the studio's own on the phone (src/ownView.ts): made-up store sales, one month at a time. */
-function salesView(month: string) {
+function salesView(month: string, product = '', q = '') {
   const months = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
   const sold = [8200, 9100, 7600, 10400, 11900, 12400];
   const names = ['May', 'June', 'July', 'August', 'September', 'October'];
   const at = Math.max(0, months.indexOf(month));
+  const products = [['Harbour, full game', 0.7], ['Soundtrack', 0.2], ['Art book', 0.1]] as const;
+  const one = products.find(([name]) => name === product);
+  if (one) {
+    // A product opened from the month: its own months, side by side, and its orders.
+    const share = one[1];
+    const orders = [['Studio licence', 1490], ['Single copy', 149], ['Single copy', 149], ['Gift copy', 149]].filter(([name]) => !q || String(name).toLowerCase().includes(q.toLowerCase()));
+    return {
+      title: one[0],
+      note: 'What it sold. Made-up numbers.',
+      blocks: [
+        { kind: 'chart', title: 'Sold each month', param: 'month', mark: Math.round(sold.reduce((a, b) => a + b, 0) / sold.length * share), items: months.map((m, i) => ({ label: names[i].slice(0, 3), value: Math.round(sold[i] * share), shown: `${Math.round(sold[i] * share)} kr`, on: i === at, pick: m })) },
+        { kind: 'table', title: 'Months side by side', columns: names.map((n) => n.slice(0, 3)), rows: [
+          { label: 'Sold', cells: sold.map((x) => `${Math.round(x * share)} kr`) },
+          { label: 'Orders', cells: sold.map((x) => String(Math.round((x * share) / 98))) },
+          { label: 'Refunds', cells: ['0', '1', '0', '0', '2', '1'], tones: ['', 'warn', '', '', 'bad', 'warn'] },
+        ] },
+        { kind: 'search', param: 'q', value: q, placeholder: 'Search the orders' },
+        { kind: 'rows', title: `Orders in ${names[at]}`, items: orders.map(([name, kr]) => ({ title: String(name), detail: names[at], right: `${kr} kr` })) },
+      ],
+    };
+  }
   return {
     title: 'Sales',
     note: 'What the Harbour store sold. Made-up numbers.',
@@ -624,10 +645,11 @@ function salesView(month: string) {
         { label: 'Orders', value: String(Math.round(sold[at] / 98)) },
         { label: 'Refunds', value: '2', tone: 'warn' },
       ] },
+      { kind: 'split', title: 'Where it came from', items: products.map(([name, share]) => ({ label: name, value: sold[at] * share, shown: `${Math.round(sold[at] * share)} kr`, open: { product: name } })) },
       { kind: 'bars', title: 'By product', items: [
-        { label: 'Harbour, full game', value: sold[at] * 0.7, shown: `${Math.round(sold[at] * 0.7)} kr`, mark: sold[at] * 0.6, note: 'the line is the usual month' },
-        { label: 'Soundtrack', value: sold[at] * 0.2, shown: `${Math.round(sold[at] * 0.2)} kr` },
-        { label: 'Art book', value: sold[at] * 0.1, shown: `${Math.round(sold[at] * 0.1)} kr` },
+        { label: 'Harbour, full game', value: sold[at] * 0.7, shown: `${Math.round(sold[at] * 0.7)} kr`, mark: sold[at] * 0.6, note: 'the line is the usual month', open: { product: 'Harbour, full game' } },
+        { label: 'Soundtrack', value: sold[at] * 0.2, shown: `${Math.round(sold[at] * 0.2)} kr`, open: { product: 'Soundtrack' } },
+        { label: 'Art book', value: sold[at] * 0.1, shown: `${Math.round(sold[at] * 0.1)} kr`, open: { product: 'Art book' } },
       ] },
       { kind: 'rows', title: 'Biggest orders', items: [
         { title: 'Studio licence', detail: 'Harbour, 10 seats', right: '1 490 kr' },
@@ -658,7 +680,10 @@ export function sample(path: string, method: string, _body?: unknown) {
   if (route === '/spend') return spend;
   if (route === '/improvements') return improvements;
   if (route === '/own') return { pages: [{ name: 'sales', title: 'Sales', does: 'What the Harbour store sold, by month', phone: true, icon: 'activity' }] };
-  if (route === '/own/sales/api/phone') return salesView(/month=(\d{4}-\d{2})/.exec(path)?.[1] ?? '2026-10');
+  if (route === '/own/sales/api/phone') {
+    const query = new URLSearchParams(path.split('?')[1] ?? '');
+    return salesView(query.get('month') ?? '2026-10', query.get('product') ?? '', query.get('q') ?? '');
+  }
   if (route.startsWith('/own/sales/api/') && method === 'POST') return { ok: true };
   if (route === '/brain') return brainSample;
   if (route === '/brain/note') { const id = decodeURIComponent(/id=([^&]+)/.exec(path)?.[1] ?? ''); const n = brainSample.notes.find((x) => x.id === id); return n ? { ...n, meta: {}, text: `# ${n.title}\n\n${n.excerpt}\n\nSee [[${n.links[0] ?? n.id}]].` } : null; }
