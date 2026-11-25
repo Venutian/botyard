@@ -321,3 +321,16 @@ test('a job marked in progress with no run going waits; with a run going it is b
   const project = manager.projects.find((p) => p.id === a.projectId)
   assert.deepEqual([project.running, project.queued], [1, 1])
 })
+
+test('a request on a track is being worked on only while a run goes on its step', async () => {
+  const { requestLine } = await import('../server/lib/manager.mjs')
+  const names = new Map([['b1', 'Builder']])
+  const base = { id: 'r1', jobId: 'j1', jobCode: 'LH-9', title: 'Town kit', status: 'working', updatedAt: new Date(NOW).toISOString() }
+  const trip = { id: 't1', status: 'running', current: 'build', currentTitle: 'Build', currentKind: 'bot', currentBotId: 'b1', rounds: {} }
+  const going = requestLine({ ...base, trip: { ...trip, currentRunning: true } }, null, new Map(), NOW, names)
+  const waiting = requestLine({ ...base, trip: { ...trip, currentRunning: false } }, null, new Map(), NOW, names)
+  const older = requestLine({ ...base, trip }, null, new Map(), NOW, names)
+  assert.deepEqual([going.steps[0], waiting.steps[0], older.steps[0]], ['now', 'queued', 'now'])
+  assert.match(waiting.note, /Waiting for Builder to start build/)
+  assert.match(going.note, /Builder is building it/)
+})

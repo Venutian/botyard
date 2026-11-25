@@ -1355,7 +1355,9 @@ const requestShown = (store, request) => {
   // Who is on the step now: the bot its job went to. A script, a gate or a track inside names nobody.
   const live = trip && step?.kind === 'bot' ? store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? ORDER BY created_at DESC, try_number DESC LIMIT 1', trip.id, step.id)[0] : null
   const job = live?.jobId && live.status !== 'stale' ? store.object('SELECT raw FROM jobs WHERE id = ?', live.jobId) : null
-  return { ...request, cost: costOfRequest(store, request.id), trip: trip ? { id: trip.id, status: trip.status, current: trip.current, currentTitle: step?.title || '', currentKind: step?.kind || '', currentBotId: job?.assigneeAgentId || '', currentRuling: Boolean(step?.ruling), reason: trip.reason || '', refusal: trip.refusal || null, rounds: trip.rounds || {} } : null }
+  // Whether a run is going on that job this minute: a step given to a bot that has not started is waiting, not worked on.
+  const running = Boolean(job && store.row("SELECT id FROM runs WHERE job_id = ? AND status IN ('running', 'queued') LIMIT 1", job.id))
+  return { ...request, cost: costOfRequest(store, request.id), trip: trip ? { id: trip.id, status: trip.status, current: trip.current, currentTitle: step?.title || '', currentKind: step?.kind || '', currentBotId: job?.assigneeAgentId || '', currentRunning: running, currentRuling: Boolean(step?.ruling), reason: trip.reason || '', refusal: trip.refusal || null, rounds: trip.rounds || {} } : null }
 }
 
 export function listRequests(store, companyId, query = {}) {

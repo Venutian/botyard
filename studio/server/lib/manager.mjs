@@ -171,6 +171,8 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   const said = step ? step.charAt(0).toLowerCase() + step.slice(1) : 'its next step'
   const working = !['done', 'not-in-main', 'stopped'].includes(r.status) && !['stopped', 'stuck', 'paused', 'not-in-main', 'done'].includes(trip.status)
   const who = working && trip.currentKind === 'bot' ? names.get(trip.currentBotId) || '' : ''
+  // The engine says whether a run is going on the step's job; an older engine says nothing, and the step's word stands.
+  const idle = Boolean(who) && trip.currentRunning === false
   const checks = trip.currentRuling || /check|test|review|rul/i.test(`${trip.current} ${step}`)
   // The rounds back to this step so far, over every back-line that leads to it (keyed "from>to").
   const fixes = Object.entries(trip.rounds || {}).filter(([key]) => key.endsWith(`>${trip.current}`)).reduce((a, [, n]) => a + (Number(n) || 0), 0)
@@ -184,6 +186,7 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   else if (trip.status === 'paused') { stage = 'queued'; note = `Paused at ${said}` }
   else if (trip.currentKind === 'gate') { stage = 'queued'; pill = 'waits'; note = `Waiting for you: ${said}` }
   else if (trip.currentKind === 'bot' && !who) { stage = checks ? 'check' : 'build'; note = `Waiting for a bot to take ${said}, on its track` }
+  else if (idle) { stage = checks ? 'check' : 'build'; note = `Waiting for ${who} to start ${said}, on its track` }
   else if (trip.currentRuling) { stage = 'ruling'; note = `${who} is ruling on it, on its track` }
   else if (checks && who) { stage = 'check'; note = `${who} is checking it, on its track` }
   else if (who && /build|fix|code/i.test(`${trip.current} ${step}`)) { stage = 'build'; note = `${who} is ${fixes ? `on fix ${fixes}` : 'building it'}, on its track` }
@@ -191,7 +194,8 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   else { stage = checks ? 'check' : 'build'; note = `${step || 'Starting'}, on its track` }
   const rounds = Object.values(trip.rounds || {}).reduce((a, b) => a + b, 0)
   const at = Date.parse(r.updatedAt) || now
-  const state = (name) => ({ build: stage === 'build' ? 'now' : 'done', check: stage === 'check' ? 'now' : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
+  const at2 = idle || (trip.currentKind === 'bot' && !who) ? 'queued' : 'now'
+  const state = (name) => ({ build: stage === 'build' ? at2 : 'done', check: stage === 'check' ? at2 : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
   return {
     id: issue?.id || r.jobId, ref: issue ? refOf(issue, projectNames) : r.jobCode, title: short(plainTitle(withRefs(r.title))), project: projectNames.get(r.projectId) || '', projectId: r.projectId || '',
     bot: who, stage, pill: pill || stage, note: `${note}${cost > 0 ? `, ${usd(cost)} so far` : ''}`, steps: STEPS.map(state), fixes: rounds, since: at, late: false,
