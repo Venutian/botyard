@@ -25,6 +25,9 @@
  *   search   { param, value?, placeholder? }            a search box: opens the view again with `param=` the words
  *   actions  { items: [{ label, call, body?, kind?, done? }] }
  *            POSTs `body` to the page's own `call` (a path like "/sync"), says `done`, and reads the view again
+ *   form     { title?, call, submit, done?, fixed?, fields: [{ name, label, kind, value?, placeholder?, options? }] }
+ *            a few fields (kind text, number, or choice with options [{ id, name }]) and one button that POSTs
+ *            `fixed` and the fields' values to the page's own `call`, says `done`, and reads the view again
  *   fold     { title, blocks }                          shut until tapped; holds any block but a fold
  * `tone` is one of good, bad, warn.
  * `open` is a few choices at once, `{ "category": "Groceries", "page": "" }`: a tap on that item opens the view again
@@ -40,6 +43,7 @@ export type Bar = { label: string; value: number; shown: string; note: string; m
 export type Share = { label: string; value: number; shown: string; open: Open | null };
 export type RowItem = { title: string; detail: string; note: string; right: string; tone: Tone; open: Open | null };
 export type TableRow = { label: string; cells: string[]; tones: Tone[]; tone: Tone; open: Open | null };
+export type FormField = { name: string; label: string; kind: 'text' | 'number' | 'choice'; value: string; placeholder: string; options: { id: string; name: string }[] };
 export type Action = { label: string; call: string; body: Record<string, unknown>; kind: 'primary' | 'quiet'; done: string };
 export type Block =
   | { kind: 'heading'; text: string }
@@ -54,6 +58,7 @@ export type Block =
   | { kind: 'choose'; param: string; value: string; options: { id: string; name: string }[] }
   | { kind: 'search'; param: string; value: string; placeholder: string }
   | { kind: 'actions'; items: Action[] }
+  | { kind: 'form'; title: string; call: string; submit: string; done: string; fixed: Record<string, string>; fields: FormField[] }
   | { kind: 'fold'; title: string; blocks: Block[] };
 export type OwnView = { title: string; note: string; blocks: Block[] };
 
@@ -179,6 +184,29 @@ function block(raw: unknown, inFold = false): Block | null {
         return { label, call, body: obj(t.body) ?? {}, kind: t.kind === 'quiet' ? 'quiet' as const : 'primary' as const, done: str(t.done, 120) };
       }, 4);
       return list.length ? { kind: 'actions', items: list } : null;
+    }
+    case 'form': {
+      const call = str(b.call, 64);
+      if (!CALL.test(call) || call.includes('//')) return null;
+      const fields = items(b.fields, (x) => {
+        const f = obj(x);
+        const name = str(f?.name, 24);
+        const label = str(f?.label, 60);
+        if (!f || !PARAM.test(name) || !label) return null;
+        const kind = f.kind === 'number' || f.kind === 'choice' ? f.kind : 'text';
+        const options = kind === 'choice' ? items(f.options, (o) => {
+          const t = obj(o);
+          const id = str(t?.id, 40);
+          const optName = str(t?.name, 32);
+          return t && id && optName ? { id, name: optName } : null;
+        }, 30) : [];
+        if (kind === 'choice' && !options.length) return null;
+        return { name, label, kind, value: str(f.value, 300), placeholder: str(f.placeholder, 60), options } as FormField;
+      }, 8);
+      // Fixed values ride along unseen (which payment, which goal): plain words only, a few of them.
+      const fixed: Record<string, string> = {};
+      for (const [k, v] of Object.entries(obj(b.fixed) ?? {}).slice(0, 4)) if (PARAM.test(k) && (typeof v === 'string' || typeof v === 'number')) fixed[k] = str(v, 60);
+      return fields.length ? { kind: 'form', title, call, submit: str(b.submit, 32) || 'Save', done: str(b.done, 120), fixed, fields } : null;
     }
     case 'fold': {
       if (inFold) return null;

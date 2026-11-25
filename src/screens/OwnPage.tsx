@@ -174,6 +174,8 @@ function BlockView({ block, choose, onOpen, connection, page, reload }: { block:
       return <Search block={block} choose={choose} />;
     case 'actions':
       return <Actions items={block.items} connection={connection} page={page} reload={reload} />;
+    case 'form':
+      return <Form block={block} connection={connection} page={page} reload={reload} />;
     case 'fold':
       return <Fold title={block.title}>{block.blocks.map((inner, i) => <BlockView key={`${inner.kind}-${i}`} block={inner} choose={choose} onOpen={onOpen} connection={connection} page={page} reload={reload} />)}</Fold>;
   }
@@ -328,6 +330,47 @@ function Actions({ items, connection, page, reload }: { items: Extract<Block, { 
   );
 }
 
+/** A few fields and one button: what is typed or picked goes to the page's own server with the block's fixed values. */
+function Form({ block, connection, page, reload }: { block: Extract<Block, { kind: 'form' }>; connection: Connection; page: string; reload: () => Promise<void> }) {
+  const { t } = useLook();
+  const tap = useTap();
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(block.fields.map((f) => [f.name, f.value])));
+  const [busy, setBusy] = useState(false);
+  const set = (name: string, value: string) => setValues((now) => ({ ...now, [name]: value }));
+  const send = async () => {
+    setBusy(true);
+    try {
+      await ownCall(connection, `/own/${page}/api${block.call}`, 'POST', { ...block.fixed, ...values });
+      tap('done');
+      await reload();
+      if (block.done) tell(block.title || block.submit, block.done);
+    } catch (err) {
+      tell(`${block.submit} did not work`, (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={[styles.form, { backgroundColor: t.card, borderRadius: t.r.card, borderColor: t.line }]}>
+      {block.title ? <Txt size={14} weight={700}>{block.title}</Txt> : null}
+      {block.fields.map((f) => (
+        <View key={f.name} style={styles.gap}>
+          {f.kind === 'choice' ? (
+            <>
+              <Txt size={12} weight={600} color={t.ink2}>{f.label}</Txt>
+              <Chips value={values[f.name] ?? ''} options={f.options} onChange={(id) => set(f.name, id)} />
+            </>
+          ) : (
+            <Field label={f.label} value={values[f.name] ?? ''} onChangeText={(v) => set(f.name, v)} placeholder={f.placeholder}
+              keyboardType={f.kind === 'number' ? 'numeric' : 'default'} autoCorrect={f.kind === 'text'} returnKeyType="done" accessibilityLabel={f.label} />
+          )}
+        </View>
+      ))}
+      <Button label={block.submit} busy={busy} disabled={busy} onPress={send} />
+    </View>
+  );
+}
+
 function Fold({ title, children }: { title: string; children: ReactNode }) {
   const { t } = useLook();
   const [open, setOpen] = useState(false);
@@ -379,5 +422,6 @@ const styles = StyleSheet.create({
   search: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   clear: { justifyContent: 'center', minHeight: 44, paddingHorizontal: 14 },
   actions: { gap: 8 },
+  form: { borderWidth: StyleSheet.hairlineWidth, gap: 12, padding: 14 },
   fold: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', minHeight: 44 },
 });

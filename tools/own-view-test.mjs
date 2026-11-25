@@ -77,3 +77,17 @@ assert.deepEqual(drill.blocks[6], { kind: 'search', param: 'q', value: 'ica', pl
 assert.deepEqual(withOpen({ month: '2026-10', category: 'Food', page: '2' }, { category: 'Rent', page: '' }), { month: '2026-10', category: 'Rent' })
 assert.equal(viewPath(withOpen({}, { category: 'Eating out', q: '' })), '/phone?category=Eating%20out')
 console.log('own view taps: ok')
+
+// A form: fields of three kinds, fixed values riding along, and only a plain path of the page's own server to send to.
+const forms = readView({ blocks: [
+  { kind: 'form', title: 'Budget', call: '/budget', submit: 'Save', done: 'Saved.', fixed: { category: 'Groceries', 'bad key!': 'x', n: 3 },
+    fields: [{ name: 'amount', label: 'A month', kind: 'number', value: 4000 }, { name: 'note', label: 'Note', kind: 'weird' }, { name: 'cat', label: 'Category', kind: 'choice', options: [{ id: 'a', name: 'A' }] }, { name: 'empty', label: 'No options', kind: 'choice', options: [] }, { name: 'bad name!', label: 'x' }] },
+  { kind: 'form', call: 'https://elsewhere.example/x', fields: [{ name: 'a', label: 'A' }] },
+  { kind: 'form', call: '/x', fields: [] },
+] })
+assert.equal(forms.blocks.length, 1, 'a form needs a plain path and a field')
+const form = forms.blocks[0]
+assert.deepEqual(form.fixed, { category: 'Groceries', n: '3' })
+assert.deepEqual(form.fields.map((f) => [f.name, f.kind, f.value]), [['amount', 'number', '4000'], ['note', 'text', ''], ['cat', 'choice', '']])
+assert.equal(form.submit, 'Save')
+console.log('own view forms: ok')
