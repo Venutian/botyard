@@ -310,3 +310,14 @@ test('a line a crew script leaves for the owner shows under Also going on for tw
   const manager = view([], { files: { ...noFiles(), ownerNotes: files.ownerNotes } })
   assert.ok(manager.trouble.some((t) => t.level === 'info' && t.text === 'The judge ruled on Retainer: not approved'))
 })
+
+test('a job marked in progress with no run going waits; with a run going it is being worked on', () => {
+  number = 0
+  const a = job('Town kit', 'in_progress', 'freelancer', { startedAt: ago(90) })
+  const b = job('Harbour map', 'in_progress', 'freelancer', { startedAt: ago(10) })
+  const manager = view([a, b], { live: [{ agentId: b.assigneeAgentId, issueId: b.id, startedAt: new Date(NOW - 10 * 60000).toISOString() }] })
+  assert.equal(lineOf(manager, a.identifier).steps[0], 'queued', 'no run is going on it')
+  assert.equal(lineOf(manager, b.identifier).steps[0], 'now')
+  const project = manager.projects.find((p) => p.id === a.projectId)
+  assert.deepEqual([project.running, project.queued], [1, 1])
+})

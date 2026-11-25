@@ -141,9 +141,10 @@ export function verdictOf(comments = []) {
 const stepOf = (state, extra = {}) => ({ state, ...extra })
 
 /** One check on a piece of work, as a step: running, passed, found problems, or not asked for. */
-function checkStep(check, verdicts) {
+function checkStep(check, verdicts, isLive = () => true) {
   if (!check) return stepOf('wait')
-  if (check.status === 'in_progress') return stepOf('now', { id: check.id, since: stamp(check.startedAt) || lastTouched(check) })
+  // Marked in progress with no run going is waiting for a bot, not being worked on (25 Nov 2026: 47 jobs read "working" with 5 runs going).
+  if (check.status === 'in_progress') return stepOf(isLive(check) ? 'now' : 'queued', { id: check.id, since: stamp(check.startedAt) || lastTouched(check) })
   if (WAITING.has(check.status)) return stepOf('queued', { id: check.id, since: stamp(check.createdAt) })
   if (check.status === 'blocked') return stepOf('failed', { id: check.id, why: 'the check is blocked' })
   if (check.status === 'cancelled') return stepOf('wait')
@@ -198,7 +199,9 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   }
 }
 
-function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now, requests = [] }) {
+function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now, requests = [], liveJobs = null }) {
+  // With the live runs known, "now" means a run is going on that job; without them (an older caller), the job's own word stands.
+  const isLive = (issue) => !liveJobs || liveJobs.has(issue.id) || liveJobs.has(`bot:${issue.assigneeAgentId}`)
   const groups = new Map()
   const checks = new Map()
   // Work moved by a track is the request's one line; its steps' jobs are left out here.
@@ -226,14 +229,14 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
     if (now - touched > DAY_MS && !all.some((i) => OPEN.has(i.status))) continue
 
     const latest = (ruling) => mine.filter((c) => c.ruling === ruling && c.status !== 'cancelled').pop()
-    const build = work.status === 'in_progress' ? stepOf('now', { since: stamp(work.startedAt) || lastTouched(work) })
+    const build = work.status === 'in_progress' ? stepOf(isLive(work) ? 'now' : 'queued', { since: stamp(work.startedAt) || lastTouched(work) })
       : work.status === 'done' ? stepOf('done')
       : work.status === 'blocked' ? stepOf('failed', { why: 'blocked' })
       : work.status === 'cancelled' ? stepOf('failed', { why: 'stopped' })
       : stepOf('queued', { since: stamp(work.createdAt) })
     const built = build.state === 'done'
-    const check = built ? checkStep(latest(false), verdicts) : stepOf('wait')
-    const ruling = built ? checkStep(latest(true), verdicts) : stepOf('wait')
+    const check = built ? checkStep(latest(false), verdicts, isLive) : stepOf('wait')
+    const ruling = built ? checkStep(latest(true), verdicts, isLive) : stepOf('wait')
     const repo = repos.get(work.projectId) || NO_REPO
     const merged = built && (mergedAt.has(work.identifier) || repo.merged.has(work.identifier))
     const isPushed = merged && repo.pushed.has(work.identifier)
@@ -471,15 +474,15 @@ function dayFeed({ issues, names, projectNames, byRef, files, verdicts, now }) {
 }
 
 /** Each project: how much is moving, who is in it, and how many commits wait to be pushed. */
-function projectRows({ projects, issues, bots, repos, now }) {
+function projectRows({ projects, issues, bots, repos, now, liveJobs = null }) {
   return projects.map((project) => {
     const jobs = issues.filter((i) => i.projectId === project.id)
     const count = (test) => jobs.filter(test).length
     return {
       id: project.id,
       name: project.name,
-      running: count((i) => i.status === 'in_progress'),
-      queued: count((i) => WAITING.has(i.status)),
+      running: count((i) => (liveJobs ? (liveJobs.has(i.id) || (i.status === 'in_progress' && liveJobs.has(`bot:${i.assigneeAgentId}`))) && i.status !== 'done' && i.status !== 'cancelled' : i.status === 'in_progress')),
+      queued: count((i) => WAITING.has(i.status) || (liveJobs && i.status === 'in_progress' && !liveJobs.has(i.id) && !liveJobs.has(`bot:${i.assigneeAgentId}`))),
       blocked: count((i) => i.status === 'blocked'),
       doneToday: count((i) => i.status === 'done' && now - stamp(i.completedAt) < DAY_MS),
       unpushed: repos.get(project.id)?.unpushed ?? null,
@@ -547,7 +550,9 @@ function stateLine({ working, trouble, lines }) {
 }
 
 /** The whole view from records already in hand. Pure, so the tests can feed it a studio. */
-export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
+export function buildManager({ agents, issues, projects, live: liveGiven, files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
+  // With no list of live runs given, a job's own word stands; with one, "now" means a run is going.
+  const live = liveGiven || []
   // A copy of a bot on another AI is that bot to every list: its jobs, its name, one card.
   const fold = copyGroups(agents)
   const names = new Map(agents.map((a) => [a.id, (fold.parentOf.get(a.id) || a).name]))
@@ -563,9 +568,11 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
   const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
   // A live run that names no job still counts for the job its bot holds.
   const unnamed = new Set(live.filter((run) => !run.issueId).map((run) => run.agentId))
+  // For the steps and the project counts: a job with a run going, or held by a bot whose run names no job.
+  const liveWork = !liveGiven ? null : new Set([...liveJobs, ...[...unnamed].map((id) => `bot:${id}`)])
   const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, unnamed, fold, now })
   const jobs = foldKeys(issues, ['assigneeAgentId'], fold)
-  const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
+  const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests, liveJobs: liveWork })
   const bots = botRows({ agents: fold.top, issues: jobs, projectNames, liveAgents, working, files, fold, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
   // Jobs left in progress with no run for an hour: counted as stuck, never as work going on.
@@ -577,7 +584,7 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     now: working,
     lines,
     bots,
-    projects: projectRows({ projects, issues, bots, repos, now }),
+    projects: projectRows({ projects, issues, bots, repos, now, liveJobs: liveWork }),
     feed: dayFeed({ issues, names, projectNames, byRef, files, verdicts, now }),
     // Every pile of jobs with its count: the Work sheet's tabs, each one tap from the list.
     piles: pilesOf(counts),
