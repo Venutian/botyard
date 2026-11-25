@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Connection, getOwnView, ownCall } from '../api';
 import { Nav } from '../crew';
@@ -53,10 +53,13 @@ export function OwnPageScreen({ connection, nav, page, title }: { connection: Co
   }, [back, depth]);
   const { t } = useLook();
   const empty = data && !data.blocks.length;
+  // Each view that comes back is drawn afresh (folds shut, boxes filled from it), not the one before it reused.
+  const drawn = useRef(0);
+  const version = useMemo(() => (drawn.current += 1), [data]);
   return (
     <Page title={data?.title || title} note={data?.note} onBack={() => { if (!back()) nav.back(); }} onRefresh={load} error={error} loading={!data} top={`${viewPath(choices)}#${depth}`}>
       {empty ? <Txt color={t.ink2}>This page sent nothing to show on a phone.</Txt> : null}
-      {data?.blocks.map((block, i) => <BlockView key={`${block.kind}-${i}-${viewPath(choices)}`} block={block} choose={choose} onOpen={onOpen} connection={connection} page={page} reload={load} />)}
+      {data?.blocks.map((block, i) => <BlockView key={`${version}-${block.kind}-${i}`} block={block} choose={choose} onOpen={onOpen} connection={connection} page={page} reload={load} />)}
     </Page>
   );
 }
@@ -288,6 +291,8 @@ function Table({ block, onOpen }: { block: Extract<Block, { kind: 'table' }>; on
 function Search({ block, choose }: { block: Extract<Block, { kind: 'search' }>; choose: Choose }) {
   const { t } = useLook();
   const [words, setWords] = useState(block.value);
+  // The view comes back after the search with the words it used: the box shows them.
+  useEffect(() => setWords(block.value), [block.value]);
   return (
     <View style={styles.search}>
       <Field value={words} onChangeText={setWords} placeholder={block.placeholder || 'Search'} returnKeyType="search" autoCorrect={false} autoCapitalize="none"
@@ -366,7 +371,8 @@ const styles = StyleSheet.create({
   shareSum: { minWidth: 72, textAlign: 'right' },
   table: { flexDirection: 'row', overflow: 'hidden' },
   tableLabels: { width: 118 },
-  tableRow: { flexDirection: 'row' },
+  // The same height as a label cell, its rule inside it, so the two columns never drift apart row by row.
+  tableRow: { flexDirection: 'row', height: 40 },
   cell: { height: 40, justifyContent: 'center', paddingHorizontal: 8, width: 84 },
   labelCell: { paddingLeft: 12, width: 118 },
   labelRow: { alignItems: 'center', flexDirection: 'row', gap: 4 },
