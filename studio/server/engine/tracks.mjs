@@ -53,6 +53,8 @@ const MOST_ROUNDS = 20
 const MAX_TRIES = 5
 const VALUE_CHARS = 20_000
 const LOST_AFTER_MS = 20_000
+// A bot step whose last run ended this long ago, with the job still open and no run going or held, was left open.
+const LEFT_OPEN_MS = 6 * 60 * 60 * 1000
 /** Trips still moving: the engine looks at these on every turn. */
 const MOVING = ['running', 'not-in-main']
 
@@ -762,7 +764,16 @@ async function pollStep(store, step, row, { io, now }) {
       const said = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]?.body
       return { verdict: 'fail', leaves: {}, findings: words(said || `The step's job ${job.identifier} is blocked`, VALUE_CHARS) }
     }
-    if (job.status !== 'done') return null
+    if (job.status !== 'done') {
+      // A run that ended well without closing its job leaves the step waiting for ever (25 Nov 2026: six steps "working"
+      // for 3 to 24 hours with no run). Long after its last run it fails, and the track's fail line decides what is next.
+      // A run that was held (a pace or a limit) did not end well: that job is waiting its turn, and is left alone.
+      const live = store.row("SELECT id FROM runs WHERE job_id = ? AND status IN ('running', 'queued') LIMIT 1", job.id)
+      const last = live ? null : store.row('SELECT status, finished_at AS at FROM runs WHERE job_id = ? ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1', job.id)
+      const idle = last?.status === 'succeeded' && last.at ? now - Date.parse(last.at) : 0
+      if (idle >= LEFT_OPEN_MS) return { verdict: 'fail', leaves: {}, findings: `The bot's last run on ${job.identifier} ended ${Math.round(idle / 3_600_000)} hours ago without closing the job: no OUTCOME was left` }
+      return null
+    }
     const docs = new Map(store.rows('SELECT jd.key AS key, d.body AS body FROM job_documents jd JOIN documents d ON d.id = jd.document_id WHERE jd.job_id = ?', job.id).map((d) => [d.key, d.body]))
     const last = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]
     const left = botLeft(docs, last?.body)
@@ -1049,6 +1060,7 @@ export async function tickTracks(store, { dataDir, io = trackIo, now = Date.now(
  *   a round that ended (passed, failed or started over) whose job is still open: closed, cancelled, with why
  *   a request whose trip is stuck: its job blocked, with the reason, once
  *   a request whose trip was stopped: its job cancelled, with the reason
+ *   a request whose own job was cancelled while its trip still runs: the trip stopped
  *
  * Returns the codes of the jobs it closed. Nothing it closes had a bot at work on it: a step at work is a
  * working row, which it does not touch.
@@ -1062,6 +1074,15 @@ export function settleLeftovers(store, { now = Date.now() } = {}) {
     const why = row.status === 'passed' ? 'its round passed' : row.status === 'stale' ? 'the work went back to an earlier step' : `its round ended NOT MET${row.snapshot?.findings ? `: ${words(String(row.snapshot.findings).split('\n')[0], 300)}` : ''}`
     addComment(store, job.id, { body: `Closed by the track: ${why}. The track goes on in a later round or step; this job holds nothing more to do.` }, { now, actor: ENGINE, quiet: true })
     patchJob(store, job.id, { status: 'cancelled' }, { now, actor: ENGINE })
+    settled.push(job.identifier)
+  }
+  // A request whose own job was cancelled has nothing left to deliver: its trip stops, and the step jobs it holds close.
+  for (const trip of store.objects("SELECT t.raw AS raw FROM trips t WHERE t.status = 'running' AND t.parent_trip_id IS NULL")) {
+    const request = store.object('SELECT raw FROM requests WHERE id = ?', trip.requestId)
+    const job = request && store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
+    if (!job || job.status !== 'cancelled') continue
+    const version = versionOf(store, trip.trackId, trip.version)
+    putTrip(store, stopped(store, trip, version, `The request's job ${job.identifier} was cancelled`, now), now)
     settled.push(job.identifier)
   }
   const done = store.objects("SELECT t.raw AS raw FROM trips t WHERE t.status IN ('stuck', 'stopped') AND t.parent_trip_id IS NULL")
