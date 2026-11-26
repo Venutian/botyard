@@ -265,6 +265,18 @@ class Wide(Yard):
         self.assertIn(f'Edit(/{secret}/**)', skill_sets.claude_denials(self.env))
         self.assertIn(f'Read(/{secret}/**)', skill_sets.claude_denials(self.env))
 
+    def test_a_never_folder_opens_to_its_readers_on_claude_and_stays_shut_to_opencode(self):
+        private = os.path.join(self.d, 'private-money')
+        os.makedirs(private)
+        json.dump({'never': [{'path': private, 'read': False, 'why': 'the owner\'s money', 'readers': ['Lead Bot']}]}, open(os.path.join(self.crew, 'own', 'folder-check.json'), 'w'))
+        self.assertIn(f'Read(/{private}/**)', skill_sets.claude_denials(self.env, bot='Builder'))
+        self.assertIn(f'Grep(/{private}/**)', skill_sets.claude_denials(self.env, bot='Builder'))
+        self.assertNotIn(f'Read(/{private}/**)', skill_sets.claude_denials(self.env, bot='Lead Bot'))
+        self.assertIn(f'Edit(/{private}/**)', skill_sets.claude_denials(self.env, bot='Lead Bot'), 'a reader still never edits it')
+        perm = skill_sets.protected_denials(self.env)
+        self.assertEqual(perm['read'][f'{private}/*'], 'deny')
+        self.assertEqual(perm['bash'][f'*{private}*'], 'deny', 'a run under OpenCode cannot cat it either')
+
     def test_what_no_config_can_close_is_a_gap_not_a_fault(self):
         self.agent('a1', 'Lead', 'codex_local', self.room, self.codex())
         got = self.faults()

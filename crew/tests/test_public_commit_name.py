@@ -59,8 +59,8 @@ class PublicName(unittest.TestCase):
 
     def test_a_message_the_push_would_refuse_is_refused_when_written(self):
         dir = self.repo(True)
-        code = ''.join(reversed('EGN')) + '-2070'
-        done = git(dir, 'commit', '-qm', f'a fix ({code})', name='Fred', wrap=False)
+        word = ''.join(reversed('ynot'))  # a personal name the release check flags (NGE job codes are not personal)
+        done = git(dir, 'commit', '-qm', f'a fix by {word}', name='Fred', wrap=False)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn('commit refused', done.stderr)
         self.assertEqual(git(dir, 'commit', '-qm', 'a fix', name='Fred', wrap=False).returncode, 0)

@@ -85,7 +85,7 @@ export function playState(tracks = []) {
   const halted = prod.find((r) => r.status === 'halted')
   if (halted) return cell(`Halted ${named(halted)}`, { tone: 'bad', version: halted.name || '', waits: 'owner', next: 'Decide: resume the rollout, or ship a fix' })
   const rolling = prod.find((r) => r.status === 'inProgress')
-  if (rolling) return cell(`Rolling out ${named(rolling)} to ${Math.round((Number(rolling.userFraction) || 0) * 100)}%`, { tone: 'go', version: rolling.name || '', waits: 'owner', next: 'Your yes to raise the rollout, once the numbers hold', detail: 'Google does not say whether a release is in review; a release it has not shown yet is probably in review.' })
+  if (rolling) return cell(`Rolling out ${named(rolling)} to ${Math.round((Number(rolling.userFraction) || 0) * 100)}%`, { tone: 'go', version: rolling.name || '', waits: 'store', next: 'A release made on the Launch page is raised by itself while crashes stay under Google\'s line', detail: 'Google does not say whether a release is in review; a release it has not shown yet is probably in review.' })
   const live = prod.find((r) => r.status === 'completed')
   if (live) return cell(`Live ${named(live)}`, { tone: 'ok', version: live.name || '' })
   for (const track of PLAY_TRACKS.slice(1)) {
@@ -242,6 +242,14 @@ export function tellState({ product, channel, state: said, tone = 'wait', waits 
  * store images, the checks run and it is uploaded to the stores' testing lanes; nothing is sent for review before the
  * owner's yes at the track's gate. One release at a time per product.
  */
+/** A release's failures past their rounds go to the ruler, else the lead: the crew's lead is named when the plan names neither. */
+async function leadInput(co, inputs, options) {
+  if (inputs.ruler || inputs.lead) return {}
+  const bots = await call(`/companies/${co}/agents`, options).catch(() => [])
+  const lead = (Array.isArray(bots) ? bots : []).filter((b) => b.status !== 'terminated').find((b) => b.role === 'ceo') || (Array.isArray(bots) ? bots : []).find((b) => !b.reportsTo && b.status !== 'terminated')
+  return lead ? { lead: lead.name } : {}
+}
+
 export async function startRelease(name, { plan = readPlan(), file = stateFile(), now = Date.now(), ...options } = {}) {
   const product = plan.products.find((p) => p.name === name)
   if (!product) throw new EngineError(404, 'That product is not in the launch plan')
@@ -260,7 +268,10 @@ export async function startRelease(name, { plan = readPlan(), file = stateFile()
   const request = await call(`/companies/${co}/requests`, { ...options, method: 'POST', body: {
     track: plan.release?.track || 'release-app', title: `Release ${name}`, ...(project ? { projectId: project.id } : {}),
     words: `Release ${name} to ${[play && 'Google Play', bundle && 'the App Store'].filter(Boolean).join(' and ')}.${product.note ? `\n\n${product.note}` : ''}`,
-    inputs: { ...(plan.release?.inputs || {}), package: play, bundle },
+    inputs: { ...(await leadInput(co, plan.release?.inputs || {}, options)), ...(plan.release?.inputs || {}), package: play, bundle,
+      // The store-rules scan checks the laws of the countries it ships to and of what it does (docs/launch.md).
+      ...(Array.isArray(product.regions) && product.regions.length ? { regions: product.regions.join(',') } : {}),
+      ...(Array.isArray(product.features) && product.features.length ? { features: product.features.join(',') } : {}) },
   } })
   state.releases[name] = { requestId: request.id, jobCode: request.jobCode || '', at: now }
   state.history.unshift({ at: now, product: name, channel: play ? 'play' : 'appstore', from: '', to: `Release ${request.jobCode || ''} started`, how: 'told', by: 'owner' })

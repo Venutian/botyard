@@ -11,7 +11,7 @@ import * as THREE from 'three'
 import { DEMO_BRAIN, brainFolder, brainNote, brainRoute, frontmatter, looksSecret, newNote, readBrain, saveNote, setBrainFolder } from '../server/lib/brain.mjs'
 import { matches } from '../src/ui/brain-map.js'
 import { RADIUS, SHAPE, brainDust, fieldLayout } from '../src/ui/brain-layout.js'
-import { clampBox, edgePoint, layoutTitles, nearestNote, placeExcerpt, zoomFactor } from '../src/ui/brain-field.js'
+import { clampBox, edgePoint, layoutTitles, nearestNote, placeExcerpt, titlesAt, zoomFactor, DAY_INKS } from '../src/ui/brain-field.js'
 
 const demo = DEMO_BRAIN()
 
@@ -103,6 +103,30 @@ test('owner only: a bot\'s run, a script\'s key or a bot\'s pass is refused, on 
   }
 })
 
+test('the demo\'s own made-up vault may be read by a bot (its screenshots), never written; a real folder stays the owner\'s', async () => {
+  const saved = { ...process.env }
+  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-real-'))
+  fs.writeFileSync(path.join(real, 'a.md'), '# A real note\n')
+  delete process.env.BOTYARD_REFUSE_BOTS
+  process.env.BOTYARD_DEMO = '1'
+  try {
+    process.env.BOTYARD_BRAIN_DIR = demo
+    assert.equal((await ask({ bot: 'run-1' })).status, 200, 'the demo map, for a bot-run browser')
+    assert.equal((await ask({ bot: 'run-1', pathname: '/api/studio/brain/note' })).status, 404, 'past the guard: a note with no id is not found, not refused')
+    assert.equal((await ask({ bot: 'run-1', pathname: '/api/studio/brain/note', method: 'POST' })).status, 403, 'a bot never writes, even the demo')
+    assert.equal((await ask({ bot: 'run-1', pathname: '/api/studio/brain/folder', method: 'POST' })).status, 403, 'nor moves the folder')
+    assert.equal((await ask({ headers: { 'x-botyard-script': 'k' } })).status, 403, 'a script key is refused everywhere')
+    process.env.BOTYARD_BRAIN_DIR = real
+    assert.equal((await ask({ bot: 'run-1' })).status, 403, 'a demo pointed at a real folder: refused as ever')
+    delete process.env.BOTYARD_DEMO
+    process.env.BOTYARD_BRAIN_DIR = demo
+    assert.equal((await ask({ bot: 'run-1' })).status, 403, 'the demo vault outside the demo: refused as ever')
+  } finally {
+    process.env = saved
+    fs.rmSync(real, { recursive: true, force: true })
+  }
+})
+
 test('the field: every note inside the brain, near its own lobe, the same every time; search matches every word', () => {
   const b = readBrain(demo)
   const one = fieldLayout(b)
@@ -142,6 +166,25 @@ test('the zoom helpers: which neurons get labels as the camera comes closer', ()
   assert.equal(zoomFactor(140), 1, 'full zoom right inside the brain')
   assert.ok(zoomFactor(300) > 0 && zoomFactor(300) < 1, 'labels begin under about 300')
   assert.ok(zoomFactor(310) > zoomFactor(340), 'closer means more zoom')
+})
+
+test('which neurons get titles at a camera distance: none far off, then the nearest lit ones first, never more than twelve', () => {
+  const w = 1440
+  const h = 900
+  // Twenty neurons in a row across the stage, each 30 px apart and 10 units further from the camera than the last;
+  // n3 and n7 are dimmed by a search, so they never get a title.
+  const cands = Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, x: 60 + i * 66, y: 450, d: 50 + i * 10, inFrame: true, w: 60, h: 23, light: i === 3 || i === 7 ? 0.12 : 1 }))
+  // Shuffled, so the order out is the helper's own and not the input's.
+  const mixed = [...cands].reverse()
+  const ids = (dist) => titlesAt(dist, mixed, { w, h, max: 12, least: 6 }).map((s) => s.id)
+  assert.deepEqual(ids(520), [], 'the default view: no titles')
+  assert.deepEqual(ids(360), [], 'still none at the edge of the zoom')
+  const near = ids(200)
+  assert.equal(near.length, 12, 'twelve at most, though eighteen are lit')
+  assert.deepEqual(near, ['n0', 'n1', 'n2', 'n4', 'n5', 'n6', 'n8', 'n9', 'n10', 'n11', 'n12', 'n13'], 'nearest first, dimmed ones skipped')
+  assert.deepEqual(ids(290), near, 'the same choice anywhere inside the zoom: distance gates the titles, nearness orders them')
+  const five = mixed.filter((c) => ['n0', 'n1', 'n2', 'n3', 'n4'].includes(c.id))
+  assert.deepEqual(titlesAt(200, five, { w, h, max: 12, least: 6 }).map((s) => s.id), ['n0', 'n1', 'n2', 'n4'], 'fewer than twelve lit: every lit one')
 })
 
 test('the nearest note prefers one on the stage, and falls back to the nearest of all', () => {
@@ -208,6 +251,25 @@ test('a pooled plate that is hidden is not painted: the hidden rule beats the pl
   const label = css.slice(css.indexOf('.brainmap .bf-node-label {'))
   assert.ok(css.indexOf('.bf-node-label[hidden]') > css.indexOf('.brainmap .bf-node-label {'), 'it comes after the rule that sets display: inline-flex')
   assert.match(label, /display: inline-flex/)
+})
+
+test('the day inks read on the pale day window: each area colour is at least 3:1 on #b9c2ce', () => {
+  const lum = (hex) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+    assert.ok(m, `${hex} is a six-digit hex colour`)
+    const n = parseInt(m[1], 16)
+    const chan = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+      const s = v / 255
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * chan[0] + 0.7152 * chan[1] + 0.0722 * chan[2]
+  }
+  const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
+  assert.equal(DAY_INKS.length, 10, 'one ink per area slot')
+  for (const ink of DAY_INKS) {
+    const r = ratio(ink, '#b9c2ce')
+    assert.ok(r >= 3, `${ink} on #b9c2ce is ${r.toFixed(2)}:1, below 3:1`)
+  }
 })
 
 test('the owner edits a note: saved whole, refused when it changed meanwhile or holds a secret; a new note goes to inbox/', () => {

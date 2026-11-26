@@ -2,6 +2,7 @@
 import { AppState, Platform } from 'react-native';
 import { normalizeHost, pickWay, ways, unreachable } from './connection';
 import type { Edge, Route, Way } from './connection';
+import { readView, viewPath } from './ownView';
 
 export { normalizeHost, wayLabel, ways, unreachable } from './connection';
 export type { Edge, Route, Way } from './connection';
@@ -115,6 +116,8 @@ export type Summary = {
   plans?: Plans;
   needsYou: NeedsYou[];
   running: Job[];
+  /** Jobs marked in progress with no run going (an older door leaves it out). */
+  stalled?: number;
   queued: Job[];
   finished: Job[];
   sessions: Session[];
@@ -359,7 +362,7 @@ export const launchAction = (c: Connection, body: { action: 'check' } | { action
 export type TrackStep = { id: string; kind: 'bot' | 'script' | 'gate' | 'track'; title: string; bot?: string; ruling?: boolean; needs: string[]; leaves: string[] };
 export type TrackLine = { from: string; to: string; on: 'pass' | 'fail' | 'always'; rounds?: number; then?: string };
 export type TrackInfo = { id: string; key: string; title: string; description: string; version: number; builtIn: boolean; steps: TrackStep[]; lines: TrackLine[]; delivers: string };
-export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; costUsd: number; cost: string; updatedAt: string };
+export type RequestRow = { id: string; job: string; jobId: string; title: string; track: string; status: string; state: string; at: string; tripId: string; tripStatus: string; waitsForOwner: boolean; reason: string; refused?: string; costUsd: number; cost: string; updatedAt: string };
 export type TripStep = TrackStep & {
   state: string; tries: number; current: boolean; verdict: string; findings: string; summary: string; leftNames: string[]; left: Record<string, unknown>;
   numbers: Record<string, unknown>; job: string; jobId: string; note: string; handedFindings: string; costUsd: number; cost: string; startedAt: string; finishedAt: string;
@@ -369,6 +372,8 @@ export type Trip = {
   track: { key: string; version: number; title: string; delivers: string; main: string }; lines: TrackLine[]; steps: TripStep[]; cost: string; costUsd: number;
   request: RequestRow; gate: { step: string; title: string; ask?: { prompt: string; accept: string; reject: string } | null; backTo: { id: string; title: string }[] } | null;
   can: { pause: boolean; resume: boolean; stop: boolean; rerun: string[] };
+  /** Not landed, and why; and what a ruling waived for work that did land. */
+  refusal?: { reason: string; detail: string; why: string; at: string } | null; waivers?: { by: string; reason: string; waived: string; at: string }[];
 };
 export type TripAction = 'approve' | 'back' | 'context' | 'rerun' | 'pause' | 'resume' | 'stop';
 export const getTracks = (c: Connection) => call<{ tracks: TrackInfo[]; requests: RequestRow[] }>(c, '/tracks');
@@ -467,13 +472,17 @@ export const requestId = () =>
 
 /** Mark "Needs you" cards read or archived; the map on the PC shows the same marks. */
 /** Pages of the owner's own on the PC (their own-pages folder): the list, and a page's own calls to its server file. */
-export type OwnPage = { name: string; title: string; does: string };
+/** `phone`: the page's server answers `GET /phone` with a view the app draws (src/ownView.ts). */
+export type OwnPage = { name: string; title: string; does: string; phone?: boolean; icon?: string };
 export const getOwnPages = (c: Connection) => call<{ pages: OwnPage[] }>(c, '/own');
 /** A call to one own page's server file, `/own/<page>/api/...`. A studio's own screens use this. */
 export const ownCall = <T>(c: Connection, path: string, method = 'GET', body?: unknown) => {
   if (!/^\/own\/[a-z0-9][a-z0-9-]{0,31}\/api(\/|$)/.test(path)) throw new Error('Not an own page\'s call');
   return call<T>(c, path, method, body);
 };
+/** A page's phone view, read through `readView` so only what the app knows is drawn. */
+export const getOwnView = async (c: Connection, page: string, choices: Record<string, string>) =>
+  readView(await ownCall<unknown>(c, `/own/${page}/api${viewPath(choices)}`));
 export const markCards = (c: Connection, keys: string[], change: { read?: boolean; archived?: boolean }) =>
   call(c, '/cards', 'POST', { keys, ...change });
 
@@ -725,6 +734,15 @@ export type TrayItem = {
   answers?: TrayAnswer[]; said?: string; reason?: string; review?: ReviewSend; heldAt: number; error?: string;
 };
 export type TrayHold = Omit<TrayItem, 'key' | 'heldAt' | 'error'>;
+// ── the decision digest: five cards at most, the owner's own first ───────────────────
+/** A card that waits: `must` is the owner's alone; `default` carries its answer and when that applies by itself. */
+export type DigestCard = { id: string; jobId: string; job: string; chat: boolean; botId: string; bot: string; title: string; question: string; kind: 'must' | 'default'; why: string; default: string; appliesAt: string | null; count: number; line: string; tripId?: string };
+/** An answer the engine applied by default, and whether it can still be taken back. */
+export type DigestApplied = { id: string; jobId: string; job: string; title: string; answer: string; appliedAt: string; reverseUntil: string; canReverse: boolean; line: string };
+export type Digest = { cards: DigestCard[]; applied: DigestApplied[]; waiting: number; must: number; folded: number; more: number; notes: string; at: string };
+export const getDigest = (c: Connection) => call<Digest>(c, '/digest');
+export const takeBackDefault = (c: Connection, jobId: string, cardId: string) => call<Digest>(c, '/digest', 'POST', { action: 'take-back', jobId, cardId });
+
 export const getTray = (c: Connection) => call<{ items: TrayItem[] }>(c, '/tray');
 export const getTrayQuestions = (c: Connection, which: { job?: string; bot?: string }) =>
   call<{ jobId: string; job: string; questions: TrayQuestion[] }>(c, `/tray/questions?${which.bot ? `bot=${encodeURIComponent(which.bot)}` : `job=${encodeURIComponent(which.job || '')}`}`);

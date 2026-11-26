@@ -103,7 +103,8 @@ export function readEnvFile(file) {
 /** Where a command is, looked for the way a shell does; null when this computer does not have it. */
 export function findCommand(name, env = process.env) {
   if (!name) return null
-  const exts = process.platform === 'win32' ? ['', ...(env.PATHEXT || '.EXE;.CMD;.BAT').split(';')] : ['']
+  // On Windows a bare `opencode` beside `opencode.cmd` is npm's script for Unix shells, which cannot be run: the endings come first.
+  const exts = process.platform === 'win32' ? (/\.[a-z0-9]+$/i.test(name) ? [''] : (env.PATHEXT || '.EXE;.CMD;.BAT').split(';').filter(Boolean)) : ['']
   const runnable = (file) => {
     try { if (!fs.statSync(file).isFile()) return false; fs.accessSync(file, fs.constants.X_OK); return true } catch { return false }
   }

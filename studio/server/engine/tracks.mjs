@@ -17,6 +17,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { ownerOnly, ownerOrScript } from './caller.mjs'
+import { askText, ownerOf } from './card-kind.mjs'
 import { Refused, addComment, createCard, createJob, note, patchJob, settleCard } from './write.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -33,12 +34,28 @@ export const HANDED = ['findings', 'note', 'base']
 const NAME = /^[a-z][a-z0-9_-]{0,39}$/
 /** The last line of every job a bot step makes: the crew's own scripts leave such a job to its track. */
 export const TRACK_MARK = 'TRACK STEP:'
+/** What a title says beyond its goal: a fix round, a check, a track's step or round ("Crew: X · Build (round 3)"). */
+const GOAL_NOISE = /^(?:fix \d+ of |check [a-z]+-\d+(?: \([^)]*\))?: |review [a-z]+-\d+: )|\s*·.*$|\s*\(round \d+\)$/i
+/** The goal a title works on: "Fix 2 of Crew: X", "Crew: X · Build" and "Crew: X" share one. */
+export function goalOf(title) {
+  let text = String(title || '').trim()
+  for (let n = 0; n < 3; n++) text = text.replace(GOAL_NOISE, '').trim()
+  return text.toLowerCase()
+}
 /** Small tools a track's script steps may call: `node "$BOTYARD_TRACK_TOOLS/land.mjs"`. */
 export const TRACK_TOOLS = path.join(here, 'track-tools')
 const MOST_STEPS = 40
 const MOST_ROUNDS = 20
+/**
+ * The most tries one step of one trip gets, however many lines send work back to it (24 Nov 2026: each line kept its
+ * own count, so a build was tried 11 times and ruled on 8). A version may set `maxTries`; past it the trip is stuck,
+ * which blocks its request's job with the reason, for a person to decide.
+ */
+const MAX_TRIES = 5
 const VALUE_CHARS = 20_000
 const LOST_AFTER_MS = 20_000
+// A bot step whose last run ended this long ago, with the job still open and no run going or held, was left open.
+const LEFT_OPEN_MS = 6 * 60 * 60 * 1000
 /** Trips still moving: the engine looks at these on every turn. */
 const MOVING = ['running', 'not-in-main']
 
@@ -274,7 +291,7 @@ export const BUILD_TRACK = {
     { id: 'build', kind: 'bot', bot: '$builder', title: 'Build', needs: ['brief'], leaves: ['commit', 'report'], words: 'Build what the brief asks, commit it on this job\'s branch, and end your report with COMMIT: <sha> and OUTCOME: MET or NOT MET.' },
     { id: 'tests', kind: 'script', title: 'Tests', needs: ['commit'], command: 'sh -c "${BOTYARD_IN_TEST_COMMAND:-echo No test command is set for this project.}"', timeoutSec: 1800 },
     { id: 'check', kind: 'bot', bot: '$checker', title: 'Check', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'Check the build against the brief: run what proves it, read the change. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, what must change.' },
-    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: [], leaves: ['verdict'], words: 'A step failed past its rounds. You decide in the owner\'s place: read the findings and the work, then end with one verdict. VERDICT: PASS when the work is good enough as it is (it goes on to land). VERDICT: FAIL followed by your plan, when it can be fixed: the plan goes to the builder as its note, so name the commit to start from, what to change and how it will be proven. VERDICT: STOP with the reason, when it should not go on. VERDICT: ASK OWNER followed by the options and your pick, only when you truly cannot decide or it needs the owner (a spend, a sign-in, a final release).' },
+    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: [], leaves: ['verdict'], words: 'A step failed past its rounds. You decide in the owner\'s place: read the findings and the work, then end with one verdict. VERDICT: PASS when the work is good enough as it is (it goes on to land). When the check or the scored review did not pass and you let the work land anyway, add a line WAIVER: what you waive (the check, the review, or both) and why; without that line the land step refuses it, and a waiver that does not name the review does not cover it. VERDICT: FAIL followed by your plan, when it can be fixed: the plan goes to the builder as its note, so name the commit to start from, what to change and how it will be proven. VERDICT: STOP with the reason, when it should not go on. VERDICT: ASK OWNER followed by the options and your pick, only when it needs the owner: a spend, deleting work that is not merged, a final store release, final art or a sign-in. Everything else you decide.' },
     { id: 'review', kind: 'bot', bot: '$reviewer', orBot: '$checker', title: 'Scored review', onlyFor: 'public', needs: ['brief', 'commit'], leaves: ['verdict'], words: 'This work will be seen by the public. Score it against the bar that matches what changed: the page bar for pages, the kit bar for store listings, art and marketing kits, the release bar for release notes and public releases. Look at the real result (screenshots at phone and desktop width for pages), not only the code. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
     { id: 'owner', kind: 'gate', title: 'The owner decides', words: 'The ruler could not decide this one and asks you, with the options and the pick below.' },
     { id: 'land', kind: 'script', title: 'Land in main', needs: ['commit'], leaves: ['commit'], command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"', timeoutSec: 3600 },
@@ -303,32 +320,44 @@ export const BUILD_TRACK = {
 export const RELEASE_TRACK = {
   key: 'release-app',
   title: 'Release to the stores',
-  description: 'Build, write the listing, make and score the store images, check what a store would refuse, upload to testing, your yes, send for review, watch it go live.',
+  description: 'Build, write the listing, make and score the store images, scan the app against the store rules, check what a store would refuse, upload to testing, your one yes, send for review, go live by itself.',
   delivers: 'nothing',
   inputs: ['builder', 'writer', 'artist'],
-  optional: ['reviewer', 'package', 'bundle', 'notes', 'rollout', 'watch_hours', 'watch_every_ms'],
-  defaults: { reviewer: '', package: '', bundle: '', notes: '', rollout: '0.2', watch_hours: '20', watch_every_ms: '' },
+  optional: ['reviewer', 'ruler', 'lead', 'package', 'bundle', 'notes', 'rollout', 'watch_hours', 'watch_every_ms', 'live_every_ms', 'regions', 'features'],
+  // regions: the countries it ships to, for the store-rules scan (US, GB, DE and SE when none are named); features: what
+  // the app does that laws name (personal_data, subscriptions, kids, ai, ...). A failure past its rounds is the ruler's.
+  defaults: { reviewer: '', ruler: '', lead: '', package: '', bundle: '', notes: '', rollout: '0.2', watch_hours: '20', watch_every_ms: '', live_every_ms: '', regions: '', features: '' },
   steps: [
     { id: 'build', kind: 'bot', bot: '$builder', title: 'Build the release', leaves: ['aab', 'version', 'build', 'ios_build'], words: 'Build this app\'s next release for the stores named below (Google Play when it has a package, the App Store when it has a bundle id). Raise the version and the build number above what each store already holds; commit that raise on this job\'s branch. Build the Android App Bundle (.aab) for release, signed with the app\'s upload key, and, when the app ships on iOS, the iOS build through the app\'s own cloud build, sending it to TestFlight. Leave in your last comment: AAB: <full path of the .aab on this computer>, VERSION: <version name>, BUILD: <build number / version code>, IOS_BUILD: <the iOS build number, or none>.' },
     { id: 'listing', kind: 'bot', bot: '$writer', title: 'Write the store listing', needs: ['version'], leaves: ['listing'], words: 'Write this release\'s store listing and save it as the document `listing`, as JSON: {"language": "en-US", "play": {"title", "short", "full", "whatsNew"}, "appstore": {"name", "subtitle", "keywords", "description", "promo", "whatsNew"}, "privacyUrl", "supportUrl"}. Keep each store\'s limits (Play: title 30, short 80, full 4000, what\'s new 500; App Store: name 30, subtitle 30, keywords 100, description 4000, promo 170). Every claim must be true of the app as it is: read its code. No placeholder text. Leave out a store the app is not on.' },
     { id: 'art', kind: 'bot', bot: '$artist', title: 'Make the store images', needs: ['listing'], leaves: ['art'], words: 'Make this release\'s store images from the real app: screenshots captured on the test phone (no mock-ups), then each store\'s set at its exact sizes: Play icon 512 x 512, feature graphic 1024 x 500, 2 to 8 phone screenshots; App Store at least 3 iPhone 6.9 inch screenshots (1320 x 2868). Put them all in one folder and leave ART: <the folder\'s full path>.' },
     { id: 'score', kind: 'bot', bot: '$reviewer', orBot: '$writer', title: 'Score the listing and images', needs: ['listing', 'art'], leaves: ['verdict'], words: 'Score this release\'s store listing (the document `listing`) and its images (the folder named below) against the store kit bar: true to the app, clear, no slop, each store\'s sizes and limits. End with VERDICT: PASS or VERDICT: FAIL and, on a fail, each thing that must change.' },
+    { id: 'rule', kind: 'bot', bot: '$ruler', orBot: '$lead', title: 'Ruling', ruling: true, needs: [], leaves: ['verdict'], words: 'A release step failed past its rounds. You decide in the owner\'s place: read the findings and the work, then end with one verdict. VERDICT: PASS when it is good enough as it is (it goes on to the store-rules scan and the checks again). VERDICT: FAIL followed by your plan, when it can be fixed: the plan goes to the builder as its note. VERDICT: STOP with the reason, when this release should not go on. VERDICT: ASK OWNER followed by the options and your pick, only when it needs the owner: a spend, a sign-in, a key, a form only a person may fill. Never waive a critical store-rules finding.' },
+    { id: 'decide', kind: 'gate', title: 'The owner decides', words: 'The ruler could not decide this one and asks you, with the options and the pick below.' },
+    { id: 'comply', kind: 'script', title: 'Scan against the store rules', needs: ['version'], leaves: ['rules', 'statements'], command: 'node "$BOTYARD_TRACK_TOOLS/release-comply.mjs"', timeoutSec: 900 },
     { id: 'ready', kind: 'script', title: 'Check what a store would refuse', needs: ['listing', 'art'], leaves: ['ready'], command: 'node "$BOTYARD_TRACK_TOOLS/release-ready.mjs"', timeoutSec: 600 },
     { id: 'upload', kind: 'script', title: 'Upload to testing', needs: ['version'], leaves: ['uploaded', 'play_code'], command: 'node "$BOTYARD_TRACK_TOOLS/release-upload.mjs"', timeoutSec: 3600 },
-    { id: 'owner', kind: 'gate', title: 'Send it for review?', needs: ['listing', 'ready', 'uploaded'], words: 'The release is built, its listing and images are scored, the checks pass and it is on the stores\' testing lanes. Yes sends it for review: the listing goes onto each store, Play gets a staged rollout, the App Store version goes to Apple.' },
+    { id: 'owner', kind: 'gate', title: 'Release it?', needs: ['rules', 'ready', 'uploaded'], words: 'Your one yes for this release. It is built, its listing and images are scored, the store-rules scan and the store checks pass, and it is on the stores\' testing lanes. Yes does the rest by itself: the listing goes onto each store and it is sent for review; Apple releases it once approved, phased over seven days; Play rolls it out to 20%, then 50% after a day and everyone after three, halting by itself if crashes pass Google\'s line. Your yes also states what the store rules below list for you to state.' },
     { id: 'submit', kind: 'script', title: 'Send for review', needs: ['listing', 'uploaded'], leaves: ['sent'], command: 'node "$BOTYARD_TRACK_TOOLS/release-submit.mjs"', timeoutSec: 900 },
     { id: 'watch', kind: 'script', title: 'Watch the review', needs: ['sent'], leaves: ['outcome'], command: 'node "$BOTYARD_TRACK_TOOLS/release-watch.mjs"', timeoutSec: 24 * 3600 },
+    { id: 'live', kind: 'script', title: 'Go live', needs: ['sent'], leaves: ['live'], command: 'node "$BOTYARD_TRACK_TOOLS/release-live.mjs"', timeoutSec: 5 * 24 * 3600 },
   ],
   lines: [
-    { from: 'build', to: 'listing', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'owner' },
-    { from: 'listing', to: 'art', on: 'pass' }, { from: 'listing', to: 'owner', on: 'fail' },
-    { from: 'art', to: 'score', on: 'pass' }, { from: 'art', to: 'owner', on: 'fail' },
-    { from: 'score', to: 'ready', on: 'pass' }, { from: 'score', to: 'listing', on: 'fail', rounds: 2, then: 'owner' },
-    { from: 'ready', to: 'upload', on: 'pass' }, { from: 'ready', to: 'build', on: 'fail', rounds: 2, then: 'owner' },
-    { from: 'upload', to: 'owner', on: 'pass' }, { from: 'upload', to: 'owner', on: 'fail' },
+    { from: 'build', to: 'listing', on: 'pass' }, { from: 'build', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'listing', to: 'art', on: 'pass' }, { from: 'listing', to: 'listing', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'art', to: 'score', on: 'pass' }, { from: 'art', to: 'art', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'score', to: 'comply', on: 'pass' }, { from: 'score', to: 'listing', on: 'fail', rounds: 2, then: 'rule' },
+    // The store-rules scan's findings go to the builder with each fix; past its rounds, to the ruler, never the owner.
+    { from: 'comply', to: 'ready', on: 'pass' }, { from: 'comply', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    { from: 'ready', to: 'upload', on: 'pass' }, { from: 'ready', to: 'build', on: 'fail', rounds: 2, then: 'rule' },
+    { from: 'upload', to: 'owner', on: 'pass' }, { from: 'upload', to: 'upload', on: 'fail', rounds: 1, then: 'rule' },
+    // The owner's one card: everything after it runs by itself.
     { from: 'owner', to: 'submit', on: 'pass' },
-    { from: 'submit', to: 'watch', on: 'pass' }, { from: 'submit', to: 'owner', on: 'fail' },
-    { from: 'watch', to: 'build', on: 'fail', rounds: 1, then: 'owner' },
+    { from: 'submit', to: 'watch', on: 'pass' }, { from: 'submit', to: 'rule', on: 'fail' },
+    { from: 'watch', to: 'live', on: 'pass' }, { from: 'watch', to: 'build', on: 'fail', rounds: 1, then: 'rule' },
+    { from: 'live', to: 'rule', on: 'fail' },
+    { from: 'rule', to: 'comply', on: 'pass' }, { from: 'rule', to: 'build', on: 'fail', rounds: 2, then: 'rule' }, { from: 'rule', to: 'decide', on: 'ask' },
+    { from: 'decide', to: 'comply', on: 'pass' },
   ],
 }
 
@@ -391,9 +420,17 @@ export function startRequest(store, companyId, body = {}, { now = Date.now(), ac
   if (missing.length) throw new Refused(400, `This track needs ${missing.join(', ')} from the request`)
   let job = body.jobId ? store.object('SELECT raw FROM jobs WHERE id = ? OR identifier = ?', body.jobId, body.jobId) : null
   if (body.jobId && !job) throw new Refused(400, 'That job does not exist')
+  // A track's own step is not a request: a track started on it would run the same work twice (24 Nov 2026: "· Build · Build").
+  if (job && String(job.description || '').includes(TRACK_MARK)) throw new Refused(409, `${job.identifier} is a step of a track already: ask for the work on its request instead`)
   if (job && store.row("SELECT id FROM requests WHERE job_id = ? AND status NOT IN ('done', 'stopped')", job.id)) throw new Refused(409, 'That job already has a request moving')
   const projectId = body.projectId || job?.projectId || null
   if (version.delivers === 'change' && !projectId && !given.repo) throw new Refused(400, 'This track delivers a change: say which project (or repo) it lands in')
+  // One request a goal (24 Nov 2026: one goal asked for up to four times, each running its own track): the one moving
+  // already carries it, and findings go to it instead.
+  const goal = goalOf(job?.title || words(body.title, 500))
+  const twin = goal && store.objects("SELECT raw FROM requests WHERE company_id = ? AND status IN ('working', 'not-in-main')", companyId)
+    .find((r) => (r.projectId || null) === (projectId || null) && r.jobId !== job?.id && goalOf(r.title) === goal)
+  if (twin) throw new Refused(409, `${twin.jobCode || 'A request'} already carries this goal on its track: send it the findings or a note instead of asking again`)
   if (!job) job = createJob(store, companyId, { title: words(body.title, 500) || track.title, description: words(body.words, 40_000), projectId, status: 'in_progress' }, { now, actor })
   const request = {
     id: randomUUID(), companyId, projectId, jobId: job.id, jobCode: job.identifier, trackId: track.id, trackKey: track.key, version: version.version,
@@ -511,6 +548,9 @@ async function startStep(store, trip, request, version, step, row, values, { dat
   if (step.onlyFor === 'public') {
     const seen = await publicOf(store, request, version, inputs, io)
     if (!seen.public) return { ...row, status: 'passed', snapshot: { verdict: 'pass', leaves: {}, findings: '', summary: `Not run: ${seen.why}`, skipped: true }, startedAt: iso(now), finishedAt: iso(now) }
+    // The ruling that stands waived the review by name: it is not run again, and the land step keeps the waiver.
+    const waived = standingWaiver(store, trip, version)
+    if (coversReview(waived)) return { ...row, status: 'passed', snapshot: { verdict: 'pass', leaves: {}, findings: '', summary: `Not run: the ruling waived it. ${waived}`, skipped: true, waived: true }, startedAt: iso(now), finishedAt: iso(now) }
     inputs.public_why = seen.why
     row = { ...row, public: { kind: seen.kind || 'work', why: seen.why } }
   }
@@ -528,8 +568,10 @@ async function startStep(store, trip, request, version, step, row, values, { dat
     return { ...row, status: 'working', jobId: job.id, jobCode: job.identifier, botId: bot.id, startedAt: iso(now) }
   }
   if (step.kind === 'script') {
-    const refused = landRefusal(store, trip, version, step, row)
-    if (refused) return { ...row, status: 'failed', snapshot: { verdict: 'fail', leaves: {}, findings: refused, summary: refused }, startedAt: iso(now), finishedAt: iso(now) }
+    // Nothing lands without its passes: a refusal is a failed try that says why, and it never becomes a card.
+    const guard = await landGuard(store, trip, request, version, step, inputs, io)
+    if (guard.refusal) return { ...row, status: 'failed', snapshot: { verdict: 'fail', leaves: {}, findings: guard.refusal, summary: guard.refusal, refused: { why: guard.why, ...(guard.reviewStep ? { reviewStep: guard.reviewStep } : {}) } }, startedAt: iso(now), finishedAt: iso(now) }
+    if (guard.waiver) row = { ...row, waiver: guard.waiver }
     const dir = path.join(dataDir, 'trips', trip.id, row.id)
     fs.mkdirSync(dir, { recursive: true })
     const cwd = [inputs.workdir, projectFolder(store, request.projectId)].find((d) => d && fs.existsSync(d)) || dir
@@ -593,7 +635,7 @@ export function gateCard(version, step, row, trip, request, inputs) {
   if (blocked) {
     const base = named.length === 1 ? named[0] : ''
     yes = { label: `Send it back to ${lower(maker.title)}`, act: 'back', backTo: maker.id, ...(base ? { base } : {}) }
-    yesText = `${upper(maker.title)} starts again${base ? ` from ${base.slice(0, 12)}, the commit the findings name,` : ''} with the findings above as its note. ${missing.length ? `There is nothing to ${lower(next.title)} yet: ${missing.includes('commit') ? 'no build passed' : `nothing left ${missing.join(', ')}`}.` : `The work did not pass, so going on to ${lower(next.title)} is not offered here; to do it anyway, run its trip again from that step.`}`
+    yesText = `${upper(maker.title)} starts again${base ? ` from ${base.slice(0, 12)}, the commit the findings name,` : ''} with the findings above as its note. ${missing.length ? `There is nothing to ${lower(next.title)} yet: ${missing.includes('commit') ? 'no build passed' : `nothing left ${missing.join(', ')}`}.` : `The work did not pass, so going on to ${lower(next.title)} is not offered here.`}`
     no = { label: 'Stop it', act: 'stop' }
     noText = 'The request stops here and nothing is merged. Its jobs and branches are kept.'
   } else {
@@ -610,26 +652,108 @@ export function gateCard(version, step, row, trip, request, inputs) {
   const made = [...new Set([...step.needs, ...Object.keys(row.beforeLeaves || {})])].filter((n) => !['workdir', 'branch', 'findings'].includes(n) && inputs[n] !== undefined && !same(inputs[n]))
   const work = made.map((n) => `${n}: ${words(inputs[n], 600)}`).join('\n')
   const prompt = [why, work && `What there is to look at:\n${work}`, `${yes.label}: ${yesText}\n${no.label}: ${noText}`].filter(Boolean).join('\n\n')
+  // The card's kind (card-kind.mjs). A yes that starts a script (a landing, a store upload) or ends the request
+  // cannot be taken back by the engine, and an answer the owner took back is asked of the owner alone: those are
+  // `must`. Any other gate carries its yes as the default, applied after a day and taken back by asking again.
+  const held = trip.heldForOwner === step.id
+  const final = yes.act === 'pass' && (!next || next.kind !== 'bot')
+  const owner = held ? { ownerKind: 'must', mustWhy: 'You took back its default answer' } : final ? { ownerKind: 'must', mustWhy: next ? `Its yes starts "${lower(next.title)}", which cannot be undone` : 'Its yes finishes the request' } : { default: 'accept' }
   return {
     kind: 'request_confirmation', title: `Your call: ${[request.jobCode, request.title].filter(Boolean).join(' ')}`.slice(0, 500), summary: prompt.slice(0, 4000),
     continuationPolicy: 'none', idempotencyKey: `trip-step:${row.id}`,
-    payload: { tripId: trip.id, stepId: step.id, rowId: row.id, prompt: prompt.slice(0, 4000), acceptLabel: yes.label, rejectLabel: no.label, yes, no, findings },
+    payload: { tripId: trip.id, stepId: step.id, rowId: row.id, prompt: prompt.slice(0, 4000), acceptLabel: yes.label, rejectLabel: no.label, yes, no, findings, ...owner },
   }
 }
 
+/** A ruling's explicit waiver, in its own words: a line "WAIVER: what is waived and why". '' when it has none. */
+export function waiverIn(text) {
+  const found = /^\s*[*_`#>-]*\s*waiver[*_`]*\s*:\s*[*_`]*\s*(.+?)\s*$/im.exec(String(text || ''))
+  return found ? found[1].replace(/[*_`]+$/, '').trim().slice(0, 1000) : ''
+}
+
+/** Whether a waiver names the scored review: only then does it cover it. */
+export const coversReview = (waiver) => /\b(scored review|the review|review step|the score)\b/i.test(String(waiver || ''))
+
+/** The waiver of the ruling that stands on a trip now (its newest try, passed), or '' when there is none. */
+function standingWaiver(store, trip, version) {
+  const rulings = rowsOf(store, trip.id).filter((r) => r.status !== 'stale' && ['passed', 'failed'].includes(r.status) && version.steps.find((s) => s.id === r.stepId)?.ruling)
+  const last = rulings.sort((a, b) => String(a.finishedAt || a.createdAt).localeCompare(String(b.finishedAt || b.createdAt))).at(-1)
+  return last?.status === 'passed' ? String(last.snapshot?.waiver || '') : ''
+}
+
+/** A step that lands work in main: the land tool's script. Only this step is guarded. */
+const landsWork = (step) => step?.kind !== 'bot' && /land\.mjs/.test(step?.command || '')
+/** A check: a bot step that gives a verdict and is neither the ruling nor the scored review. */
+const isCheck = (step) => step?.kind === 'bot' && !step.ruling && step.onlyFor !== 'public' && (step.id === 'check' || (step.leaves || []).includes('verdict'))
+
 /**
- * The land step's own guard: work whose last check, ruling or scored review failed is not merged, unless the owner
- * ran the trip again from this step with a written reason (its note). A ruler's later PASS counts as the last word.
+ * The land step's own guard (docs/tracks.md, "Nothing lands without its passes"). Work is merged only when
+ *
+ *   every check step of the track passed on the work as it is now,
+ *   no ruling said no (a FAIL or a STOP; an ASK OWNER counts as a no until the owner said yes at the gate), and
+ *   work the public will see has a scored review that passed, kept as a row in `reviews`.
+ *
+ * The one way past a check or a review that did not pass is a waiver: a ruling that passed (or asked the owner, who
+ * said yes) and says so in a line of its own, "WAIVER: what and why". An owner's note on a rerun is not a waiver.
+ * A waiver covers the checks; it covers the scored review only when it names the review. Public work that has no
+ * score and no such waiver is sent to its review step, which starts by itself.
+ *
+ * Returns `{ refusal, why, reviewStep, waiver }`: `refusal` is '' when the work may land; `waiver` is set when it
+ * lands on one, to be kept with the trip.
  */
-export function landRefusal(store, trip, version, step, row) {
-  if (!/land\.mjs/.test(step.command || '')) return ''
-  if (String(row?.inputs?.note || '').trim()) return ''
-  const order = version.steps.map((s) => s.id)
-  const judged = rowsOf(store, trip.id).filter((r) => r.status !== 'stale' && ['check', 'rule', 'review'].includes(r.stepId) && ['passed', 'failed'].includes(r.status) && !r.snapshot?.skipped)
-    .sort((a, b) => String(a.finishedAt || a.createdAt).localeCompare(String(b.finishedAt || b.createdAt)) || order.indexOf(a.stepId) - order.indexOf(b.stepId))
-  const last = judged.at(-1)
-  if (!last || last.status !== 'failed') return ''
-  return `Not landed: the last ${String(last.title || last.stepId).toLowerCase()} failed. To land it anyway, run the trip again from this step with a written reason.\n${words(last.snapshot?.findings, 1500)}`.trim()
+export async function landGuard(store, trip, request, version, step, inputs = {}, io = trackIo) {
+  if (!landsWork(step)) return { refusal: '' }
+  const stepOf = (id) => version.steps.find((s) => s.id === id)
+  const at = (r) => String(r.finishedAt || r.createdAt || '')
+  const all = rowsOf(store, trip.id)
+  const live = all.filter((r) => r.status !== 'stale')
+  const ended = (r) => ['passed', 'failed'].includes(r.status)
+  const newest = (rows) => [...rows].sort((a, b) => at(a).localeCompare(at(b))).at(-1) || null
+  const said = (r) => words(r?.snapshot?.findings || r?.snapshot?.leaves?.verdict, 1200)
+
+  // The ruling: the newest one still standing. A no is a no; an ASK OWNER needs the owner's yes after it.
+  const ruling = newest(live.filter((r) => stepOf(r.stepId)?.ruling && ended(r)))
+  const asked = ruling?.snapshot?.verdict === 'ask'
+  const ownerYes = asked && all.some((r) => r.kind === 'gate' && r.status === 'passed' && at(r) >= at(ruling))
+  if (ruling && ruling.status === 'failed' && !ownerYes) {
+    const how = asked ? 'asked the owner, who has not said yes' : ruling.snapshot?.verdict === 'stop' ? 'said STOP' : 'said no'
+    return { refusal: `Not landed: the ruling ${how}.\n${said(ruling)}`.trim(), why: 'ruling' }
+  }
+  const mayWaive = ruling && (ruling.status === 'passed' || ownerYes)
+  const waiverText = mayWaive ? String(ruling.snapshot?.waiver || '') : ''
+  const waivesReview = coversReview(waiverText)
+
+  // The checks: each one's newest try on this work must have passed.
+  const failed = []
+  for (const check of version.steps.filter(isCheck)) {
+    const row = newest(live.filter((r) => r.stepId === check.id))
+    if (row?.status === 'passed') continue
+    failed.push({ what: `the ${lower(check.title || check.id)} ${row?.status === 'failed' ? 'failed' : 'did not run on this work'}`, said: row?.status === 'failed' ? said(row) : '' })
+  }
+
+  // The scored review: public work needs a passed one, kept in `reviews`.
+  const scoring = version.steps.filter((s) => s.onlyFor === 'public')
+  const seen = await publicOf(store, request, version, inputs, io)
+  if (seen.public) {
+    const scored = newest(live.filter((r) => scoring.some((s) => s.id === r.stepId) && ended(r) && !r.snapshot?.skipped))
+    const kept = scored ? store.object('SELECT raw FROM reviews WHERE id = ?', `track-${scored.id}`) : null
+    if (waivesReview && !(scored?.status === 'passed' && kept?.verdict === 'pass')) {
+      failed.push({ what: `the scored review ${scored ? 'failed' : 'did not run'}`, said: scored ? said(scored) : '' })
+    } else if (!scored || !kept) {
+      // No score on this work at all: the review step starts by itself. A track with no review step cannot land it.
+      if (scoring.length) return { refusal: `Not landed yet: the public will see this work (${seen.why}) and it has no scored review. The review starts now, by itself.`, why: 'review-missing', reviewStep: scoring[0].id }
+      failed.push({ what: `the public will see this work (${seen.why}) and this track has no scored review`, said: '' })
+    } else if (scored.status !== 'passed' || kept.verdict !== 'pass') {
+      failed.push({ what: 'the scored review failed', said: said(scored) })
+    }
+  }
+  if (!failed.length) return { refusal: '' }
+  const what = failed.map((f) => f.what).join('; ')
+  // A waiver covers the checks; the review only when it names it.
+  const review = failed.some((f) => /scored review/.test(f.what))
+  if (waiverText && (!review || waivesReview)) return { refusal: '', waiver: { by: ruling.jobCode || ruling.stepId, rowId: ruling.id, botId: ruling.botId || null, reason: waiverText, waived: what, ...(ownerYes ? { ownerYes: true } : {}) } }
+  const detail = failed.map((f) => f.said).filter(Boolean).join('\n')
+  return { refusal: `Not landed: ${what}. Only a ruling that says "WAIVER: what and why" lets it land as it is${review ? ', and it must name the review to cover it' : ''}.\n${detail}`.trim(), why: review ? 'review' : 'check' }
 }
 
 /** What kind of piece a set of public files is, for counting reviews: kit, release, page or work. */
@@ -657,9 +781,15 @@ function openCardFor(store, request, trip, asked, now) {
   const earlier = store.objects('SELECT raw FROM cards WHERE job_id = ?', request.jobId).filter((c) => c.payload?.tripId === trip.id && String(c.idempotencyKey || '').startsWith('trip-step:'))
   const titled = earlier.length ? { ...asked, title: `${asked.title} (asked ${earlier.length + 1} times)`.slice(0, 500) } : asked
   const open = earlier.find((c) => c.status === 'pending')
-  if (!open) return createCard(store, request.jobId, titled, { now, actor: ENGINE })
+  if (!open) {
+    const made = createCard(store, request.jobId, titled, { now, actor: ENGINE })
+    if (earlier.length && made.asked !== earlier.length + 1) store.put('cards', { ...made, asked: earlier.length + 1 }, { position: store.row('SELECT position FROM cards WHERE id = ?', made.id).position })
+    return made
+  }
   const position = store.row('SELECT position FROM cards WHERE id = ?', open.id).position
-  const card = { ...open, title: titled.title, summary: titled.summary, payload: titled.payload, idempotencyKey: titled.idempotencyKey, updatedAt: iso(now) }
+  const card = { ...open, title: titled.title, summary: titled.summary, payload: titled.payload, idempotencyKey: titled.idempotencyKey, asked: earlier.length + 1, lastAskedAt: iso(now), updatedAt: iso(now) }
+  // A new question starts its day again; the same question asked again keeps the clock it had.
+  if (!open.owner || askText(card) !== askText(open)) card.owner = ownerOf(card, now)
   store.put('cards', card, { position })
   return card
 }
@@ -728,7 +858,16 @@ async function pollStep(store, step, row, { io, now }) {
       const said = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]?.body
       return { verdict: 'fail', leaves: {}, findings: words(said || `The step's job ${job.identifier} is blocked`, VALUE_CHARS) }
     }
-    if (job.status !== 'done') return null
+    if (job.status !== 'done') {
+      // A run that ended well without closing its job leaves the step waiting for ever (25 Nov 2026: six steps "working"
+      // for 3 to 24 hours with no run). Long after its last run it fails, and the track's fail line decides what is next.
+      // A run that was held (a pace or a limit) did not end well: that job is waiting its turn, and is left alone.
+      const live = store.row("SELECT id FROM runs WHERE job_id = ? AND status IN ('running', 'queued') LIMIT 1", job.id)
+      const last = live ? null : store.row('SELECT status, finished_at AS at FROM runs WHERE job_id = ? ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1', job.id)
+      const idle = last?.status === 'succeeded' && last.at ? now - Date.parse(last.at) : 0
+      if (idle >= LEFT_OPEN_MS) return { verdict: 'fail', leaves: {}, findings: `The bot's last run on ${job.identifier} ended ${Math.round(idle / 3_600_000)} hours ago without closing the job: no OUTCOME was left` }
+      return null
+    }
     const docs = new Map(store.rows('SELECT jd.key AS key, d.body AS body FROM job_documents jd JOIN documents d ON d.id = jd.document_id WHERE jd.job_id = ?', job.id).map((d) => [d.key, d.body]))
     const last = store.objects('SELECT raw FROM comments WHERE job_id = ? AND author_agent_id = ? ORDER BY position DESC LIMIT 1', job.id, job.assigneeAgentId || '')[0]
     const left = botLeft(docs, last?.body)
@@ -754,7 +893,9 @@ async function pollStep(store, step, row, { io, now }) {
     }
     const missing = verdict === 'pass' ? step.leaves.filter((n) => n !== 'verdict' && n !== 'report' && leaves[n] === undefined) : []
     if (missing.length) return { verdict: 'fail', leaves, findings: `The step's job ${job.identifier} closed but did not leave ${missing.join(', ')}` }
-    return { verdict, leaves, findings: verdict === 'fail' ? words(docs.get('verdict') || last?.body || said || `The job ${job.identifier} closed without a verdict`, VALUE_CHARS) : '' }
+    // A ruling's waiver is its own line, in its verdict or its last words: kept with the try, never as a value of the trip.
+    const waiver = step.ruling ? waiverIn(docs.get('waiver') ? `WAIVER: ${docs.get('waiver')}` : '') || waiverIn(docs.get('verdict')) || waiverIn(last?.body) : ''
+    return { verdict, leaves, findings: verdict === 'fail' ? words(docs.get('verdict') || last?.body || said || `The job ${job.identifier} closed without a verdict`, VALUE_CHARS) : '', ...(waiver ? { waiver } : {}) }
   }
   if (step.kind === 'script') {
     const result = readJson(path.join(row.folder, 'result.json'))
@@ -855,6 +996,17 @@ function route(store, trip, version, step, row, outcome, now) {
   if (outcome === 'stop') return stopped(store, trip, version, row.snapshot?.findings || row.snapshot?.leaves?.verdict || `${step.title} stopped it`, now)
   // ASK OWNER takes its own line when the track has one; otherwise it is a fail.
   if (outcome === 'ask' && !lines.some((l) => l.on === 'ask')) outcome = 'fail'
+  // The land guard refused: a missing review starts by itself; anything else is the ruling's, never the owner's.
+  // Either is tried as often as a step may be, and then the trip is stuck with the reason.
+  const refused = step.kind === 'script' ? row.snapshot?.refused : null
+  if (refused) {
+    const reason = row.snapshot.findings || 'Not landed'
+    const target = version.steps.find((s) => s.id === refused.reviewStep)?.id || version.steps.find((s) => s.ruling)?.id
+    if (!target) return { ...trip, status: 'stuck', reason: words(reason, 500) }
+    const tries = store.row('SELECT COUNT(*) AS n FROM trip_steps WHERE trip_id = ? AND step_id = ?', trip.id, target).n
+    if (tries >= (Number(version.maxTries) || MAX_TRIES)) return { ...trip, status: 'stuck', reason: words(`${reason.split('\n')[0]} "${target}" was already tried ${tries} times.`, 500) }
+    return goTo(store, trip, version, target, refused.reviewStep === target ? {} : { findings: reason }, now)
+  }
   const line = lines.find((l) => l.on === outcome) || lines.find((l) => l.on === 'always')
   const order = version.steps.map((s) => s.id)
   // The owner's answer at a gate that could not go on: back to the step that makes the change, or stop.
@@ -871,6 +1023,12 @@ function route(store, trip, version, step, row, outcome, now) {
     return { ...trip, status: 'stuck', reason: `Step "${step.id}" failed and has nothing after it` }
   }
   const findings = row.snapshot?.findings || ''
+  // Going back to a step tried as often as a trip may: the trip stops trying and waits for a person.
+  if (outcome === 'fail' && order.indexOf(line.to) <= order.indexOf(step.id)) {
+    const most = Number(version.maxTries) || MAX_TRIES
+    const tries = store.row('SELECT COUNT(*) AS n FROM trip_steps WHERE trip_id = ? AND step_id = ?', trip.id, line.to).n
+    if (tries >= most) return { ...trip, status: 'stuck', reason: words(`"${line.to}" was tried ${tries} times and "${step.id}" still failed: ${findings}`, 500) }
+  }
   const back = outcome === 'fail' && order.indexOf(line.to) <= order.indexOf(step.id) && line.rounds
   if (!back) return goTo(store, trip, version, line.to, outcome === 'fail' ? { findings } : {}, now)
   const key = `${line.from}>${line.to}`
@@ -961,13 +1119,23 @@ async function moveTrip(store, tripId, ctx) {
       return false
     }
     putRow(store, started, now)
+    // A refusal is a state of the trip, with its reason, until the work does land; a waiver it lands on is kept.
+    const refusal = started.snapshot?.refused ? { step: step.id, why: started.snapshot.refused.why, reason: words(started.snapshot.findings, 2000), at: iso(now), count: (trip.refusal?.count || 0) + 1 } : null
+    if (refusal) {
+      putTrip(store, { ...trip, refusal, refusals: (trip.refusals || 0) + 1 }, now)
+      note(store, 'trip.land_refused', { type: 'issue', id: request.jobId }, ENGINE, { tripId: trip.id, why: refusal.why }, now)
+    } else if (started.waiver || (trip.refusal && started.status === 'working' && step.id === trip.refusal.step)) {
+      const waiver = started.waiver ? { ...started.waiver, step: step.id, at: iso(now) } : null
+      putTrip(store, { ...trip, refusal: null, ...(waiver ? { waivers: [...(trip.waivers || []), waiver] } : {}) }, now)
+      if (waiver) note(store, 'trip.waived', { type: 'issue', id: request.jobId }, ENGINE, { tripId: trip.id, by: waiver.by, reason: waiver.reason, waived: waiver.waived }, now)
+    }
     // Looked at again at once: a short script may already have ended.
     return true
   }
   if (row.status === 'working') {
     const result = await pollStep(store, step, row, ctx)
     if (!result) return false
-    const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}), ...(result.gate ? { gate: result.gate } : {}) }
+    const snapshot = { verdict: result.verdict, leaves: result.leaves || {}, findings: result.findings || '', numbers: result.numbers || {}, summary: result.summary || '', costUsd: result.costUsd || 0, ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}), ...(result.gate ? { gate: result.gate } : {}), ...(result.waiver ? { waiver: result.waiver } : {}) }
     row = { ...row, status: result.verdict === 'pass' ? 'passed' : 'failed', snapshot, finishedAt: iso(now) }
     putRow(store, row, now)
     if (step.onlyFor === 'public') recordReview(store, request, trip, step, row, now)
@@ -986,7 +1154,7 @@ async function moveTrip(store, tripId, ctx) {
  */
 export async function tickTracks(store, { dataDir, io = trackIo, now = Date.now() } = {}) {
   ensureBuiltIns(store, { now })
-  const report = { moved: [], stuck: [] }
+  const report = { moved: [], stuck: [], settled: settleLeftovers(store, { now }) }
   const trips = store.rows(`SELECT id FROM trips WHERE status IN (${MOVING.map(() => '?').join(', ')}) ORDER BY parent_trip_id IS NULL, created_at`, ...MOVING)
   for (const { id } of trips) {
     try {
@@ -1000,6 +1168,52 @@ export async function tickTracks(store, { dataDir, io = trackIo, now = Date.now(
     if (after?.status === 'stuck') report.stuck.push({ id, reason: after.reason })
   }
   return report
+}
+
+/**
+ * What a track leaves open, closed on every turn, so no job stays "in progress" or "blocked" for work that has
+ * moved on (24 Nov 2026: 36 such jobs, 34 blocked, 7 of 78 open jobs with a run going):
+ *
+ *   a round that ended (passed, failed or started over) whose job is still open: closed, cancelled, with why
+ *   a request whose trip is stuck: its job blocked, with the reason, once
+ *   a request whose trip was stopped: its job cancelled, with the reason
+ *   a request whose own job was cancelled while its trip still runs: the trip stopped
+ *
+ * Returns the codes of the jobs it closed. Nothing it closes had a bot at work on it: a step at work is a
+ * working row, which it does not touch.
+ */
+export function settleLeftovers(store, { now = Date.now() } = {}) {
+  const settled = []
+  const ended = store.objects("SELECT ts.raw AS raw FROM trip_steps ts JOIN jobs j ON j.id = ts.job_id WHERE ts.status IN ('passed', 'failed', 'stale') AND j.status NOT IN ('done', 'cancelled')")
+  for (const row of ended) {
+    const job = store.object('SELECT raw FROM jobs WHERE id = ?', row.jobId)
+    if (!job || ['done', 'cancelled'].includes(job.status)) continue
+    const why = row.status === 'passed' ? 'its round passed' : row.status === 'stale' ? 'the work went back to an earlier step' : `its round ended NOT MET${row.snapshot?.findings ? `: ${words(String(row.snapshot.findings).split('\n')[0], 300)}` : ''}`
+    addComment(store, job.id, { body: `Closed by the track: ${why}. The track goes on in a later round or step; this job holds nothing more to do.` }, { now, actor: ENGINE, quiet: true })
+    patchJob(store, job.id, { status: 'cancelled' }, { now, actor: ENGINE })
+    settled.push(job.identifier)
+  }
+  // A request whose own job was cancelled has nothing left to deliver: its trip stops, and the step jobs it holds close.
+  for (const trip of store.objects("SELECT t.raw AS raw FROM trips t WHERE t.status = 'running' AND t.parent_trip_id IS NULL")) {
+    const request = store.object('SELECT raw FROM requests WHERE id = ?', trip.requestId)
+    const job = request && store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
+    if (!job || job.status !== 'cancelled') continue
+    const version = versionOf(store, trip.trackId, trip.version)
+    putTrip(store, stopped(store, trip, version, `The request's job ${job.identifier} was cancelled`, now), now)
+    settled.push(job.identifier)
+  }
+  const done = store.objects("SELECT t.raw AS raw FROM trips t WHERE t.status IN ('stuck', 'stopped') AND t.parent_trip_id IS NULL")
+  for (const trip of done) {
+    const request = store.object('SELECT raw FROM requests WHERE id = ?', trip.requestId)
+    const job = request && store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
+    if (!job || ['done', 'cancelled'].includes(job.status)) continue
+    if (trip.status === 'stuck' && job.status === 'blocked') continue
+    const reason = words(trip.reason || (trip.status === 'stuck' ? 'The track cannot go on' : 'The track was stopped'), 500)
+    addComment(store, job.id, { body: trip.status === 'stuck' ? `Blocked: the track cannot go on. ${reason}` : `Closed: the track was stopped. ${reason}` }, { now, actor: ENGINE, quiet: true })
+    patchJob(store, job.id, { status: trip.status === 'stuck' ? 'blocked' : 'cancelled' }, { now, actor: ENGINE })
+    settled.push(job.identifier)
+  }
+  return settled
 }
 
 // ── the owner's hands on a trip ──────────────────────────────────────────────────────
@@ -1049,13 +1263,15 @@ export function rerunTrip(store, tripId, body = {}, { now = Date.now(), actor } 
   if (!step) throw new Refused(400, `Say which step to run again: ${version.steps.map((s) => s.id).join(', ')}`)
   const said = words(body.note, VALUE_CHARS)
   const reopened = OPEN_AGAIN.includes(trip.status) || trip.status === 'paused'
-  const next = goTo(store, trip, version, step.id, said ? { note: said } : {}, now)
+  // `findings` come with a gate that is asked again: its card says what failed, as it did the first time.
+  const found = words(body.findings, VALUE_CHARS)
+  const next = goTo(store, trip, version, step.id, { ...(said ? { note: said } : {}), ...(found ? { findings: found } : {}) }, now)
   putTrip(store, { ...next, status: 'running', reason: '', endedAt: null, pausedAt: null, reruns: (trip.reruns || 0) + 1 }, now)
   if (reopened && !trip.parentTripId) {
     const request = requestOr404(store, trip.requestId)
     if (request.status !== 'working') putRequest(store, { ...request, status: 'working', finishedAt: null }, now)
     const job = store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId)
-    if (job && ['done', 'cancelled'].includes(job.status)) patchJob(store, job.id, { status: 'in_progress' }, { now, actor: ENGINE })
+    if (job && ['done', 'cancelled', 'blocked'].includes(job.status)) patchJob(store, job.id, { status: 'in_progress' }, { now, actor: ENGINE })
   }
   return tripOr404(store, tripId)
 }
@@ -1139,7 +1355,9 @@ const requestShown = (store, request) => {
   // Who is on the step now: the bot its job went to. A script, a gate or a track inside names nobody.
   const live = trip && step?.kind === 'bot' ? store.objects('SELECT raw FROM trip_steps WHERE trip_id = ? AND step_id = ? ORDER BY created_at DESC, try_number DESC LIMIT 1', trip.id, step.id)[0] : null
   const job = live?.jobId && live.status !== 'stale' ? store.object('SELECT raw FROM jobs WHERE id = ?', live.jobId) : null
-  return { ...request, cost: costOfRequest(store, request.id), trip: trip ? { id: trip.id, status: trip.status, current: trip.current, currentTitle: step?.title || '', currentKind: step?.kind || '', currentBotId: job?.assigneeAgentId || '', currentRuling: Boolean(step?.ruling), reason: trip.reason || '', rounds: trip.rounds || {} } : null }
+  // Whether a run is going on that job this minute: a step given to a bot that has not started is waiting, not worked on.
+  const running = Boolean(job && store.row("SELECT id FROM runs WHERE job_id = ? AND status IN ('running', 'queued') LIMIT 1", job.id))
+  return { ...request, cost: costOfRequest(store, request.id), trip: trip ? { id: trip.id, status: trip.status, current: trip.current, currentTitle: step?.title || '', currentKind: step?.kind || '', currentBotId: job?.assigneeAgentId || '', currentRunning: running, currentRuling: Boolean(step?.ruling), reason: trip.reason || '', refusal: trip.refusal || null, rounds: trip.rounds || {} } : null }
 }
 
 export function listRequests(store, companyId, query = {}) {

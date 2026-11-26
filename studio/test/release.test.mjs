@@ -20,7 +20,7 @@ function png(file, w, h) {
 const LISTING = {
   language: 'en-US',
   play: { title: 'Lamp', short: 'A small lamp that turns on.', full: 'Turn the lamp on and off. That is all it does.', whatsNew: 'Faster start.' },
-  appstore: { name: 'Lamp', subtitle: 'Turns on', keywords: 'lamp,light', description: 'Turn the lamp on and off.', promo: '', whatsNew: 'Faster start.' },
+  appstore: { name: 'Lamp', subtitle: 'Turns on', keywords: 'light,bulb', description: 'Turn the lamp on and off.', promo: '', whatsNew: 'Faster start.' },
   privacyUrl: 'https://example.test/privacy', supportUrl: 'https://example.test/help',
 }
 

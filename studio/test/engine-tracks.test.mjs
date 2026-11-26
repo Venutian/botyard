@@ -664,22 +664,7 @@ test('a fix round after a build that said NOT MET still starts from that build\'
   assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', workingJob(store, tripId, 'build')).startFrom, 'eee5555')
 })
 
-test('the land step refuses work whose last check failed unless the trip is run again from it with a written reason', async () => {
-  const { landRefusal } = await import('../server/engine/tracks.mjs')
-  const { store } = yard()
-  const version = { steps: [{ id: 'check' }, { id: 'rule' }, { id: 'land' }] }
-  const step = { id: 'land', command: 'node "$BOTYARD_TRACK_TOOLS/land.mjs"' }
-  const put = (id, stepId, status, at) => store.put('trip_steps', { id, tripId: 't1', requestId: 'r1', stepId, kind: 'bot', title: stepId === 'check' ? 'Check' : 'Ruling', try: 1, status, snapshot: { verdict: status === 'passed' ? 'pass' : 'fail', findings: 'row 2 wrong' }, createdAt: at, finishedAt: at })
-  put('a', 'check', 'failed', '2026-11-20T10:00:00Z')
-  assert.match(landRefusal(store, { id: 't1' }, version, step, {}), /^Not landed: the last check failed/)
-  // A written reason on a rerun from the land step lets it through.
-  assert.equal(landRefusal(store, { id: 't1' }, version, step, { inputs: { note: 'Land it: the row is fixed by hand' } }), '')
-  // A ruler's later PASS is the last word.
-  put('b', 'rule', 'passed', '2026-11-20T11:00:00Z')
-  assert.equal(landRefusal(store, { id: 't1' }, version, step, {}), '')
-  // Only the land script is guarded.
-  assert.equal(landRefusal(store, { id: 't1' }, version, { id: 'x', command: 'echo' }, {}), '')
-})
+// The land step's guard (nothing lands without its passes) has its own tests: engine-land-guard.test.mjs.
 
 test('every scored review is kept in the reviews table with its piece kind and verdict; a skipped one is not', async () => {
   const { store, dataDir } = yard()
@@ -721,4 +706,136 @@ test('a request has one open card at a time: a new question updates it and says 
   const pending = store.objects("SELECT raw FROM cards WHERE status = 'pending'")
   assert.equal(pending.length, 1, 'one open card')
   assert.match(pending[0].title, /\(asked 2 times\)$/)
+})
+
+test('a round that ended leaves no job open, a stuck request says so once, and a step is never a request of its own', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const io = fakeIo({ 'run tests': () => ({ out: { verdict: 'pass' } }) })
+  const request = startRequest(store, 'co', { track: 'crew', title: 'Add a lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const tick = (n) => tickTracks(store, { dataDir, io, now: T0 + n * 1000 })
+  const job = (id) => store.object('SELECT raw FROM jobs WHERE id = ?', id)
+  await tick(1)
+  const tripId = store.row('SELECT id FROM trips').id
+  botDoes(store, workingJob(store, tripId, 'build'), { commit: 'aaa1111' }, T0)
+  await tick(2)
+  // The check's bot gives up: its job blocked, no question. The track sends the work back for round 2.
+  const check = workingJob(store, tripId, 'check')
+  store.put('jobs', { ...job(check), status: 'blocked' })
+  await tick(3)
+  const round2 = workingJob(store, tripId, 'build')
+  assert.ok(round2, 'round 2 of the build is at work')
+  // The blocked check is not left blocked: on the next turn it is closed, with why.
+  const settled = await tick(4)
+  assert.equal(job(check).status, 'cancelled')
+  assert.ok(settled.settled.includes(job(check).identifier))
+  assert.match(store.objects('SELECT raw FROM comments WHERE job_id = ? ORDER BY position', check).at(-1).body, /Closed by the track: the work went back to an earlier step/)
+  assert.equal(job(round2).status, 'todo', 'the round at work is never touched')
+  // A track started on one of its own steps is refused.
+  assert.throws(() => startRequest(store, 'co', { track: 'crew', jobId: round2, inputs: { brief: 'b' } }, { now: T0, actor: OWNER }), /is a step of a track already/)
+  // A trip that gets stuck: its request's job says so once, as blocked; a stopped one is closed.
+  const trip = store.object('SELECT raw FROM trips WHERE id = ?', tripId)
+  store.put('trips', { ...trip, status: 'stuck', reason: 'Step "land" has nothing after it' })
+  await tick(5)
+  assert.equal(job(request.jobId).status, 'blocked')
+  assert.equal(job(round2).status, 'todo', 'a stuck trip\'s working step is left to the owner')
+  await tick(6)
+  assert.equal(store.objects('SELECT raw FROM comments WHERE job_id = ?', request.jobId).filter((c) => /cannot go on/.test(c.body)).length, 1, 'said once')
+})
+
+test('one request a goal: asking again for a goal that is moving is refused and names the one that carries it', async () => {
+  const { store } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const first = startRequest(store, 'co', { track: 'crew', title: 'Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  assert.throws(() => startRequest(store, 'co', { track: 'crew', title: 'Fix 1 of Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER }),
+    new RegExp(`${first.jobCode} already carries this goal`))
+  // Another goal, or the same goal once the first is stopped, is asked for as before.
+  startRequest(store, 'co', { track: 'crew', title: 'Harbour: the door opens', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  store.put('requests', { ...store.object('SELECT raw FROM requests WHERE id = ?', first.id), status: 'stopped' })
+  assert.ok(startRequest(store, 'co', { track: 'crew', title: 'Harbour: the lamp lights', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER }))
+})
+
+test('a step is tried at most five times in a trip, whichever lines send it back; then the trip waits for a person', async () => {
+  const { store, dataDir } = yard()
+  const LOOP = {
+    key: 'loop', title: 'Loop', inputs: ['brief'],
+    steps: [
+      { id: 'build', kind: 'bot', bot: 'Builder', words: 'Build.', needs: ['brief'], leaves: ['commit'] },
+      { id: 'check', kind: 'bot', bot: 'Checker', words: 'Check.', needs: ['commit'], leaves: ['verdict'] },
+      { id: 'review', kind: 'bot', bot: 'Judge', words: 'Review.', needs: ['commit'], leaves: ['verdict'] },
+      { id: 'decide', kind: 'gate', title: 'Owner decides' },
+    ],
+    lines: [
+      { from: 'build', to: 'check', on: 'pass' }, { from: 'build', to: 'decide', on: 'fail' },
+      { from: 'check', to: 'review', on: 'pass' }, { from: 'check', to: 'build', on: 'fail', rounds: 9, then: 'decide' },
+      { from: 'review', to: 'build', on: 'fail', rounds: 9, then: 'decide' }, { from: 'review', to: 'decide', on: 'pass' },
+    ],
+  }
+  saveTrack(store, 'co', LOOP, { now: T0, actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'loop', title: 'Harbour: lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  let n = 0
+  const tick = () => tickTracks(store, { dataDir, io: fakeIo(), now: T0 + ++n * 1000 })
+  await tick()
+  const tripId = store.row('SELECT id FROM trips').id
+  for (let round = 0; round < 12; round++) {
+    const build = workingJob(store, tripId, 'build')
+    if (!build) break
+    botDoes(store, build, { commit: `aaa${1000 + round}` }, T0)
+    await tick()
+    const check = workingJob(store, tripId, 'check')
+    if (!check) break
+    botDoes(store, check, { verdict: 'FAIL: no lamp' }, T0)
+    await tick()
+  }
+  const trip = store.object('SELECT raw FROM trips WHERE id = ?', tripId)
+  assert.equal(trip.status, 'stuck')
+  assert.match(trip.reason, /"build" was tried 5 times/)
+  assert.equal(store.row("SELECT COUNT(*) AS n FROM trip_steps WHERE trip_id = ? AND step_id = 'build'", tripId).n, 5)
+  await tick()
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId).status, 'blocked', 'its request waits for a person, once')
+})
+
+test('a step whose bot left its job open long after its last run fails; one that was held or has a run going waits', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  startRequest(store, 'co', { track: 'crew', title: 'Add a lamp', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  const io = fakeIo()
+  await tickTracks(store, { dataDir, io, now: T0 })
+  const tripId = store.row('SELECT id FROM trips').id
+  const job = workingJob(store, tripId, 'build')
+  const HOUR = 3_600_000
+  const ended = (status, hoursAgo, at) => store.put('runs', { id: 'r-left', companyId: 'co', agentId: 'b1', issueId: job, status, startedAt: new Date(at - hoursAgo * HOUR - 60_000).toISOString(), finishedAt: status === 'running' ? null : new Date(at - hoursAgo * HOUR).toISOString() })
+  const later = T0 + 8 * HOUR
+  // Held by a pace: it is waiting its turn.
+  ended('failed', 7, later)
+  await tickTracks(store, { dataDir, io, now: later })
+  assert.equal(workingJob(store, tripId, 'build'), job, 'a held job is left alone')
+  // A run is going: it is being worked on.
+  ended('running', 7, later)
+  await tickTracks(store, { dataDir, io, now: later + 1000 })
+  assert.equal(workingJob(store, tripId, 'build'), job)
+  // Its run ended well an hour ago: the bot may still close it.
+  ended('succeeded', 1, later)
+  await tickTracks(store, { dataDir, io, now: later + 2000 })
+  assert.equal(workingJob(store, tripId, 'build'), job)
+  // Seven hours ago, and the job is still open: the step fails with the reason, and the track moves on.
+  ended('succeeded', 7, later)
+  await tickTracks(store, { dataDir, io, now: later + 3000 })
+  const row = store.objects('SELECT raw FROM trip_steps WHERE job_id = ?', job)[0]
+  assert.equal(row.status, 'failed')
+  assert.match(row.snapshot.findings, /ended 7 hours ago without closing the job/)
+})
+
+test('a request whose own job was cancelled stops its trip', async () => {
+  const { store, dataDir } = yard()
+  saveTrack(store, 'co', CREW, { now: T0, actor: OWNER })
+  const request = startRequest(store, 'co', { track: 'crew', title: 'X', projectId: 'p1', inputs: { brief: 'b' } }, { now: T0, actor: OWNER })
+  await tickTracks(store, { dataDir, io: fakeIo(), now: T0 })
+  const tripId = store.row('SELECT id FROM trips').id
+  const step = workingJob(store, tripId, 'build')
+  store.put('jobs', { ...store.object('SELECT raw FROM jobs WHERE id = ?', request.jobId), status: 'cancelled' })
+  await tickTracks(store, { dataDir, io: fakeIo(), now: T0 + 1000 })
+  assert.equal(tripView(store, tripId).status, 'stopped')
+  assert.equal(getRequest(store, request.id).status, 'stopped')
+  assert.equal(store.object('SELECT raw FROM jobs WHERE id = ?', step).status, 'cancelled', 'the step it held is closed')
 })

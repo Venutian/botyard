@@ -75,7 +75,8 @@ async function names(id, options) {
 function notInMainOf(options = {}) {
   const file = options.notInMainFile ?? (options.fetcher ? '' : path.join(crewFolder(), 'not-in-main.json'))
   if (!file) return new Set()
-  try { return new Set((JSON.parse(fs.readFileSync(file, 'utf8')).jobs || []).map((j) => j.job).filter(Boolean)) } catch { return new Set() }
+  // An older try whose goal landed later (marked `superseded`) is not shown as "not in main".
+  try { return new Set((JSON.parse(fs.readFileSync(file, 'utf8')).jobs || []).filter((j) => !j.superseded).map((j) => j.job).filter(Boolean)) } catch { return new Set() }
 }
 
 const jobRow = (issue, n, snippet = '') => ({

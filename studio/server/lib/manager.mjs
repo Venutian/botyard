@@ -141,9 +141,10 @@ export function verdictOf(comments = []) {
 const stepOf = (state, extra = {}) => ({ state, ...extra })
 
 /** One check on a piece of work, as a step: running, passed, found problems, or not asked for. */
-function checkStep(check, verdicts) {
+function checkStep(check, verdicts, isLive = () => true) {
   if (!check) return stepOf('wait')
-  if (check.status === 'in_progress') return stepOf('now', { id: check.id, since: stamp(check.startedAt) || lastTouched(check) })
+  // Marked in progress with no run going is waiting for a bot, not being worked on (25 Nov 2026: 47 jobs read "working" with 5 runs going).
+  if (check.status === 'in_progress') return stepOf(isLive(check) ? 'now' : 'queued', { id: check.id, since: stamp(check.startedAt) || lastTouched(check) })
   if (WAITING.has(check.status)) return stepOf('queued', { id: check.id, since: stamp(check.createdAt) })
   if (check.status === 'blocked') return stepOf('failed', { id: check.id, why: 'the check is blocked' })
   if (check.status === 'cancelled') return stepOf('wait')
@@ -170,6 +171,8 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   const said = step ? step.charAt(0).toLowerCase() + step.slice(1) : 'its next step'
   const working = !['done', 'not-in-main', 'stopped'].includes(r.status) && !['stopped', 'stuck', 'paused', 'not-in-main', 'done'].includes(trip.status)
   const who = working && trip.currentKind === 'bot' ? names.get(trip.currentBotId) || '' : ''
+  // The engine says whether a run is going on the step's job; an older engine says nothing, and the step's word stands.
+  const idle = Boolean(who) && trip.currentRunning === false
   const checks = trip.currentRuling || /check|test|review|rul/i.test(`${trip.current} ${step}`)
   // The rounds back to this step so far, over every back-line that leads to it (keyed "from>to").
   const fixes = Object.entries(trip.rounds || {}).filter(([key]) => key.endsWith(`>${trip.current}`)).reduce((a, [, n]) => a + (Number(n) || 0), 0)
@@ -183,6 +186,7 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   else if (trip.status === 'paused') { stage = 'queued'; note = `Paused at ${said}` }
   else if (trip.currentKind === 'gate') { stage = 'queued'; pill = 'waits'; note = `Waiting for you: ${said}` }
   else if (trip.currentKind === 'bot' && !who) { stage = checks ? 'check' : 'build'; note = `Waiting for a bot to take ${said}, on its track` }
+  else if (idle) { stage = checks ? 'check' : 'build'; note = `Waiting for ${who} to start ${said}, on its track` }
   else if (trip.currentRuling) { stage = 'ruling'; note = `${who} is ruling on it, on its track` }
   else if (checks && who) { stage = 'check'; note = `${who} is checking it, on its track` }
   else if (who && /build|fix|code/i.test(`${trip.current} ${step}`)) { stage = 'build'; note = `${who} is ${fixes ? `on fix ${fixes}` : 'building it'}, on its track` }
@@ -190,7 +194,8 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   else { stage = checks ? 'check' : 'build'; note = `${step || 'Starting'}, on its track` }
   const rounds = Object.values(trip.rounds || {}).reduce((a, b) => a + b, 0)
   const at = Date.parse(r.updatedAt) || now
-  const state = (name) => ({ build: stage === 'build' ? 'now' : 'done', check: stage === 'check' ? 'now' : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
+  const at2 = idle || (trip.currentKind === 'bot' && !who) ? 'queued' : 'now'
+  const state = (name) => ({ build: stage === 'build' ? at2 : 'done', check: stage === 'check' ? at2 : ['merged', 'passed'].includes(stage) ? 'done' : 'wait', ruling: 'skipped', merged: stage === 'merged' ? 'done' : 'wait', pushed: 'wait' })[name]
   return {
     id: issue?.id || r.jobId, ref: issue ? refOf(issue, projectNames) : r.jobCode, title: short(plainTitle(withRefs(r.title))), project: projectNames.get(r.projectId) || '', projectId: r.projectId || '',
     bot: who, stage, pill: pill || stage, note: `${note}${cost > 0 ? `, ${usd(cost)} so far` : ''}`, steps: STEPS.map(state), fixes: rounds, since: at, late: false,
@@ -198,7 +203,9 @@ export function requestLine(r, issue, projectNames, now, names = new Map()) {
   }
 }
 
-function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now, requests = [] }) {
+function workLines({ issues, names, roles = new Map(), projectNames, verdicts, mergedAt, repos, now, requests = [], liveJobs = null }) {
+  // With the live runs known, "now" means a run is going on that job; without them (an older caller), the job's own word stands.
+  const isLive = (issue) => !liveJobs || liveJobs.has(issue.id) || liveJobs.has(`bot:${issue.assigneeAgentId}`)
   const groups = new Map()
   const checks = new Map()
   // Work moved by a track is the request's one line; its steps' jobs are left out here.
@@ -226,14 +233,14 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
     if (now - touched > DAY_MS && !all.some((i) => OPEN.has(i.status))) continue
 
     const latest = (ruling) => mine.filter((c) => c.ruling === ruling && c.status !== 'cancelled').pop()
-    const build = work.status === 'in_progress' ? stepOf('now', { since: stamp(work.startedAt) || lastTouched(work) })
+    const build = work.status === 'in_progress' ? stepOf(isLive(work) ? 'now' : 'queued', { since: stamp(work.startedAt) || lastTouched(work) })
       : work.status === 'done' ? stepOf('done')
       : work.status === 'blocked' ? stepOf('failed', { why: 'blocked' })
       : work.status === 'cancelled' ? stepOf('failed', { why: 'stopped' })
       : stepOf('queued', { since: stamp(work.createdAt) })
     const built = build.state === 'done'
-    const check = built ? checkStep(latest(false), verdicts) : stepOf('wait')
-    const ruling = built ? checkStep(latest(true), verdicts) : stepOf('wait')
+    const check = built ? checkStep(latest(false), verdicts, isLive) : stepOf('wait')
+    const ruling = built ? checkStep(latest(true), verdicts, isLive) : stepOf('wait')
     const repo = repos.get(work.projectId) || NO_REPO
     const merged = built && (mergedAt.has(work.identifier) || repo.merged.has(work.identifier))
     const isPushed = merged && repo.pushed.has(work.identifier)
@@ -313,7 +320,7 @@ function workLines({ issues, names, roles = new Map(), projectNames, verdicts, m
 }
 
 /** What each bot is doing this minute. A job marked running with no live run is said to be waiting. */
-function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), fold = copyGroups([]), now }) {
+function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs = new Set(), unnamed = new Set(), fold = copyGroups([]), now }) {
   const models = new Map(agents.map((a) => [a.id, a.adapterConfig?.model || '']))
   // A run going on a job puts its bot in that job's bay, even before the job is marked in progress.
   return issues.filter((i) => (i.status === 'in_progress' || (liveJobs.has(i.id) && i.status !== 'done' && i.status !== 'cancelled')) && i.assigneeAgentId).map((issue) => {
@@ -333,6 +340,8 @@ function workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs 
       stage: what.kind === 'check' ? `Checking ${withRefs(what.of)}` : what.kind === 'ruling' ? 'Ruling' : what.kind === 'fix' ? `Fix ${what.round}` : 'Building',
       minutes: Math.max(0, Math.round((now - since) / 60_000)),
       live: liveAgents.has(issue.assigneeAgentId),
+      // A run is going on this very job; a job marked in progress whose run has ended is not being worked on.
+      running: liveJobs.has(issue.id) || unnamed.has(issue.assigneeAgentId),
     }
   }).sort((a, b) => a.minutes - b.minutes)
 }
@@ -469,15 +478,15 @@ function dayFeed({ issues, names, projectNames, byRef, files, verdicts, now }) {
 }
 
 /** Each project: how much is moving, who is in it, and how many commits wait to be pushed. */
-function projectRows({ projects, issues, bots, repos, now }) {
+function projectRows({ projects, issues, bots, repos, now, liveJobs = null }) {
   return projects.map((project) => {
     const jobs = issues.filter((i) => i.projectId === project.id)
     const count = (test) => jobs.filter(test).length
     return {
       id: project.id,
       name: project.name,
-      running: count((i) => i.status === 'in_progress'),
-      queued: count((i) => WAITING.has(i.status)),
+      running: count((i) => (liveJobs ? (liveJobs.has(i.id) || (i.status === 'in_progress' && liveJobs.has(`bot:${i.assigneeAgentId}`))) && i.status !== 'done' && i.status !== 'cancelled' : i.status === 'in_progress')),
+      queued: count((i) => WAITING.has(i.status) || (liveJobs && i.status === 'in_progress' && !liveJobs.has(i.id) && !liveJobs.has(`bot:${i.assigneeAgentId}`))),
       blocked: count((i) => i.status === 'blocked'),
       doneToday: count((i) => i.status === 'done' && now - stamp(i.completedAt) < DAY_MS),
       unpushed: repos.get(project.id)?.unpushed ?? null,
@@ -511,7 +520,8 @@ function troubleList({ issues, projectNames, lines, bots, files, now }) {
   if (aside.length && !answering.length) out.push({ level: 'bad', text: 'Every free model is out, so the bots on free models cannot work' })
   else if (aside.length) out.push({ level: 'info', text: `${plural(aside.length, 'free model is', 'free models are')} set aside; ${answering.length} still answer` })
   // Done jobs whose code never reached main (crew/not-in-main.py): a job is not done while its work is not in main.
-  const left = (files.notInMain?.jobs || []).filter((j) => j && j.job)
+  // An older try whose goal landed later (not-in-main.py marks it `superseded`) is not lost work.
+  const left = (files.notInMain?.jobs || []).filter((j) => j && j.job && !j.superseded)
   if (left.length) {
     const byCode = new Map(issues.map((i) => [i.identifier, i]))
     const named = [...new Set(left.map((j) => (byCode.has(j.job) ? refOf(byCode.get(j.job), projectNames) : j.job)))]
@@ -533,15 +543,20 @@ function stateLine({ working, trouble, lines }) {
     const verb = checked ? 'checking' : w.stage === 'Ruling' ? 'ruling on' : 'on'
     return `${w.bot.split(' ')[0]} ${verb} ${short(w.title.replace(FIX, ''), 34)} ${checked || w.ref}`
   }
-  const doing = working.length
-    ? `${plural(working.length, 'bot is', 'bots are')} working: ${working.slice(0, 3).map(said).join(', ')}${working.length > 3 ? ' and more' : ''}`
+  // Only a job with a run going counts as worked on: the engine keeps some jobs "in progress" after their run ends.
+  // A job started in the last quarter hour counts too: its run may still be starting.
+  const busy = working.filter((w) => w.running || w.minutes < 15)
+  const doing = busy.length
+    ? `${plural(busy.length, 'bot is', 'bots are')} working: ${busy.slice(0, 3).map(said).join(', ')}${busy.length > 3 ? ' and more' : ''}`
     : 'Nobody is working right now'
   const open = lines.filter((l) => l.open && !['build', 'check', 'ruling'].includes(l.stage)).length
   return `${doing}.${bad ? ` ${plural(bad, 'thing needs', 'things need')} a look.` : open ? ` ${plural(open, 'piece', 'pieces')} of work ${open === 1 ? 'is' : 'are'} waiting.` : ''}`
 }
 
 /** The whole view from records already in hand. Pure, so the tests can feed it a studio. */
-export function buildManager({ agents, issues, projects, live = [], files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
+export function buildManager({ agents, issues, projects, live: liveGiven, files, verdicts = new Map(), repos = new Map(), requests = [], counts = null, now = Date.now() }) {
+  // With no list of live runs given, a job's own word stands; with one, "now" means a run is going.
+  const live = liveGiven || []
   // A copy of a bot on another AI is that bot to every list: its jobs, its name, one card.
   const fold = copyGroups(agents)
   const names = new Map(agents.map((a) => [a.id, (fold.parentOf.get(a.id) || a).name]))
@@ -555,18 +570,25 @@ export function buildManager({ agents, issues, projects, live = [], files, verdi
     if (match) mergedAt.set(match[1], line.at)
   }
   const liveJobs = new Set(live.map((run) => run.issueId).filter(Boolean))
-  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, fold, now })
+  // A live run that names no job still counts for the job its bot holds.
+  const unnamed = new Set(live.filter((run) => !run.issueId).map((run) => run.agentId))
+  // For the steps and the project counts: a job with a run going, or held by a bot whose run names no job.
+  const liveWork = !liveGiven ? null : new Set([...liveJobs, ...[...unnamed].map((id) => `bot:${id}`)])
+  const working = workingNow({ issues, names, projectNames, agents, liveAgents, liveJobs, unnamed, fold, now })
   const jobs = foldKeys(issues, ['assigneeAgentId'], fold)
-  const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests })
+  const lines = workLines({ issues: jobs, names, roles: new Map(fold.top.map((a) => [a.id, roleOf(a)])), projectNames, verdicts, mergedAt, repos, now, requests, liveJobs: liveWork })
   const bots = botRows({ agents: fold.top, issues: jobs, projectNames, liveAgents, working, files, fold, now })
   const trouble = troubleList({ issues, projectNames, lines, bots, files, now })
+  // Jobs left in progress with no run for an hour: counted as stuck, never as work going on.
+  const stale = working.filter((w) => !w.running && w.minutes >= 60).length
+  if (stale) trouble.push({ level: 'warn', text: `${plural(stale, 'job is', 'jobs are')} marked in progress with no run going for over an hour` })
   return {
     state: stateLine({ working, trouble, lines }),
     trouble,
     now: working,
     lines,
     bots,
-    projects: projectRows({ projects, issues, bots, repos, now }),
+    projects: projectRows({ projects, issues, bots, repos, now, liveJobs: liveWork }),
     feed: dayFeed({ issues, names, projectNames, byRef, files, verdicts, now }),
     // Every pile of jobs with its count: the Work sheet's tabs, each one tap from the list.
     piles: pilesOf(counts),

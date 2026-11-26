@@ -151,3 +151,12 @@ test('an empty or unreadable log is an empty feed', () => {
   assert.deepEqual(runFeed(''), { items: [], cut: 0 })
   assert.deepEqual(runFeed('not json\n{"chunk": 4}\n'), { items: [], cut: 0 })
 })
+
+test('OpenCode: the model the free runner starts on is a note, and so is the one it switches to', () => {
+  const feed = runFeed(logOf([
+    { type: 'model', model: 'nv/step-5', sessionID: '' },
+    { type: 'text', sessionID: 's', part: { text: 'Reading.' } },
+    { type: 'model', model: 'kilo/nemotron:free', sessionID: '' },
+  ]), { fromStart: true })
+  assert.deepEqual(feed.items.filter((i) => i.kind === 'note').map((i) => i.text), ['On nv/step-5', 'On kilo/nemotron:free'])
+})

@@ -207,11 +207,15 @@ def protected_denials(env=None):
     if not items:
         return {}
     edit = {p: 'deny' for i in items for p in (i['path'], f"{i['path']}/*")}
+    # A model run under OpenCode may be a free one, whose words go to a third party: a folder nobody may read stays closed to it
+    # whoever its readers are, through the shell too.
     read = {p: 'deny' for i in items if i['read'] is False for p in (i['path'], f"{i['path']}/*")}
     out = {'edit': {'*': 'allow', **edit}}
     if read:
         out.update({tool: {'*': 'allow', **read} for tool in ('read', 'glob', 'grep', 'list')})
         out['external_directory'] = {'*': 'deny', **read}
+        out['bash'] = {'*': 'allow', **{f"*{i['path']}*": 'deny' for i in items if i['read'] is False},
+                       **{f"*{botyard_home.short(i['path'])}*": 'deny' for i in items if i['read'] is False}}
     return out
 
 
@@ -238,9 +242,14 @@ def scratch_open(perm):
     return {**perm, 'external_directory': {'*': mine.get('*', 'deny'), **opened, **scratch, **closed}}
 
 
-def claude_denials(env=None):
+def may_read(item, bot):
+    """Whether this bot may read a folder nobody else may: it is one of the folder's `readers` (by name or slug)."""
+    return bool(bot) and _slug(bot) in {_slug(r) for r in item.get('readers') or []}
+
+
+def claude_denials(env=None, bot=None):
     """permissions.deny rules for a Claude bot's settings file: no edit of what no bot may have (as protected_denials), no read of
-    what nobody may read, and no edit of the owner's notes (a Claude run may read them, never write)."""
+    what nobody may read (unless this bot is one of its readers), and no edit of the owner's notes (a Claude run may read them, never write)."""
     import folders
     deny = []
     for item in folders.protected(env):
@@ -248,8 +257,8 @@ def claude_denials(env=None):
             continue
         spec = '/' + item['path'] + ('/**' if os.path.isdir(item['path']) else '')
         deny.append(f'Edit({spec})')
-        if item['read'] is False:
-            deny.append(f'Read({spec})')
+        if item['read'] is False and not may_read(item, bot):
+            deny += [f'Read({spec})', f'Grep({spec})', f'Glob({spec})']
     return sorted(set(deny))
 
 
@@ -316,7 +325,7 @@ def write_for(bot, adapter, skills=None, want=None, reads=None, own=None):
             if s['kind'] == 'plugin':
                 plugins[s['plugin']] = plugins.get(s['plugin'], False) or s['name'] in want
         path = f'{OUT}/{_slug(bot)}.claude.json'
-        deny = sorted(set((base.get('permissions') or {}).get('deny', []) + claude_denials()))
+        deny = sorted(set((base.get('permissions') or {}).get('deny', []) + claude_denials(bot=bot)))
         out = {**base, **({'permissions': {**(base.get('permissions') or {}), 'deny': deny}} if deny else {})}
         if not every:
             out.update({'skillOverrides': dict(sorted(off.items())), 'enabledPlugins': plugins})

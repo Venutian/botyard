@@ -100,6 +100,21 @@ class NotInMain(unittest.TestCase):
         self.assertEqual(rows[0]['repo'], os.path.realpath(self.repo))
         self.assertEqual(rows[0]['bot'], 'Builder')
 
+    def test_an_older_try_whose_goal_landed_later_is_superseded_not_lost(self):
+        now = dt.datetime(2026, 11, 24, 12, tzinfo=dt.timezone.utc)
+        projects = [{'workspaces': [{'cwd': self.repo}]}]
+        jobs = [{'identifier': 'LH-1', 'id': 'a', 'status': 'done', 'completedAt': '2026-11-20T01:00:00Z', 'title': 'Fix 1 of Crew: lamp lands'},
+                {'identifier': 'LH-2', 'id': 'b', 'status': 'done', 'completedAt': '2026-11-21T01:00:00Z', 'title': 'Crew: lamp lands · Build (round 2)'},
+                {'identifier': 'LH-3', 'id': 'c', 'status': 'done', 'completedAt': '2026-11-20T01:00:00Z', 'title': 'Crew: door opens'},
+                {'identifier': 'LH-4', 'id': 'd', 'status': 'done', 'completedAt': '2026-11-22T01:00:00Z', 'title': 'Fix 1 of Crew: door opens'}]
+        # LH-2 landed (nothing left of it): LH-1, an earlier try of the same goal, is superseded. LH-3's goal has a
+        # later done job too, but that one (LH-4) is not in main either: both stay lost work.
+        scan = lambda repo: [(code, f'{code}-x', 1, ['a.js']) for code in ('LH-1', 'LH-3', 'LH-4')]
+        rows = {r['job']: r for r in nim.measure(projects, jobs, hours=6, now=now, scan=scan)}
+        self.assertEqual(rows['LH-1'].get('superseded'), 'LH-2')
+        self.assertNotIn('superseded', rows['LH-3'])
+        self.assertNotIn('superseded', rows['LH-4'])
+
     def test_what_counts_as_code(self):
         for path in ('src/a.ts', 'crew/x.py', 'data/goods.json', 'notes.mdx'):
             self.assertTrue(nim.is_code(path), path)

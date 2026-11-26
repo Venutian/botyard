@@ -76,6 +76,21 @@ test('one piece of work is one line through its build, checks and fix rounds', (
   assert.match(manager.state, /^1 bot is working: Lead checking Town kit LH-3\./)
 })
 
+test('a job left in progress with no run going is not counted as work, and is said once as stuck', () => {
+  const now = Date.parse('2026-11-24T14:00:00Z')
+  const job = (id, identifier, status, startedAt) => ({ id, identifier, title: `Town kit ${identifier}`, status, assigneeAgentId: 'builder', projectId: 'p1', startedAt, updatedAt: startedAt, createdAt: startedAt })
+  const m = buildManager({
+    agents: [{ id: 'builder', name: 'Builder', role: 'engineer', status: 'idle', adapterConfig: {} }],
+    issues: [job('a', 'LH-1', 'in_progress', '2026-11-24T13:50:00Z'), job('b', 'LH-2', 'in_progress', '2026-11-21T10:00:00Z'), job('c', 'LH-3', 'in_progress', '2026-11-22T10:00:00Z')],
+    projects: [{ id: 'p1', name: 'Lighthouse' }],
+    live: [{ agentId: 'builder', issueId: 'a' }],
+    files: noFiles(),
+    now,
+  })
+  assert.match(m.state, /^1 bot is working/)
+  assert.ok(m.trouble.some((t) => t.text === '2 jobs are marked in progress with no run going for over an hour'))
+})
+
 test('work that failed its check is trouble until something newer starts', () => {
   number = 0
   const build = job('Frame clock', 'done', 'freelancer')
@@ -294,4 +309,28 @@ test('a line a crew script leaves for the owner shows under Also going on for tw
   assert.deepEqual(files.ownerNotes.map((n) => n.text), ['The judge ruled on Retainer: not approved'])
   const manager = view([], { files: { ...noFiles(), ownerNotes: files.ownerNotes } })
   assert.ok(manager.trouble.some((t) => t.level === 'info' && t.text === 'The judge ruled on Retainer: not approved'))
+})
+
+test('a job marked in progress with no run going waits; with a run going it is being worked on', () => {
+  number = 0
+  const a = job('Town kit', 'in_progress', 'freelancer', { startedAt: ago(90) })
+  const b = job('Harbour map', 'in_progress', 'freelancer', { startedAt: ago(10) })
+  const manager = view([a, b], { live: [{ agentId: b.assigneeAgentId, issueId: b.id, startedAt: new Date(NOW - 10 * 60000).toISOString() }] })
+  assert.equal(lineOf(manager, a.identifier).steps[0], 'queued', 'no run is going on it')
+  assert.equal(lineOf(manager, b.identifier).steps[0], 'now')
+  const project = manager.projects.find((p) => p.id === a.projectId)
+  assert.deepEqual([project.running, project.queued], [1, 1])
+})
+
+test('a request on a track is being worked on only while a run goes on its step', async () => {
+  const { requestLine } = await import('../server/lib/manager.mjs')
+  const names = new Map([['b1', 'Builder']])
+  const base = { id: 'r1', jobId: 'j1', jobCode: 'LH-9', title: 'Town kit', status: 'working', updatedAt: new Date(NOW).toISOString() }
+  const trip = { id: 't1', status: 'running', current: 'build', currentTitle: 'Build', currentKind: 'bot', currentBotId: 'b1', rounds: {} }
+  const going = requestLine({ ...base, trip: { ...trip, currentRunning: true } }, null, new Map(), NOW, names)
+  const waiting = requestLine({ ...base, trip: { ...trip, currentRunning: false } }, null, new Map(), NOW, names)
+  const older = requestLine({ ...base, trip }, null, new Map(), NOW, names)
+  assert.deepEqual([going.steps[0], waiting.steps[0], older.steps[0]], ['now', 'queued', 'now'])
+  assert.match(waiting.note, /Waiting for Builder to start build/)
+  assert.match(going.note, /Builder is building it/)
 })

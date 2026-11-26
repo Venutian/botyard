@@ -24,6 +24,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { launchable, notStarted } from './start-tool.mjs'
 
 const argv = process.argv.slice(2)
 const split = argv.indexOf('--')
@@ -221,11 +222,13 @@ if (tool.length) {
   process.stdin.on('end', () => {
     const prompt = Buffer.concat(chunks).toString('utf8')
     try {
-      child = spawn(tool[0], tool.slice(1), { cwd, env: process.env, stdio: ['pipe', 'pipe', 'inherit'] })
+      const start = launchable(tool[0], tool.slice(1), process.env)
+      if (!start.found) throw Object.assign(new Error(`spawn ${tool[0]} ENOENT`), { code: 'ENOENT' })
+      child = spawn(start.command, start.args, { cwd, env: process.env, stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, ...start.options })
     } catch (err) {
-      return fail(`The tool could not be started: ${err.message}`)
+      return fail(notStarted(tool[0], err))
     }
-    child.on('error', (err) => fail(`The tool could not be started: ${err.message}`))
+    child.on('error', (err) => fail(notStarted(tool[0], err)))
     child.on('exit', (code, signal) => { if (!done) fail(`The tool stopped before the turn ended (${signal || `code ${code}`})`) })
     child.stdin.on('error', () => { /* the tool closed its input */ })
     let pending = ''

@@ -22,6 +22,7 @@ import { tickRoutines } from './routines.mjs'
 import { tick } from './runner.mjs'
 import { tickTracks } from './tracks.mjs'
 import { dailyBlockedSweep } from './signals.mjs'
+import { applyDefaults } from './digest.mjs'
 import { openStore } from './store.mjs'
 import { convertBookedRuns } from './run-usage.mjs'
 import { leftoverSweeper } from './leftovers.mjs'
@@ -140,6 +141,8 @@ export async function startEngine({ dataDir, port = null, runs = true, tracks = 
         for (const run of report.finished) log(`[engine] ${run.status} ${run.id}${run.error ? `: ${run.error}` : ''}`)
         for (const skip of report.skipped) log(`[engine] wake ${skip.id} not started: ${skip.why}`)
       }
+      // Default cards that waited their day are answered first, so a gate answered this way moves on this same turn.
+      for (const card of applyDefaults(store)) log(`[engine] applied by default on ${card.job}: "${String(card.title).slice(0, 80)}" → ${card.answer}`)
       // Tracks move after the runs are booked, so a step whose job just ended is read on this same turn.
       for (const stuck of (await tickTracks(store, { dataDir: dir })).stuck) log(`[engine] trip ${stuck.id} is stuck: ${stuck.reason}`)
       // Programs ended runs left running (leftovers.mjs): stopped ten minutes after their run.

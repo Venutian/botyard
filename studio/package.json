@@ -1,6 +1,6 @@
 {
   "name": "botyard",
-  "version": "2.9.2",
+  "version": "2.10.2",
   "private": true,
   "type": "module",
   "description": "A studio run by a crew of AI bots, on your own computer: a 3D map of your projects, the bots that work in them, the engine that hands out their jobs, and a door for the phone app.",

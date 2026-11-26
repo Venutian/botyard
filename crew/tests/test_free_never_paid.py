@@ -32,6 +32,17 @@ class NoPaidEngineForFreeBots(Studio):
         self.assertEqual(self.files.build('hunter')['ai'], 'free')
         self.assertEqual(self.m.on_engine('hunter', 'free')['adapter'], 'opencode_local')
 
+    def test_a_fallback_the_file_marks_backup_can_be_used_by_a_script(self):
+        path = f'{self.crew}/bots/hunter.json'
+        spec = json.load(open(path))
+        spec['fallbacks']['gemini']['for'] = 'backup'
+        json.dump(spec, open(path, 'w'))
+        self.load()
+        self.assertEqual(self.files.backups('hunter'), ['gemini'])
+        self.assertEqual(self.files.build('hunter', 'gemini')['ai'], 'gemini')
+        with self.assertRaises(crew_set.PaidEngine):
+            self.files.build('hunter', 'claude')
+
     def test_only_a_person_asking_by_hand_can(self):
         self.files.paid_by_hand = True
         self.assertEqual(self.files.build('hunter', 'gemini')['ai'], 'gemini')

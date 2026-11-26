@@ -42,9 +42,21 @@ PC_LOAD_TOLD = ('Refused: the PC load setting is the owner\'s. The level is set 
                 'or phone; a run never changes it or the tool it names.')
 
 
+def run_bot():
+    """The bot this Claude run is for, as its slug, from its own settings file (`<slug>.claude.json`, skill_sets.write_for); '' when
+    the run has none. Only a Claude run has one: a run on any other AI is never one of a folder's readers."""
+    name = os.path.basename(os.environ.get('BOTYARD_BOT_SETTINGS') or '')
+    return name[:-len('.claude.json')] if name.endswith('.claude.json') else ''
+
+
+def _slug(name):
+    return str(name).lower().replace(' ', '-')
+
+
 def closed_folders():
-    """Folders no bot may touch, each with what a bot is told: Botyard's keys folder, and the ones a studio
-    names itself in its crew/own/guard.json, {"closed": [{"folder": "name-or-path", "told": "why"}]}."""
+    """Folders no bot may touch, each with what a bot is told and the bots that may read it all the same (on Claude only): Botyard's
+    keys folder, and the ones a studio names itself in its crew/own/guard.json,
+    {"closed": [{"folder": "name-or-path", "told": "why", "readers": ["Bot Name"]}]}."""
     places = botyard_home.places()
     keys = places['keys']
     out = [(mark, KEYS_TOLD) for mark in {keys, botyard_home.short(keys), os.path.join(os.path.basename(places['home']), 'keys')}]
@@ -54,7 +66,7 @@ def closed_folders():
         with open(os.path.join(places['crew'], 'own', 'guard.json'), encoding='utf8') as f:
             for row in json.load(f).get('closed') or []:
                 if row.get('folder'):
-                    out.append((str(row['folder']), row.get('told') or CLOSED_TOLD))
+                    out.append((str(row['folder']), row.get('told') or CLOSED_TOLD, [r for r in row.get('readers') or [] if isinstance(r, str)]))
     except (OSError, ValueError, AttributeError):
         pass
     return out
@@ -185,8 +197,12 @@ def check(event):
     given = event.get('tool_input') or {}
     # Where a tool points, not what it writes: the script's own source names the folder and may be edited.
     aimed = [given.get('command')] if tool == 'Bash' else [given.get(k) for k in ('file_path', 'path', 'pattern', 'notebook_path')]
-    for folder, told in closed_folders():
+    me = run_bot()
+    for folder, told, *rest in closed_folders():
         if any(folder in str(a) for a in aimed if a):
+            readers = {_slug(r) for r in (rest[0] if rest else [])}
+            if me and me in readers:
+                continue
             return told
     if SEND_TOOLS.search(tool):
         return TOLD.format(what=tool)

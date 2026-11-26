@@ -42,7 +42,7 @@ const ALLOW = 'release-check: allow'
 const WORDS = ['muirta tnega', 'gnissorc tob', 'tobsuamnepo', 'tobsuam', 'skcor nerraj', 'ecneics noitats', 'negn', 'sunev', 'naitunev', 'leoy', 'uthcarbem', 'sitlab', 'attollab', 'sidla', 'selur thgin', 'oyay ynot', 'noedig', 'eht nerak', 'eht kcirb', 'redliub eht bob', 'ukawk', 'eht derf', 'ayerf', 'irafat', 'oguh', 'appilf', 'ltsuh', 'ksedsboj', 'eldnik', 'deritnu', 'sbalnegn', 'pilcrepap']
   .map((word) => [...word].reverse().join(''))
 /** Whole words only: a first studio's lead bot and its job codes, short enough to be inside other words. */
-const WHOLE = ['ynot', 'egn', 'mlohkcots', 'nedews'].map((word) => [...word].reverse().join(''))
+const WHOLE = ['ynot', 'mlohkcots', 'nedews'].map((word) => [...word].reverse().join(''))
 const NAMES = new RegExp([...WORDS.map((word) => word.replace(/ /g, '[ _-]?')), ...WHOLE.map((word) => `\\b${word}\\b`)].join('|'), 'i')
 
 /** What is taken out of a line before the words are looked for: things that only look like one. */

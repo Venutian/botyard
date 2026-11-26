@@ -41,7 +41,45 @@ export function checkListing(listing, stores) {
       else if (PLACEHOLDER.test(value)) out.push(item('Listing', `${name} has no placeholder text`, 'fail', `It says "${PLACEHOLDER.exec(value)[0]}"`))
     }
   }
+  out.push(...checkListingWords(listing, stores))
   if (!out.length) out.push(item('Listing', 'Every field present, within the store limits, with no placeholder text', 'pass'))
+  return out
+}
+
+/**
+ * What the stores refuse in listing words: naming the other store or platform; on Play, a title, short description or
+ * icon text that claims a rank or a price, shouts in capitals or carries emoji (Play's metadata policy); on the App
+ * Store, a name or subtitle stuffed with keywords, and keywords that repeat the name or name other apps (2.3.7).
+ */
+export function checkListingWords(listing, stores) {
+  const out = []
+  const said = (store, field, text, why, state = 'fail') => out.push(item('Listing', `${store === 'play' ? 'Play' : 'App Store'} ${field}: ${why}`, state, `"${String(text).slice(0, 80)}"`))
+  if (!listing) return out
+  const play = listing.play || {}
+  const apple = listing.appstore || {}
+  if (stores.includes('play')) {
+    for (const [field, text] of [['title', play.title], ['short', play.short]]) {
+      if (!text) continue
+      if (/\b(best|#\s?1|number one|top[- ]rated|top \d+|free|discount|sale|cheapest|new)\b/i.test(text)) said('play', field, text, 'no rank, price or promotion words (best, #1, top, free, sale, new)')
+      if (/\p{Extended_Pictographic}/u.test(text)) said('play', field, text, 'no emoji')
+      if (/\b[A-Z]{4,}\b/.test(text) && text === text.toUpperCase()) said('play', field, text, 'not in capitals')
+    }
+    for (const [field, text] of [['title', play.title], ['short', play.short], ['full', play.full], ['whatsNew', play.whatsNew]]) {
+      if (text && /\b(iPhone|iPad|iOS|App Store|Apple Watch)\b/.test(text)) said('play', field, text, 'does not name Apple platforms')
+    }
+  }
+  if (stores.includes('appstore')) {
+    for (const [field, text] of [['name', apple.name], ['subtitle', apple.subtitle], ['description', apple.description], ['promo', apple.promo], ['whatsNew', apple.whatsNew]]) {
+      if (text && /\b(Android|Google Play|Play Store)\b/.test(text)) said('appstore', field, text, 'does not name other platforms (2.3.10)')
+    }
+    for (const [field, text] of [['name', apple.name], ['subtitle', apple.subtitle]]) {
+      if (text && (String(text).match(/[,|/]/g) || []).length >= 2) said('appstore', field, text, 'reads as a name, not a list of keywords (2.3.7)')
+    }
+    const name = String(apple.name || '').toLowerCase().split(/\W+/).filter((w) => w.length > 2)
+    const words = String(apple.keywords || '').toLowerCase().split(',').map((w) => w.trim()).filter(Boolean)
+    if (words.some((w) => name.includes(w))) said('appstore', 'keywords', apple.keywords, 'leave out words already in the name; they count anyway', 'warn')
+    if (new Set(words).size < words.length) said('appstore', 'keywords', apple.keywords, 'each keyword once', 'warn')
+  }
   return out
 }
 

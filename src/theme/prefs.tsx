@@ -42,6 +42,8 @@ export type Prefs = {
   showTimes: boolean;
   showPreviews: boolean;
   tabLabels: boolean;
+  /** Write what each button does under it. Off: the words go to the screen reader only. */
+  explain: boolean;
   haptics: boolean;
   notify: boolean;
   prompts: string[];
@@ -70,6 +72,7 @@ export const DEFAULT_PREFS: Prefs = {
   showTimes: true,
   showPreviews: true,
   tabLabels: true,
+  explain: false,
   haptics: true,
   notify: true,
   prompts: ['Status', 'What is blocked?', 'What should I look at next?'],
@@ -94,9 +97,9 @@ function themeFor(plates: Plates, accent: string | null): Theme {
     outline: false,
     glass: alpha(plates.raised, 0.94),
     hair: 1,
-    // A plate's thickness shows straight below it.
-    shadow: `0px 3px 0px ${plates.dark ? '#05070a' : mix(plates.ink, plates.app, 0.55)}`,
-    r: { card: 10, button: 8, chip: 6, field: 8 },
+    // A soft lift under a plate: near and tight, then wide and faint, so it reads as depth, not an outline.
+    shadow: plates.dark ? '0px 1px 2px rgba(0,0,0,0.45), 0px 8px 24px rgba(0,0,0,0.35)' : `0px 1px 2px ${alpha(plates.ink, 0.08)}, 0px 8px 24px ${alpha(plates.ink, 0.08)}`,
+    r: { card: 18, button: 14, chip: 12, field: 12 },
   };
   if (!accent) return base;
   // Your own paint: what can be pressed and your own messages follow it. A colour that would leave a

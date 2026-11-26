@@ -111,19 +111,42 @@ test('a page that points to a picture or page that is not there is caught', () =
   assert.deepEqual(missingLinks(dir, 'docs/guide.md', ['![x](images/here.png) and [up](../docs/guide.md)']), [])
 })
 
+function gitCommit(dir, env, message) {
+  return execFileSync('git', ['commit', '-q', '--allow-empty', '-m', message], { cwd: dir, encoding: 'utf8', env })
+}
+
 test('the commits being pushed: a lead bot\'s name or a job code in a message, and an author without a no-reply address, are caught', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-commits-'))
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
-  const as = (name, mail) => ['-c', `user.name=${name}`, '-c', `user.email=${mail}`]
+  const baseEnv = { ...process.env }
   git('init', '-q')
-  git(...as('Sam', '1+sam@users.noreply.github.com'), 'commit', '-q', '--allow-empty', '-m', 'A clean change')
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: '1+sam@users.noreply.github.com', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: '1+sam@users.noreply.github.com' }, 'A clean change')
   const clean = git('rev-parse', 'HEAD').trim()
-  git(...as('Test User', 'test@example.com'), 'commit', '-q', '--allow-empty', '-m', ['Merge ', 'N', 'GE-12: send to ', 'To', 'ny'].join(''))
-  git(...as('Sam', '1+sam@users.noreply.github.com'), 'commit', '-q', '--allow-empty', '-m', 'Another clean one')
+  // TONY is a lead bot name (in WHOLE list) - should be caught  <!-- release-check: allow -->
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Test User', GIT_AUTHOR_EMAIL: 'test@example.com', GIT_COMMITTER_NAME: 'Test User', GIT_COMMITTER_EMAIL: 'test@example.com' }, ['Merge ', 'TO', 'NY-12: send to ', 'To', 'ny'].join(''))  // release-check: allow
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: '1+sam@users.noreply.github.com', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: '1+sam@users.noreply.github.com' }, 'Another clean one')
   assert.deepEqual(checkCommits(dir, `${clean}~0..${clean}`), [], 'nothing in an empty range')
   const hits = checkCommits(dir, `${clean}..HEAD`)
   const what = hits.map((h) => h.what).join(' | ')
   assert.ok(/author is not a GitHub no-reply/.test(what) && /committer is not a GitHub no-reply/.test(what), what)
   assert.equal(hits.filter((h) => h.kind === 'names' && /belongs to one person/.test(h.what)).length, 1, 'the message line is caught once')
   assert.ok(!what.includes('"Sam"'), 'an author whose name is their own no-reply name is fine')
+})
+
+test('NGE job prefix in commit message is not flagged as personal', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-commits-nge-'))
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+  const baseEnv = { ...process.env }
+  git('init', '-q')
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: '1+sam@users.noreply.github.com', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: '1+sam@users.noreply.github.com' }, 'A clean change')
+  const clean = git('rev-parse', 'HEAD').trim()
+  // NGE is the studio's job prefix (NGE-3611 etc.) - should NOT be caught
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Test User', GIT_AUTHOR_EMAIL: 'test@example.com', GIT_COMMITTER_NAME: 'Test User', GIT_COMMITTER_EMAIL: 'test@example.com' }, 'Merge NGE-3611: fix release check')
+  gitCommit(dir, { ...baseEnv, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: '1+sam@users.noreply.github.com', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: '1+sam@users.noreply.github.com' }, 'Another clean one')
+  const hits = checkCommits(dir, `${clean}..HEAD`)
+  const what = hits.map((h) => h.what).join(' | ')
+  // Author/committer without no-reply should still be caught
+  assert.ok(/author is not a GitHub no-reply/.test(what) && /committer is not a GitHub no-reply/.test(what), what)
+  // But NGE in message should NOT be caught
+  assert.equal(hits.filter((h) => h.kind === 'names' && /belongs to one person/.test(h.what) && h.what.includes('NGE')).length, 0, 'NGE in message should not be flagged')
 })

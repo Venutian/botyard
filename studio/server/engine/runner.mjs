@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AdapterError, canRun, commandFor, inlinesInstructions, providerOf, readOutput, sessionIsGone } from './adapters.mjs'
 import { envForRun } from './bots.mjs'
+import { FREE_REFUSED, FREE_REFUSED_WHY, autoFreeModel, pathOf, stopTree, windowsEnv } from './start-tool.mjs'
 import { lastPrinted, ownShare } from './run-usage.mjs'
 import { addComment, patchJob } from './write.mjs'
 import { fileOf } from './files.mjs'
@@ -60,7 +61,7 @@ export function filesForRun(store, job, agent, comments, since, into, { dataDir 
 export const realIo = {
   /** Start a run's keeper and let go of it. */
   startKeeper(specFile) {
-    const keeper = spawn(process.execPath, [path.join(here, 'run-one.mjs'), specFile], { detached: true, stdio: 'ignore' })
+    const keeper = spawn(process.execPath, [path.join(here, 'run-one.mjs'), specFile], { detached: true, stdio: 'ignore', windowsHide: true })
     keeper.unref()
     return keeper.pid
   },
@@ -68,7 +69,8 @@ export const realIo = {
     if (!pid) return false
     try { process.kill(pid, 0); return true } catch { return false }
   },
-  stop(pid) { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } },
+  // Windows has no signals: the keeper and its tool are ended as one tree.
+  stop(pid) { if (process.platform === 'win32') stopTree(pid); else try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } },
   git: (cwd, args) => run('git', ['-C', cwd, ...args], { timeout: 60_000 }).then((r) => r.stdout.trim()),
 }
 
@@ -180,7 +182,7 @@ export function botEnv(given = {}, env = process.env) {
     if (value === undefined || value === null || isHidden(value)) continue
     out[name] = String(value)
   }
-  if (out.PATH) out.PATH = [...new Set([...out.PATH.split(':'), ...String(env.PATH || '/usr/local/bin:/usr/bin:/bin').split(':')])].filter(Boolean).join(':')
+  if (out.PATH) out.PATH = [...new Set([...out.PATH.split(path.delimiter), ...String(pathOf(env) || '/usr/local/bin:/usr/bin:/bin').split(path.delimiter)])].filter(Boolean).join(path.delimiter)
   return out
 }
 
@@ -332,7 +334,10 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
   if (!fs.existsSync(cwd)) throw new FolderGone(`The folder this run would start in does not exist: ${cwd}.`)
   const config = agent.adapterConfig || {}
   const override = store.object('SELECT raw FROM jobs WHERE id = ?', job.id).assigneeAdapterOverrides || {}
-  const model = override.model || config.model || ''
+  let model = override.model || config.model || ''
+  // A free bot on OpenCode itself (no crew launcher, as on Windows): "auto" is the best free model listed now.
+  const bareOpenCode = agent.adapterType === 'opencode_local' && /^opencode(\.cmd|\.exe)?$/i.test(path.basename(String(config.command || 'opencode')))
+  if (bareOpenCode && (!model || model === 'auto')) model = (await autoFreeModel(config.command || 'opencode', { ...env, ...windowsEnv(env) }).catch(() => null)) || ''
 
   // It is carried on unless a fresh one was asked for, the folder moved, or the folder it was in is gone: then the run starts a
   // fresh session in the current folder and is told so.
@@ -362,9 +367,13 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
 
   const token = issueToken(store, runId, agent.id)
   const mayNot = mayNotOf(agent)
-  const { command, args, env: toolEnv = {} } = commandFor(agent, { model, session, cwd, instructionsFile: instructionsOf(agent).file, mcpConfig, mayNot, readDirs: files.length ? [path.join(scratch, 'files')] : [] })
+  const { command, args: toolArgs, env: toolEnv = {} } = commandFor(agent, { model, session, cwd, instructionsFile: instructionsOf(agent).file, mcpConfig, mayNot, readDirs: files.length ? [path.join(scratch, 'files')] : [] })
+  // OpenCode's own log on stderr is how a used-up free allowance is seen (it then retries in silence).
+  const args = bareOpenCode ? [...toolArgs.slice(0, 1), '--print-logs', ...toolArgs.slice(1)] : toolArgs
   const runEnv = {
-    HOME: env.HOME, PATH: env.PATH, LANG: env.LANG || 'C.UTF-8', USER: env.USER, SHELL: env.SHELL, SSH_AUTH_SOCK: env.SSH_AUTH_SOCK, XDG_RUNTIME_DIR: env.XDG_RUNTIME_DIR, DISPLAY: env.DISPLAY, WAYLAND_DISPLAY: env.WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS,
+    // Windows programs need their own variables too (where the user's files and the system are).
+    ...windowsEnv(env),
+    HOME: env.HOME || (process.platform === 'win32' ? env.USERPROFILE : undefined), PATH: pathOf(env) || undefined, LANG: env.LANG || 'C.UTF-8', USER: env.USER, SHELL: env.SHELL, SSH_AUTH_SOCK: env.SSH_AUTH_SOCK, XDG_RUNTIME_DIR: env.XDG_RUNTIME_DIR, DISPLAY: env.DISPLAY, WAYLAND_DISPLAY: env.WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS,
     ...toolEnv,
     // A free-model bot gets the providers' keys the owner pasted on the setup page; its own variables win.
     ...(agent.adapterType === 'opencode_local' ? providerKeys(dataDir) : {}),
@@ -380,7 +389,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
   if (runEnv.GIT_CONFIG_GLOBAL) runEnv.GIT_CONFIG_GLOBAL = runGitConfig(scratch, runEnv.GIT_CONFIG_GLOBAL)
   if (mayNot.length) {
     runEnv[MAY_NOT_VAR] = mayNot.join(',')
-    runEnv.PATH = `${gitGuard(scratch, mayNot)}:${runEnv.PATH || '/usr/local/bin:/usr/bin:/bin'}`
+    runEnv.PATH = `${gitGuard(scratch, mayNot)}${path.delimiter}${runEnv.PATH || '/usr/local/bin:/usr/bin:/bin'}`
   }
   for (const key of Object.keys(runEnv)) if (runEnv[key] === undefined) delete runEnv[key]
 
@@ -388,6 +397,7 @@ export async function startRun(store, wake, { dataDir, apiUrl, io = realIo, now 
     runId, command, args, cwd, env: runEnv, promptFile, logFile,
     resultFile: path.join(runDir, 'result.json'), pidFile: path.join(runDir, 'pid.json'),
     timeoutSec: Number(config.timeoutSec) || DEFAULT_TIMEOUT_SEC, graceSec: Number(config.graceSec) || 15,
+    ...(bareOpenCode ? { refuseOn: FREE_REFUSED, refuseWhy: FREE_REFUSED_WHY } : {}),
   }
   const specFile = path.join(runDir, 'spec.json')
   fs.writeFileSync(specFile, JSON.stringify(spec), { mode: 0o600 })
@@ -447,7 +457,7 @@ export function finishRun(store, made, result, { dataDir, now = Date.now() } = {
       : result.timedOut ? 'It was stopped at its time limit'
         : read.why || result.error || (log.stderr.trim().split('\n').at(-1) || '').slice(0, 400) || (result.lost ? 'Its keeper stopped without leaving a result' : `The tool ended with code ${result.exitCode}`)
   // `partial` says the tool never added its tokens up (the run was cut): the counts are what its messages reported, at least.
-  const reported = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
+  const reported = { model: read.model || made.contextSnapshot?.model || '', inputTokens: read.inputTokens, cachedInputTokens: read.cachedInputTokens, outputTokens: read.outputTokens, ...(read.models.length > 1 ? { models: read.models } : {}), ...(read.partial ? { partial: true } : {}), costUsd: read.costUsd, billingType: 'subscription_included' }
   // A resumed session's tool may print the session's running total: the run is booked with its own share (run-usage.mjs).
   const usage = ownShare(agent.adapterType, reported, made.sessionIdBefore ? lastPrinted(store, made.agentId, made.sessionIdBefore, made.createdAt) : null)
   const done = {

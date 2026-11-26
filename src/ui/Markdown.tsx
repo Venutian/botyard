@@ -108,20 +108,28 @@ export function Markdown({ text, ink, size }: { text: string; ink: string; size:
             {block.items.map((item, n) => (
               <View key={n} style={{ flexDirection: 'row', gap: 8 }}>
                 <Text style={[body, { color: t.ink3 }]}>{block.ordered ? `${n + 1}.` : '•'}</Text>
-                <Text selectable style={[body, { flex: 1 }]}><Inline text={item} ink={ink} size={size} /></Text>
+                {/* Shrinks to fit but asks for its full width first: with `flex: 1` a list in a chat bubble took the
+                    width of the shortest paragraph beside it, and long items wrapped into a thin column. */}
+                <Text selectable style={[body, { flexShrink: 1 }]}><Inline text={item} ink={ink} size={size} /></Text>
               </View>
             ))}
           </View>
         );
       case 'table': {
         const columns = block.rows[0].length;
+        // A column is as wide as its longest cell asks for, between 72 and 240: a fixed narrow column wrapped
+        // every sentence into a few words a line.
+        const widths = Array.from({ length: columns }, (_, c) => {
+          const longest = Math.max(...block.rows.map((row) => (row[c] ?? '').replace(/[*`]/g, '').length));
+          return Math.round(Math.min(240, Math.max(72, longest * size * 0.82 * 0.56 + 20)));
+        });
         return (
           <ScrollView key={index} horizontal showsHorizontalScrollIndicator={false}>
             <View style={{ borderColor: t.line, borderRadius: 10, borderWidth: 1, overflow: 'hidden' }}>
               {block.rows.map((row, r) => (
                 <View key={r} style={{ backgroundColor: r === 0 ? t.control : 'transparent', borderTopColor: t.line, borderTopWidth: r ? 1 : 0, flexDirection: 'row' }}>
                   {Array.from({ length: columns }, (_, c) => (
-                    <View key={c} style={{ borderLeftColor: t.line, borderLeftWidth: c ? 1 : 0, paddingHorizontal: 9, paddingVertical: 6, width: 124 }}>
+                    <View key={c} style={{ borderLeftColor: t.line, borderLeftWidth: c ? 1 : 0, paddingHorizontal: 9, paddingVertical: 6, width: widths[c] }}>
                       <Text selectable style={[body, { fontSize: size * 0.82, lineHeight: size * 1.14 }, r === 0 && font(700)]}><Inline text={row[c] ?? ''} ink={ink} size={size * 0.82} /></Text>
                     </View>
                   ))}

@@ -102,6 +102,20 @@
       "on": true
     },
     {
+      "name": "open-work",
+      "kind": "timer",
+      "what": "Settles open work that is not moving: an older try of a goal that has a newer job is closed, a job in progress with nothing done for a day is marked blocked so it is seen. Never touches a job with a run going or open jobs under it. Uses no AI.",
+      "command": [
+        "{python}",
+        "{scripts}/open-work-check.py"
+      ],
+      "every": "2h",
+      "after": "finish",
+      "first": "15m",
+      "limit": "5m",
+      "on": true
+    },
+    {
       "name": "sandbox-roots",
       "kind": "timer",
       "what": "Takes out of the Codex bots' sandbox config any folder that no longer exists (a retired or moved repository), which would otherwise make every sandboxed shell command fail. Uses no AI.",
@@ -198,6 +212,19 @@
       "after": "finish",
       "first": "10m",
       "limit": "2m",
+      "on": true
+    },
+    {
+      "name": "store-rules-watch",
+      "kind": "timer",
+      "what": "Once a week, asks the lead to read Apple's, Google's and the EU's change pages and keep the store rules current. Uses no AI itself.",
+      "command": [
+        "{python}",
+        "{scripts}/store-rules-watch.py"
+      ],
+      "at": "Mon 07:00",
+      "catchUp": true,
+      "limit": "5m",
       "on": true
     }
   ]

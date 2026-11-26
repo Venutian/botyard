@@ -230,3 +230,31 @@ test('pictures of the demo get a made-up computer: the real page, nothing of the
     assert.equal((await setupAct({ action: 'check' }))[0], 200)
   } finally { delete process.env.BOTYARD_SETUP }
 })
+
+test('a Mac or Linux computer with no npm gets OpenCode from its own installer, no Node.js needed', async () => {
+  const mac = computer({ tools: { git: {}, curl: {} } })
+  mac.probe.platform = 'darwin'
+  const fix = by(await setupState({ probe: mac.probe }), 'opencode').fix
+  assert.equal(fix.command, 'curl -fsSL https://opencode.ai/install | bash')
+  assert.deepEqual(fix.argv, ['bash', '-c', 'curl -fsSL https://opencode.ai/install | bash'])
+  mac.probe.which = (name) => (['git', 'curl', 'bash'].includes(name) ? `/usr/bin/${name}` : null)
+  let opened = null
+  const [, answer] = await setupAct({ action: 'start', id: 'opencode' }, { probe: mac.probe, open: async (argv) => { opened = argv; return { ok: true } } })
+  assert.equal(answer.opened, true)
+  assert.deepEqual(opened, ['/usr/bin/bash', '-c', 'curl -fsSL https://opencode.ai/install | bash'])
+
+  const windows = computer({ tools: { git: {}, curl: {} } })
+  windows.probe.platform = 'win32'
+  assert.equal(by(await setupState({ probe: windows.probe }), 'opencode').fix.command, 'npm install -g opencode-ai')
+  const withNpm = computer({ tools: { git: {}, curl: {}, npm: {} } })
+  withNpm.probe.platform = 'linux'
+  assert.equal(by(await setupState({ probe: withNpm.probe }), 'opencode').fix.command, 'npm install -g opencode-ai')
+})
+
+test('OpenCode put in ~/.opencode/bin by its installer is found by a Botyard already running', () => {
+  const home = temp()
+  fs.mkdirSync(path.join(home, '.opencode', 'bin'), { recursive: true })
+  const file = path.join(home, '.opencode', 'bin', 'opencode')
+  fs.writeFileSync(file, '#!/bin/sh\n', { mode: 0o755 })
+  assert.equal(probes({ env: { HOME: home, PATH: '' } }).which('opencode'), file)
+})

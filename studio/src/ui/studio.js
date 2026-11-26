@@ -14,6 +14,7 @@ import { DESCRIBE } from './describe.js'
 import { BrainMap } from './brain-map.js'
 import { claudeChip } from './usage.js'
 import { isDecision, waitingCount } from './needs-count.js'
+import { digestHtml } from './digest-view.js'
 import { botStyle, learnColours } from './crew-colours.js'
 import { markdown } from './markdown.js'
 import { loadOwnPages, mountOwnPage, ownDock, ownName, ownTools } from './own-pages.js'
@@ -582,6 +583,7 @@ export class Studio {
         const flag = (v) => (v === undefined ? undefined : v === 'true')
         return card && this._markCards([card], { read: flag(el.dataset.read), archived: flag(el.dataset.archived) })
       }
+      if (el.dataset.act === 'digest-take-back') return this._takeBack(el.dataset.job, el.dataset.cardId)
       if (el.dataset.act === 'cards-read') return this._markCards((this._cards || []).filter((c) => !c.read && !c.archived), { read: true })
       // Opening a card reads it.
       const opened = this._cards?.[Number(el.closest('.ask[data-card]')?.dataset.card)]
@@ -890,7 +892,7 @@ export class Studio {
     const live = all.filter((a) => !a.archived)
     const archived = all.filter((a) => a.archived)
     this._alsoHtml = ''
-    if (!all.length) return '<div class="tray-slot" data-part="tray"></div>'
+    if (!all.length) return digestHtml(this._digest) + '<div class="tray-slot" data-part="tray"></div>'
     const KIND = { approval: 'Wants your yes or no', question: 'Asks you', blocked: 'Blocked', review: 'To review', failed: 'Failed' }
     const card = (a) => {
       const n = all.indexOf(a)
@@ -930,7 +932,7 @@ export class Studio {
       const words = `<span class="state ${tone}">${esc(KIND[a.kind] || a.kind)}</span> ${esc(plainWords(a.title))}${a.times > 1 ? ` (${a.times} times)` : ''}`
       return open ? `<button type="button" class="also" data-card="${n}" ${open}>${words}</button>` : `<p class="also" data-card="${n}">${words}</p>`
     }).join('')
-    return '<div class="tray-slot" data-part="tray"></div>' + decide.map(card).join('')
+    return digestHtml(this._digest) + '<div class="tray-slot" data-part="tray"></div>' + decide.map(card).join('')
       + (archived.length ? `<details class="archived-cards"><summary>Archived (${archived.length})</summary>${archived.map(card).join('')}</details>` : '')
   }
 
@@ -953,11 +955,24 @@ export class Studio {
     }
   }
 
+  /** Take back an answer the engine applied by default: the card is open again, for the owner alone. */
+  async _takeBack(jobId, cardId) {
+    try {
+      this._digest = await call('/api/studio/digest', { action: 'take-back', jobId, cardId })
+      this.actions.toast('Taken back. It waits for your answer')
+      this._loadNeeds()
+    } catch (err) {
+      this.actions.toast(err.message || 'That could not be taken back', 'err')
+    }
+  }
+
   async _loadNeeds() {
     this._needsAt = Date.now()
     try {
-      const { needs } = await call('/api/studio/needs')
+      // The digest rides on the same read; a server without one simply shows none.
+      const [{ needs }, digest] = await Promise.all([call('/api/studio/needs'), call('/api/studio/digest').catch(() => null)])
       this._needs = needs
+      this._digest = digest
       this._last.panel = null
       this._putPanel()
       this._putDock()
@@ -2534,6 +2549,7 @@ setView(view) {
       const html = parts.length
         ? pinnedCards + parts.map((p) => p.html).join('')
           + (chat.working ? '<p class="typing">Writing an answer…</p>' : '')
+          + (chat.stopped ? `<p class="chat-stopped" role="status"><strong>${esc(chat.bot.name)} could not answer.</strong> ${esc(chat.stopped.why)}</p>` : '')
         : '<p class="none">Nothing said yet. Write what you want done; the bot answers here.</p>'
       if (this._last.talk !== html) {
         // Stay at the bottom only if the reader was already there: scrolling back is reading.
