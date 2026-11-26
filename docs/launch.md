@@ -110,19 +110,39 @@ with evidence, a **stop** never. Every rule, the waivers and what the owner stat
 
 A built-in track, `release-app`, per product and version:
 
-1. **Build** (script): the product's build command; leaves the artifact and its version and build number.
-2. **Tests** (script): the product's test command.
-3. **Readiness** (script): the checklist above; a fail goes back to the crew with what failed.
-4. **Upload to testing** (script): the store's testing lane; leaves the store's build id.
-5. **Wait for processing** (script): until the store has the build, or a time limit.
-6. **Store rules** (script): the scan above; a block goes back to the builder.
-7. **The owner's one card** (gate): the store-rules result, the store checks, what is on the testing lanes, and
-   everything the yes does (see "One card").
-8. **Send for review** (script): the listing onto each store; Apple's version set to release itself once approved.
-9. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to the
-   crew with the store's words.
-10. **Go live** (script): Play's rollout raised step by step while the crash and ANR rates hold, halted by itself
-    when they do not; Apple's phased release runs by itself.
+1. **Build** (bot, the `builder`): builds the app's next release for the stores in the plan (Play when
+   it has a package, the App Store when it has a bundle id), raises the version and build number above
+   what each store holds, and commits the raise on the job's branch. Builds the Android App Bundle (.aab)
+   for release, signed with the app's upload key, and, when the app ships on iOS, the iOS build through the
+   app's own cloud build, sending it to TestFlight; leaves in the last comment: AAB: <full path of the .aab on
+   this computer>, VERSION: <version name>, BUILD: <build number / version code>, IOS_BUILD: <the iOS build
+   number, or none>.
+2. **Write the listing** (bot, the `writer`): the store listing as JSON, within each store's limits.
+3. **Make the store images** (bot, the `artist`): screenshots from the real app on the test phone, at
+   each store's sizes.
+4. **Score them** (bot, the `reviewer`, or the `writer` when there is no reviewer): the listing and
+   images against the store kit bar.
+5. **Scan against the store rules** (script): what Apple and Google turn an app away for (see "Store
+   rules" above); a block goes back to the builder with its fix.
+6. **Check what a store would refuse** (script): the listing fields and limits, image sizes, the
+   privacy and support pages, the bundle and its version code against Play, and the store products for
+   an app that takes payments.
+7. **Upload to testing** (script): Play internal testing as a draft release, TestFlight to the internal
+   group.
+8. **The owner decides** (gate): the release is built, its listing and images are scored, the store-rules
+   scan and the checks pass and it is on the stores' testing lanes. Yes sends it for review, sets Apple's
+   version to release itself once approved, and starts Play's staged rollout (see "One card").
+9. **Send for review** (script): the listing onto each store, a staged Play rollout, the App Store
+   version to Apple.
+10. **Watch the review** (script): reads the state until approved or rejected; a rejection goes back to
+    the crew with the store's words.
+11. **Go live** (script): Play's rollout raised step by step while the crash and ANR rates hold, halted by
+    itself when they do not; Apple's phased release runs by itself.
+
+On a fail the track goes back with what failed: the score to the listing (two rounds), the store-rules
+scan, the readiness check or the watch to the build (with its rounds); a failed build goes back to the
+build once, and then to the ruler, who decides in the owner's place (only the ruler's ASK OWNER reaches
+the owner, at the gate above).
 
 Web products and Botyard's own GitHub releases use a short form: build, tests, preview or draft, the owner's
 gate, publish, check the live version.
