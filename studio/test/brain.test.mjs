@@ -11,7 +11,7 @@ import * as THREE from 'three'
 import { DEMO_BRAIN, brainFolder, brainNote, brainRoute, frontmatter, looksSecret, newNote, readBrain, saveNote, setBrainFolder } from '../server/lib/brain.mjs'
 import { matches } from '../src/ui/brain-map.js'
 import { RADIUS, SHAPE, brainDust, fieldLayout } from '../src/ui/brain-layout.js'
-import { clampBox, edgePoint, layoutTitles, nearestNote, placeExcerpt, titlesAt, zoomFactor } from '../src/ui/brain-field.js'
+import { clampBox, edgePoint, layoutTitles, nearestNote, placeExcerpt, titlesAt, zoomFactor, DAY_INKS } from '../src/ui/brain-field.js'
 
 const demo = DEMO_BRAIN()
 
@@ -251,6 +251,25 @@ test('a pooled plate that is hidden is not painted: the hidden rule beats the pl
   const label = css.slice(css.indexOf('.brainmap .bf-node-label {'))
   assert.ok(css.indexOf('.bf-node-label[hidden]') > css.indexOf('.brainmap .bf-node-label {'), 'it comes after the rule that sets display: inline-flex')
   assert.match(label, /display: inline-flex/)
+})
+
+test('the day inks read on the pale day window: each area colour is at least 3:1 on #b9c2ce', () => {
+  const lum = (hex) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+    assert.ok(m, `${hex} is a six-digit hex colour`)
+    const n = parseInt(m[1], 16)
+    const chan = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+      const s = v / 255
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * chan[0] + 0.7152 * chan[1] + 0.0722 * chan[2]
+  }
+  const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
+  assert.equal(DAY_INKS.length, 10, 'one ink per area slot')
+  for (const ink of DAY_INKS) {
+    const r = ratio(ink, '#b9c2ce')
+    assert.ok(r >= 3, `${ink} on #b9c2ce is ${r.toFixed(2)}:1, below 3:1`)
+  }
 })
 
 test('the owner edits a note: saved whole, refused when it changed meanwhile or holds a secret; a new note goes to inbox/', () => {

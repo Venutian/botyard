@@ -84,6 +84,24 @@ const MEASURE = `(() => {
   }
 })()`
 
+/**
+ * Aim the camera, then wait until a frame has painted the new view before measuring. A single aim + frames can
+ * race the render: MEASURE then reads the DOM still showing the previous (zoomed-out, hidden) frame and sees no
+ * titles. Zoomed in (dist < 360) wait for a title to be drawn; zoomed out, wait for them to clear. Bounded, so a
+ * genuinely empty view still returns its last measure.
+ */
+async function aimSettle(page, target, angle, dist) {
+  await page.evaluate(aim(target, angle, dist))
+  const wantDrawn = dist < 360
+  let m = null
+  for (let n = 0; n < 24; n += 1) {
+    await page.evaluate(frames)
+    m = await page.evaluate(MEASURE)
+    if (wantDrawn ? m.drawn > 0 : m.drawn === 0) break
+  }
+  return m
+}
+
 async function run() {
   const file = findBrowser()
   if (!file) throw new Error('No browser was found')
@@ -128,9 +146,7 @@ async function run() {
             let views = 0
             let edges = 0
             for (const target of targets) for (const angle of ANGLES) {
-              await page.evaluate(aim(target, angle, dist))
-              await page.evaluate(frames)
-              const m = await page.evaluate(MEASURE)
+              const m = await aimSettle(page, target, angle, dist)
               views += 1
               edges = Math.max(edges, m.edge)
               least = Math.min(least, m.inside)
@@ -144,9 +160,7 @@ async function run() {
             if (overlaps) fails.push(`${tag} d${dist}: ${overlaps} overlapping title pairs, e.g. ${JSON.stringify(await page.evaluate('window.__overlap'))}`)
           }
           // Back out: every pooled plate must be gone, not just marked hidden.
-          await page.evaluate(aim({ x: 0, y: 0, z: 0 }, [0.4, 0.2], 700))
-          await page.evaluate(frames)
-          const out = await page.evaluate(MEASURE)
+          const out = await aimSettle(page, { x: 0, y: 0, z: 0 }, [0.4, 0.2], 700)
           rows.push(`${tag.padEnd(11)} d${out.dist}: titles drawn ${out.drawn}, hidden plates compute display ${out.hiddenDisplay.join('/')}, excerpt ${out.excerpt ? 'SHOWN' : 'gone'}`)
           if (out.drawn || out.excerpt || out.hiddenDisplay.some((d) => d !== 'none')) fails.push(`${tag}: plates still drawn after zooming out`)
           if (shotsDir) {
@@ -154,22 +168,19 @@ async function run() {
             // The picture: of the views round the brain at 170, the one with the most neurons really in frame.
             let best = null
             for (const target of targets) for (const angle of ANGLES) {
-              await page.evaluate(aim(target, angle, 170))
-              await page.evaluate(frames)
-              const m = await page.evaluate(MEASURE)
+              const m = await aimSettle(page, target, angle, 170)
               const score = m.inside - m.edge
               if (m.excerpt?.inside && (!best || score > best.score)) best = { target, angle, score }
             }
-            await page.evaluate(aim(best.target, best.angle, 170))
-            await page.evaluate(frames)
-            await sleep(400)
+            await aimSettle(page, best.target, best.angle, 170)
+            await sleep(150)
             const over2 = await page.evaluate(DECK_OVER)
-            const m = await page.evaluate(MEASURE)
-            if (over2.length || m.inside < MIN_TITLES || !m.excerpt?.inside) { fails.push(`${shotTag}: not captured (deck ${over2.join(',') || 'closed'}, ${m.inside} titles, excerpt ${m.excerpt?.inside})`); continue }
+            const live = await page.evaluate(MEASURE)
+            if (over2.length || live.inside < MIN_TITLES || !live.excerpt?.inside) { fails.push(`${shotTag}: not captured (deck ${over2.join(',') || 'closed'}, ${live.inside} titles, excerpt ${live.excerpt?.inside})`); continue }
             const { data } = await page.cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
             const to = path.join(shotsDir, SHOT_FILES[shotTag])
             fs.writeFileSync(to, Buffer.from(data, 'base64'))
-            rows.push(`${tag.padEnd(11)} shot ${to}: d${m.dist}, ${m.inside} titles on stage, excerpt inside, deck closed, viewport ${vp.join('x')}`)
+            rows.push(`${tag.padEnd(11)} shot ${to}: d${live.dist}, ${live.inside} titles on stage, excerpt inside, deck closed, viewport ${vp.join('x')}`)
           }
         } finally { await page.close().catch(() => {}) }
       }
